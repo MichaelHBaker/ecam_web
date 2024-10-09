@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>File Upload and Excel Operations</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        form { margin-bottom: 20px; }
+        input, button { margin: 10px 0; }
+        #result { margin-top: 20px; font-weight: bold; }
+        #file-validation { color: green; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>File Upload and Excel Operations</h1>
+    
+    <form id="excelForm" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div>
+            <label for="csvFile">Select a CSV file:</label>
+            <input type="file" id="csvFile" name="csv_file" accept=".csv" required>
+            <span id="file-validation"></span>
+        </div>
+        <div>
+            <label for="folderPath">Select Folder:</label>
+            <input type="file" id="folderPath" name="folder_path" webkitdirectory directory multiple>
+        </div>
+        <div>
+            <label for="workbookName">Workbook Name:</label>
+            <input type="text" id="workbookName" name="workbook_name" required>
+        </div>
+        <div>
+            <label for="sheetName">Sheet Name:</label>
+            <input type="text" id="sheetName" name="sheet_name" required>
+        </div>
+        <button type="submit">Create Excel Workbook</button>
+    </form>
+
+    <div id="result"></div>
+
+    <script>
+        document.getElementById('csvFile').addEventListener('change', function() {
+            var file = this.files[0];
+            var validationLabel = document.getElementById('file-validation');
+            
+            if (file && file.name.endsWith('.csv')) {
+                validationLabel.innerHTML = "Valid CSV file selected";
+                validationLabel.style.color = 'green';
+            } else {
+                validationLabel.innerHTML = "Selected file not valid CSV file";
+                validationLabel.style.color = 'red';
+            }
+        });
+
+        document.getElementById('excelForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const folderInput = document.getElementById('folderPath');
+            
+            if (folderInput.files.length > 0) {
+                const folderPath = folderInput.files[0].webkitRelativePath.split('/')[0];
+                formData.set('folder_path', folderPath);
+            }
+
+            fetch('{% url "excel_upload" %}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.status === 'success') {
+                    document.getElementById('result').innerHTML = data.message;
+                } else {
+                    document.getElementById('result').innerHTML = 'Error: ' + (data.error || 'Unknown error occurred');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('result').innerHTML = 'An error occurred.';
+            });
+        });
+    </script>
+</body>
+</html>

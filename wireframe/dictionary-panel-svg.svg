@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 260">
+  <defs>
+    <style type="text/css">
+      text {
+        font-family: Arial, sans-serif;
+        font-size: 12px;
+      }
+      .header {
+        font-size: 14px;
+        font-weight: bold;
+      }
+      .tableHeader {
+        font-weight: bold;
+      }
+    </style>
+  </defs>
+
+  <!-- Panel container -->
+  <rect x="0" y="0" width="760" height="260" fill="#ffffff" stroke="#808080" stroke-width="2"/>
+
+  <!-- Header -->
+  <path d="M5 15 L15 25 L5 35 Z" fill="#404040"/>
+  <text x="25" y="30" class="header" fill="#404040">Dictionary</text>
+
+  <!-- Table header -->
+  <rect x="0" y="40" width="745" height="30" fill="#d0d0d0" stroke="#808080" stroke-width="1"/>
+  <text x="10" y="60" class="tableHeader" fill="#404040">Name</text>
+  <text x="190" y="60" class="tableHeader" fill="#404040">Rename</text>
+  <text x="370" y="60" class="tableHeader" fill="#404040">Type</text>
+  <text x="550" y="60" class="tableHeader" fill="#404040">Description</text>
+
+  <!-- Table rows (example data) -->
+  <rect x="0" y="70" width="745" height="30" fill="#ffffff" stroke="#808080" stroke-width="1"/>
+  <text x="10" y="90" fill="#404040">kWh</text>
+  <text x="190" y="90" fill="#404040">Energy</text>
+  <text x="370" y="90" fill="#404040">Float</text>
+  <text x="550" y="90" fill="#404040">Kilowatt-hours consumed</text>
+
+  <rect x="0" y="100" width="745" height="30" fill="#f0f0f0" stroke="#808080" stroke-width="1"/>
+  <text x="10" y="120" fill="#404040">OAT</text>
+  <text x="190" y="120" fill="#404040">OutdoorTemp</text>
+  <text x="370" y="120" fill="#404040">Float</text>
+  <text x="550" y="120" fill="#404040">Outdoor Air Temperature</text>
+
+  <rect x="0" y="130" width="745" height="30" fill="#ffffff" stroke="#808080" stroke-width="1"/>
+  <text x="10" y="150" fill="#404040">Date</text>
+  <text x="190" y="150" fill="#404040">MeasurementDate</text>
+  <text x="370" y="150" fill="#404040">Date</text>
+  <text x="550" y="150" fill="#404040">Date of measurement</text>
+
+  <rect x="0" y="160" width="745" height="30" fill="#f0f0f0" stroke="#808080" stroke-width="1"/>
+  <text x="10" y="180" fill="#404040">Time</text>
+  <text x="190" y="180" fill="#404040">MeasurementTime</text>
+  <text x="370" y="180" fill="#404040">Time</text>
+  <text x="550" y="180" fill="#404040">Time of measurement</text>
+
+  <!-- Vertical scrollbar -->
+  <rect x="745" y="40" width="15" height="205" fill="#c0c0c0" rx="7" ry="7"/>
+  <rect x="747" y="42" width="11" height="80" fill="#808080" rx="5" ry="5"/>
+
+  <!-- Horizontal scrollbar -->
+  <rect x="0" y="245" width="745" height="15" fill="#c0c0c0" rx="7" ry="7"/>
+  <rect x="2" y="247" width="600" height="11" fill="#808080" rx="5" ry="5"/>
+</svg>

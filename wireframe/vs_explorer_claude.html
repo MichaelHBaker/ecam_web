@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VS Code-like File Explorer with Inline Naming</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+        }
+        .explorer {
+            width: 300px;
+            height: 100vh;
+            overflow-y: auto;
+            padding: 10px;
+        }
+        .explorer-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .action-menu {
+            display: flex;
+            gap: 10px;
+        }
+        .action-button {
+            background: none;
+            border: none;
+            color: #d4d4d4;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 2px 5px;
+        }
+        .action-button:hover {
+            background-color: #2a2d2e;
+        }
+        .folder, .file {
+            padding: 3px 0;
+            cursor: pointer;
+            position: relative;
+        }
+        .folder-label, .file {
+            display: block;
+            padding-left: 15px;
+        }
+        .folder-label::before {
+            content: '>';
+            position: absolute;
+            left: 5px;
+            font-size: 12px;
+            width: 10px;
+            text-align: center;
+            cursor: pointer;
+        }
+        .folder.open > .folder-label::before {
+            content: 'v';
+        }
+        .folder-content {
+            display: none;
+            padding-left: 12px;
+        }
+        .folder.open > .folder-content {
+            display: block;
+        }
+        .file {
+            padding-left: 35px;
+        }
+        .file::before {
+            content: '📄';
+            position: absolute;
+            left: 5px;
+        }
+        .python-file::before {
+            content: '🐍';
+        }
+        .selected {
+            background-color: #094771;
+        }
+        .new-item-input {
+            background-color: #3c3c3c;
+            border: none;
+            color: #d4d4d4;
+            font-size: 14px;
+            padding: 2px 5px;
+            width: calc(100% - 10px);
+            margin-left: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="explorer">
+        <div class="explorer-header">
+            <span>EXPLORER</span>
+            <div class="action-menu">
+                <button class="action-button" id="addFile">Add File</button>
+                <button class="action-button" id="addFolder">Add Folder</button>
+                <button class="action-button" id="delete">Delete</button>
+            </div>
+        </div>
+        <div class="folder">
+            <span class="folder-label">WORKSPACE</span>
+            <div class="folder-content">
+                <div class="folder">
+                    <span class="folder-label">ecam_web</span>
+                    <div class="folder-content">
+                        <div class="folder">
+                            <span class="folder-label">ecam_web</span>
+                            <div class="folder-content">
+                                <div class="folder">
+                                    <span class="folder-label">_pycache_</span>
+                                    <div class="folder-content"></div>
+                                </div>
+                                <div class="file python-file">_init_.py</div>
+                                <div class="file python-file">asgi.py</div>
+                                <div class="file python-file">settings.py</div>
+                                <div class="file python-file">urls.py</div>
+                                <div class="file python-file">wsgi.py</div>
+                            </div>
+                        </div>
+                        <div class="folder">
+                            <span class="folder-label">main</span>
+                            <div class="folder-content"></div>
+                        </div>
+                        <div class="folder">
+                            <span class="folder-label">static</span>
+                            <div class="folder-content"></div>
+                        </div>
+                        <div class="folder">
+                            <span class="folder-label">test_files</span>
+                            <div class="folder-content"></div>
+                        </div>
+                        <div class="folder">
+                            <span class="folder-label">venv</span>
+                            <div class="folder-content"></div>
+                        </div>
+                        <div class="folder">
+                            <span class="folder-label">wireframe</span>
+                            <div class="folder-content"></div>
+                        </div>
+                        <div class="file">.gitignore</div>
+                        <div class="file">db.sqlite3</div>
+                        <div class="file python-file">manage.py</div>
+                        <div class="file">test_dependencies.txt</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedItem = null;
+
+        function addClickListeners(element) {
+            if (element.classList.contains('folder-label') || element.classList.contains('file')) {
+                element.addEventListener('click', function(event) {
+                    if (this.classList.contains('selected')) {
+                        this.classList.remove('selected');
+                        selectedItem = null;
+                    } else {
+                        document.querySelectorAll('.selected').forEach(selectedItem => {
+                            selectedItem.classList.remove('selected');
+                        });
+                        this.classList.add('selected');
+                        selectedItem = this;
+                    }
+                    event.stopPropagation();
+                });
+            }
+
+            if (element.classList.contains('folder-label')) {
+                element.addEventListener('click', function(event) {
+                    if (event.offsetX < 15) {
+                        this.parentElement.classList.toggle('open');
+                        event.stopPropagation();
+                    }
+                });
+            }
+        }
+
+        document.querySelectorAll('.folder-label, .file').forEach(addClickListeners);
+
+        function createNewItem(isFolder) {
+            if (selectedItem && (selectedItem.classList.contains('folder-label') || selectedItem.parentElement.classList.contains('folder'))) {
+                const newItem = document.createElement('div');
+                newItem.className = isFolder ? 'folder' : 'file';
+                
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'new-item-input';
+                input.placeholder = isFolder ? 'New Folder' : 'New File';
+                
+                if (isFolder) {
+                    newItem.innerHTML = '<span class="folder-label"></span><div class="folder-content"></div>';
+                    newItem.querySelector('.folder-label').appendChild(input);
+                } else {
+                    newItem.appendChild(input);
+                }
+
+                const targetContent = selectedItem.classList.contains('folder-label') 
+                    ? selectedItem.nextElementSibling 
+                    : selectedItem.parentElement;
+                targetContent.appendChild(newItem);
+
+                input.focus();
+
+                input.addEventListener('blur', finalizeNewItem);
+                input.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        finalizeNewItem.call(this);
+                    }
+                });
+
+                function finalizeNewItem() {
+                    const itemName = this.value.trim() || this.placeholder;
+                    if (isFolder) {
+                        this.parentElement.textContent = itemName;
+                        addClickListeners(newItem.querySelector('.folder-label'));
+                    } else {
+                        newItem.textContent = itemName;
+                        addClickListeners(newItem);
+                    }
+                }
+            } else {
+                alert('Please select a folder to add a new ' + (isFolder ? 'folder' : 'file') + '.');
+            }
+        }
+
+        document.getElementById('addFile').addEventListener('click', () => createNewItem(false));
+        document.getElementById('addFolder').addEventListener('click', () => createNewItem(true));
+
+        document.getElementById('delete').addEventListener('click', function() {
+            if (selectedItem) {
+                if (confirm('Are you sure you want to delete this item?')) {
+                    if (selectedItem.classList.contains('folder-label')) {
+                        selectedItem.parentElement.remove();
+                    } else {
+                        selectedItem.remove();
+                    }
+                    selectedItem = null;
+                }
+            } else {
+                alert('Please select an item to delete.');
+            }
+        });
+    </script>
+</body>
+</html>

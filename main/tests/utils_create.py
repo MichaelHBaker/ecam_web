@@ -34,7 +34,7 @@ def create_header_only_csv(file_path):
 def create_missing_values_csv(file_path):
     data = [
         ['Name', 'Age', 'City'],
-        ['Alice', '30', ''],
+        ['Alice', '29', ''],
         ['Bob', '', 'Los Angeles'],
         ['', '35', 'Chicago']
     ]

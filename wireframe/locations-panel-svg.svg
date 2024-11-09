@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 220">
+  <!-- Locations Section -->
+  <rect x="20" y="0" width="760" height="200" fill="#ffffff" stroke="#808080" stroke-width="2"/>
+  <!-- Collapse/Expand icon for Locations -->
+  <path d="M25 15 L35 25 L25 35 Z" fill="#404040"/>
+  <text x="45" y="30" font-family="Arial" font-size="18" font-weight="bold" fill="#404040">Locations</text>
+  
+  <!-- Locations tree view -->
+  <rect x="20" y="40" width="745" height="145" fill="#e8e8e8" stroke="#a0a0a0" stroke-width="1"/>
+  
+  <!-- Tree items (simplified) -->
+  <text x="40" y="70" font-family="Arial" font-size="14" fill="#404040">▼ Group A</text>
+  <text x="60" y="95" font-family="Arial" font-size="14" fill="#404040">▶ Subgroup A1</text>
+  <text x="60" y="120" font-family="Arial" font-size="14" fill="#404040">▼ Subgroup A2</text>
+  <text x="80" y="145" font-family="Arial" font-size="14" fill="#404040">Location A2-1</text>
+  
+  <!-- Highlighted Location A2-2 -->
+  <rect x="75" y="150" width="685" height="25" fill="#d0d0d0"/>
+  <text x="80" y="170" font-family="Arial" font-size="14" fill="#404040">Location A2-2</text>
+  
+  <!-- Vertical scroll bar for Locations -->
+  <rect x="765" y="40" width="15" height="145" fill="#c0c0c0" rx="7" ry="7"/>
+  <rect x="767" y="42" width="11" height="60" fill="#808080" rx="5" ry="5"/>
+  
+  <!-- Horizontal scroll bar for Locations -->
+  <rect x="20" y="185" width="745" height="15" fill="#c0c0c0" rx="7" ry="7"/>
+  <rect x="22" y="187" width="300" height="11" fill="#808080" rx="5" ry="5"/>
+</svg>

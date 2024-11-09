@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 140">
+  <defs>
+    <style type="text/css">
+      text {
+        font-family: Arial, sans-serif;
+        font-size: 12px;
+      }
+    </style>
+  </defs>
+  
+  <!-- Form container -->
+  <rect x="0" y="0" width="300" height="140" fill="#ffffff" stroke="#404040" stroke-width="1"/>
+  
+  <!-- Form header -->
+  <rect x="0" y="0" width="300" height="25" fill="#d0d0f0"/>
+  <text x="10" y="17" font-weight="bold" fill="#404040">Import Data</text>
+  
+  <!-- Select Source label and dropdown -->
+  <text x="10" y="45" fill="#404040">Select Source:</text>
+  <rect x="10" y="55" width="130" height="20" fill="#ffffff" stroke="#808080" stroke-width="1"/>
+  <text x="15" y="70" fill="#404040">File</text>
+  <path d="M130 60 L135 60 L132.5 65 Z" fill="#404040"/>
+  
+  <!-- Dropdown options (expanded) -->
+  <rect x="10" y="75" width="130" height="40" fill="#ffffff" stroke="#808080" stroke-width="1"/>
+  <text x="15" y="90" fill="#404040">Connection</text>
+  <rect x="10" y="95" width="130" height="20" fill="#e0e0e0"/>
+  <text x="15" y="110" fill="#404040">File</text>
+  
+  <!-- Select File label and input -->
+  <text x="150" y="45" fill="#404040">Select File:</text>
+  <rect x="150" y="55" width="140" height="20" fill="#ffffff" stroke="#808080" stroke-width="1"/>
+  <text x="155" y="70" fill="#808080">Choose a file...</text>
+  
+  <!-- Buttons -->
+  <rect x="180" y="105" width="50" height="25" fill="#4CAF50" stroke="#45a049" stroke-width="1"/>
+  <text x="190" y="122" fill="#ffffff">Import</text>
+  
+  <rect x="240" y="105" width="50" height="25" fill="#f0f0f0" stroke="#808080" stroke-width="1"/>
+  <text x="247" y="122" fill="#404040">Cancel</text>
+</svg>

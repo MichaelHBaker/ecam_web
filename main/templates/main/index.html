@@ -84,5 +84,37 @@
             });
         });
     </script>
+
+    <a href="{% url 'dashboard' %}" class="button-link">Go to Dashboard</a>
+
+    <style>
+        .button-link {
+            display: inline-block;
+            padding: 10px 20px;
+            margin: 20px 0;
+            background-color: #007bff;
+            color: white;
+            text-align: center;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+    </style>
+    
+
+<script>
+    document.querySelectorAll('.card-header button').forEach(button => {
+        button.addEventListener('click', function () {
+            const alreadyExpanded = button.getAttribute('aria-expanded') === 'true';
+            if (alreadyExpanded) {
+                // Handle closing or reducing size
+                button.closest('.card').querySelector('.card-body').style.height = '200px';  // Standard height
+            } else {
+                // Expand to full when opened
+                button.closest('.card').querySelector('.card-body').style.height = 'calc(100vh - 150px)';
+            }
+        });
+    });
+</script>
 </body>
-</html>
+</html>  

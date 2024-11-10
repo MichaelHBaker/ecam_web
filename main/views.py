@@ -1,12 +1,15 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
+from django.shortcuts import render
+
 from .forms import CSVUploadForm
 import chardet
 import csv
 from io import StringIO
 import os
 from openpyxl import Workbook
+
 
 def index(request):
     return render(request, 'main/index.html')
@@ -73,3 +76,22 @@ def excel_upload(request):
         return JsonResponse({'error': 'Unable to decode file content'}, status=400)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+    
+
+def dashboard(request):
+    close_region = request.GET.get('close')
+    regions = [
+        {'id': 'locations', 'title': 'Locations', 'icon': 'bi bi-geo-alt'},
+        {'id': 'measurements', 'title': 'Measurements', 'icon': 'bi bi-speedometer2'},
+        {'id': 'data', 'title': 'Data', 'icon': 'bi bi-pie-chart-fill'},
+        {'id': 'dictionary', 'title': 'Dictionary', 'icon': 'bi bi-book-half'}
+    ]
+    # Set initial collapse state based on 'close' query parameter
+    for region in regions:
+        region['is_closed'] = (region['id'] == close_region)
+    return render(request, 'main/dashboard.html', {'regions': regions})
+
+def full_region_view(request, region_id):
+    # Here you would likely determine what data to display based on region_id
+    context = {'region_id': region_id}
+    return render(request, 'main/full_region_page.html', context)

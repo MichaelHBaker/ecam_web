@@ -22,4 +22,6 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', views.index, name='index'),
     path('excel-upload/', views.excel_upload, name='excel_upload'),
+    path('dashboard/', views.dashboard, name='dashboard'),
+    path('dashboard/full/<str:region_id>/', views.full_region_view, name='full_region'),
 ]

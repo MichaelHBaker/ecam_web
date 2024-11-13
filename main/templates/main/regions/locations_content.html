@@ -1,0 +1,122 @@
+<div class="content-loaded">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5><i class="bi bi-geo-alt"></i> Locations Overview</h5>
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="refreshLocations()">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                    <a href="{% url 'full_region' 'locations' %}" class="btn btn-sm btn-outline-primary" target="_blank">
+                        <i class="bi bi-arrows-fullscreen"></i> Full View
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Quick Stats -->
+        <div class="col-md-4 mb-3">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title">Quick Stats</h6>
+                    <ul class="list-unstyled">
+                        <li>Total Locations: {{ locations|default:"0" }}</li>
+                        {% comment %}
+                        <!-- These will be implemented when we have location types -->
+                        <li>Sites: {{ site_count|default:"0" }}</li>
+                        <li>Stations: {{ station_count|default:"0" }}</li>
+                        <li>Facilities: {{ facility_count|default:"0" }}</li>
+                        {% endcomment %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mini Map -->
+        <div class="col-md-8 mb-3">
+            <div class="card">
+                <div class="card-body">
+                    <div id="miniMap" style="height: 200px;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Locations Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    Recent Locations
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Type</th>
+                                    <th>Coordinates</th>
+                                    <th>Added</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% if locations %}
+                                    {% for location in locations|slice:":5" %}
+                                    <tr>
+                                        <td>{{ location.name|default:"--" }}</td>
+                                        <td>{{ location.type|default:"--" }}</td>
+                                        <td>
+                                            {% if location.latitude and location.longitude %}
+                                                {{ location.latitude }}, {{ location.longitude }}
+                                            {% else %}
+                                                --
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ location.created_at|date:"M d, Y"|default:"--" }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                {% else %}
+                                    <tr>
+                                        <td colspan="4" class="text-center">No locations available</td>
+                                    </tr>
+                                {% endif %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if locations %}
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script>
+        // Initialize mini map
+        const miniMap = L.map('miniMap').setView([0, 0], 1);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(miniMap);
+
+        // Add markers for existing locations
+        {% for location in locations %}
+            {% if location.latitude and location.longitude %}
+                L.marker([{{ location.latitude }}, {{ location.longitude }}])
+                    .bindPopup('{{ location.name|escapejs }}')
+                    .addTo(miniMap);
+            {% endif %}
+        {% endfor %}
+
+        function refreshLocations() {
+            const contentUrl = "{% url 'region_content' 'locations' %}";
+            fetch(contentUrl)
+                .then(response => response.text())
+                .then(html => {
+                    document.querySelector('#bodylocations').innerHTML = html;
+                });
+        }
+    </script>
+    {% endif %}
+</div>

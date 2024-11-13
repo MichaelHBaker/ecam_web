@@ -23,5 +23,7 @@ urlpatterns = [
     path('', views.index, name='index'),
     path('excel-upload/', views.excel_upload, name='excel_upload'),
     path('dashboard/', views.dashboard, name='dashboard'),
-    path('dashboard/full/<str:region_id>/', views.full_region_view, name='full_region'),
+    path('region/<str:region_id>/full/', views.full_region_view, name='full_region'),
+    path('region/<str:region_id>/content/', views.region_content, name='region_content'),
+    path('region/update-state/', views.update_region_state, name='update_region_state'),
 ]

@@ -11,6 +11,11 @@ from openpyxl import Workbook
 def index(request):
     return render(request, 'main/index.html')
 
+def dashboard(request):
+    return render(request, 'main/dashboard.html')
+
+
+
 @require_http_methods(["POST"])
 def excel_upload(request):
     if 'csv_file' not in request.FILES:

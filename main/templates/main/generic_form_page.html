@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+
+{% block extra_css %}
+<!-- Additional CSS can be added here if required -->
+{% endblock %}
+
+{% block content %}
+<div class="w3-container">
+    <h2>Generic Page Title</h2>
+    <p>This is a generic page content.</p>
+
+    <!-- Example form with CSRF token -->
+    <form action="/your-form-handler/" method="post">
+        {% csrf_token %}
+        <p>
+            <label>Your Name:</label>
+            <input type="text" name="name" class="w3-input w3-border" required>
+        </p>
+        <p>
+            <button type="submit" class="w3-button w3-teal">
+                Submit <i class="material-icons">chevron_right</i>
+            </button>
+        </p>
+    </form>
+
+    <!-- Example usage of the chevron right icon with other elements -->
+    <ul class="w3-ul w3-hoverable">
+        <li>
+            List Item 1 <i class="material-icons">chevron_right</i>
+        </li>
+        <li>
+            List Item 2 <i class="material-icons">chevron_right</i>
+        </li>
+        <li>
+            List Item 3 <i class="material-icons">chevron_right</i>
+        </li>
+    </ul>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Additional JavaScript can be added here if required -->
+{% endblock %}

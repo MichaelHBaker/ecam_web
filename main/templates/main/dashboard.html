@@ -1,9 +1,67 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Dashboard</title>
-</head>
-<body>
-    <h1>Dashboard</h1>
-</body>
+{% extends 'base.html' %}
+
+{% block extra_css %}
+<!-- Additional CSS can be added here if required -->
+{% endblock %}
+
+{% block content %}
+<h2>Dashboard</h2>
+
+<!-- Locations Section -->
+<button onclick="toggleOpenClose('Demo1')" class="w3-btn w3-block w3-black w3-left-align">
+    <i id="chevronIcon1" class="bi bi-chevron-right"></i> Locations
+</button>
+<div id="Demo1" class="w3-container w3-hide">
+    <h4>Locations</h4>
+    <p>Some text about Locations.</p>
+    {% comment %} <a href="{% url 'locations' %}" class="w3-btn w3-teal">Go to Full Locations Page</a> {% endcomment %}
+</div>
+
+<!-- Measurements Section -->
+<button onclick="toggleOpenClose('Demo2')" class="w3-btn w3-block w3-black w3-left-align">
+    <i id="chevronIcon2" class="bi bi-chevron-right"></i> Measurements
+</button>
+<div id="Demo2" class="w3-container w3-hide">
+    <h4>Measurements</h4>
+    <p>Some text about Measurements.</p>
+    {% comment %} <a href="{% url 'measurements' %}" class="w3-btn w3-teal">Go to Full Measurements Page</a> {% endcomment %}
+</div>
+
+<!-- Data Section -->
+<button onclick="toggleOpenClose('Demo3')" class="w3-btn w3-block w3-black w3-left-align">
+    <i id="chevronIcon3" class="bi bi-chevron-right"></i> Data
+</button>
+<div id="Demo3" class="w3-container w3-hide">
+    <h4>Data</h4>
+    <p>Some information about Data.</p>
+    {% comment %} <a href="{% url 'data' %}" class="w3-btn w3-teal">Go to Full Data Page</a> {% endcomment %}
+</div>
+
+<!-- Dictionary Section -->
+<button onclick="toggleOpenClose('Demo4')" class="w3-btn w3-block w3-black w3-left-align">
+    <i id="chevronIcon4" class="bi bi-chevron-right"></i> Dictionary
+</button>
+<div id="Demo4" class="w3-container w3-hide">
+    <h4>Dictionary</h4>
+    <p>Definitions and other details for Dictionary.</p>
+    {% comment %} <a href="{% url 'dictionary' %}" class="w3-btn w3-teal">Go to Full Dictionary Page</a> {% endcomment %}
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleOpenClose(id) {
+    var x = document.getElementById(id);
+    var iconId = 'chevronIcon' + id.substring(4); // Gets the icon id based on the section number
+    var icon = document.getElementById(iconId);
+    if (x.className.indexOf("w3-show") === -1) {
+        x.className += " w3-show";
+        icon.className = "bi bi-chevron-down";  // Change to chevron-down
+    } else { 
+        x.className = x.className.replace(" w3-show", "");
+        icon.className = "bi bi-chevron-right"; // Change back to chevron-right
+    }
+}
+</script>
+{% endblock %}

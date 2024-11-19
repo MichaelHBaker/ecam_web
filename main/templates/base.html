@@ -1,4 +1,41 @@
-{% comment %} 
-w2.css
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Project Title</title>
+    <!-- W3.CSS CSS -->
+    <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+    <!-- bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- Google Icons -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    {% block extra_css %}
+    {% endblock %}
+</head>
+<body>
+    <header class="w3-container w3-teal">
+        <h4>Energy Charting and Metrics (ECAM web version)</h4>
+    </header>
 
-{% endcomment %}
+    <nav class="w3-bar w3-black">
+        <a href="#" class="w3-bar-item w3-button">Home</a>
+        <a href="#" class="w3-bar-item w3-button">About</a>
+        <a href="#" class="w3-bar-item w3-button">Contact</a>
+    </nav>
+
+    <div class="w3-container" style="margin-top:20px">
+        {% block content %}
+        <!-- Main content goes here -->
+        {% endblock %}
+    </div>
+
+    <footer class="w3-container w3-teal">
+        <h5>Footer</h5>
+        <p>Copyright © {{ year }}</p>
+    </footer>
+
+    {% block extra_js %}
+    {% endblock %}
+</body>
+</html>

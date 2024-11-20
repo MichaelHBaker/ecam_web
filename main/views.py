@@ -14,6 +14,8 @@ def index(request):
 def dashboard(request):
     return render(request, 'main/dashboard.html')
 
+def locations(request):
+    return render(request, 'main/locations.html')
 
 
 @require_http_methods(["POST"])

@@ -23,4 +23,5 @@ urlpatterns = [
     path('', views.index, name='index'),
     path('excel-upload/', views.excel_upload, name='excel_upload'),
     path('dashboard/', views.dashboard, name='dashboard'),
+    path('locations/', views.locations, name='locations'),
 ]

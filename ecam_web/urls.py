@@ -24,4 +24,7 @@ urlpatterns = [
     path('excel-upload/', views.excel_upload, name='excel_upload'),
     path('dashboard/', views.dashboard, name='dashboard'),
     path('locations/', views.locations, name='locations'),
+    path('measurements/', views.measurements, name='measurements'),
+    path('data/', views.data, name='data'),
+    path('dictionary/', views.dictionary, name='dictionary'),
 ]

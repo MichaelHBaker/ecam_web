@@ -4,19 +4,38 @@
 
 {% block extra_css %}
 <!-- Additional CSS can be added here if required -->
+<style>
+    /* Shift dropdown to the left by its own width */
+    .w3-dropdown-hover .w3-dropdown-content {
+        transform: translateX(-10%);
+        right: 0; /* Ensure it aligns to the right side of the button */
+    }
+</style>
 {% endblock %}
 
 {% block content %}
-<h2>Dashboard</h2>
 
 <!-- Locations Section -->
-<button onclick="toggleOpenClose('locations')" class="w3-btn w3-block w3-black w3-left-align">
-    <i id="chevronIcon-locations" class="bi bi-chevron-right"></i> Locations
-</button>
+<div class="w3-bar w3-white w3-margin-bottom w3-bottombar">   
+    <button onclick="toggleOpenClose('locations')" class="w3-bar-item w3-button">
+        <i id="chevronIcon-locations" class="bi bi-chevron-right"></i> Locations
+    </button>
+    <div class="w3-dropdown-hover w3-right">
+        <button class="w3-button">
+            <i class="bi bi-three-dots-vertical"></i>
+        </button>
+        <div class="w3-dropdown-content w3-bar-block w3-border">
+            <a href="{% url 'locations' %}" class="w3-bar-item w3-button" target="_blank" rel="noopener">
+                <i class="bi bi-box-arrow-up-right"></i> Full Page
+            </a>
+            <a href="#" onclick="exportLocations()" class="w3-bar-item w3-button">
+                <i class="bi bi-file-earmark-arrow-down"></i> Export
+            </a>
+        </div>
+    </div>
+</div>
 <div id="locations" class="w3-container w3-hide">
-    <h4>Locations</h4>
     <p>Some text about Locations.</p>
-    {% comment %} <a href="{% url 'locations' %}" class="w3-btn w3-teal">Go to Full Locations Page</a> {% endcomment %}
 </div>
 
 <!-- Measurements Section -->
@@ -26,7 +45,7 @@
 <div id="measurements" class="w3-container w3-hide">
     <h4>Measurements</h4>
     <p>Some text about Measurements.</p>
-    {% comment %} <a href="{% url 'measurements' %}" class="w3-btn w3-teal">Go to Full Measurements Page</a> {% endcomment %}
+    <a href="{% url 'measurements' %}" class="w3-btn w3-teal">Go to Full Measurements Page</a>
 </div>
 
 <!-- Data Section -->
@@ -36,7 +55,7 @@
 <div id="data" class="w3-container w3-hide">
     <h4>Data</h4>
     <p>Some information about Data.</p>
-    {% comment %} <a href="{% url 'data' %}" class="w3-btn w3-teal">Go to Full Data Page</a> {% endcomment %}
+    <a href="{% url 'data' %}" class="w3-btn w3-teal">Go to Full Data Page</a>
 </div>
 
 <!-- Dictionary Section -->
@@ -46,7 +65,7 @@
 <div id="dictionary" class="w3-container w3-hide">
     <h4>Dictionary</h4>
     <p>Definitions and other details for Dictionary.</p>
-    {% comment %} <a href="{% url 'dictionary' %}" class="w3-btn w3-teal">Go to Full Dictionary Page</a> {% endcomment %}
+    <a href="{% url 'dictionary' %}" class="w3-btn w3-teal">Go to Full Dictionary Page</a>
 </div>
 
 {% endblock %}

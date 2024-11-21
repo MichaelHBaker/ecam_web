@@ -17,6 +17,15 @@ def dashboard(request):
 def locations(request):
     return render(request, 'main/locations.html')
 
+def measurements(request):
+    return render(request, 'main/measurements.html')
+
+def data(request):
+    return render(request, 'main/data.html')
+
+def dictionary(request):
+    return render(request, 'main/dictionary.html')
+
 
 @require_http_methods(["POST"])
 def excel_upload(request):

@@ -15,7 +15,7 @@
 
 {% block content %}
 
-<!-- Locations Section -->
+<!-- measurements Section -->
 <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">   
     <button onclick="toggleOpenClose('locations')" class="w3-bar-item w3-button">
         <i id="chevronIcon-locations" class="bi bi-chevron-right"></i> Locations
@@ -25,7 +25,7 @@
             <i class="bi bi-three-dots-vertical"></i>
         </button>
         <div class="w3-dropdown-content w3-bar-block w3-border">
-            <a href="{% url 'locations' %}" class="w3-bar-item w3-button" target="_blank" rel="noopener">
+            <a href="{% url 'locations' %}" class="w3-bar-item w3-button">
                 <i class="bi bi-box-arrow-up-right"></i> Full Page
             </a>
             <a href="#" onclick="exportLocations()" class="w3-bar-item w3-button">
@@ -39,34 +39,74 @@
 </div>
 
 <!-- Measurements Section -->
-<button onclick="toggleOpenClose('measurements')" class="w3-btn w3-block w3-black w3-left-align">
-    <i id="chevronIcon-measurements" class="bi bi-chevron-right icon-margin"></i> Measurements
-</button>
+<div class="w3-bar w3-white w3-margin-bottom w3-bottombar">   
+    <button onclick="toggleOpenClose('measurements')" class="w3-bar-item w3-button">
+        <i id="chevronIcon-measurements" class="bi bi-chevron-right"></i> measurements
+    </button>
+    <div class="w3-dropdown-hover w3-right">
+        <button class="w3-button">
+            <i class="bi bi-three-dots-vertical"></i>
+        </button>
+        <div class="w3-dropdown-content w3-bar-block w3-border">
+            <a href="{% url 'measurements' %}" class="w3-bar-item w3-button">
+                <i class="bi bi-box-arrow-up-right"></i> Full Page
+            </a>
+            <a href="#" onclick="exportmeasurements()" class="w3-bar-item w3-button">
+                <i class="bi bi-file-earmark-arrow-down"></i> Export
+            </a>
+        </div>
+    </div>
+</div>
 <div id="measurements" class="w3-container w3-hide">
-    <h4>Measurements</h4>
-    <p>Some text about Measurements.</p>
-    <a href="{% url 'measurements' %}" class="w3-btn w3-teal">Go to Full Measurements Page</a>
+    <p>Some text about measurements.</p>
 </div>
 
 <!-- Data Section -->
-<button onclick="toggleOpenClose('data')" class="w3-btn w3-block w3-black w3-left-align">
-    <i id="chevronIcon-data" class="bi bi-chevron-right icon-margin"></i> Data
-</button>
+<div class="w3-bar w3-white w3-margin-bottom w3-bottombar">   
+    <button onclick="toggleOpenClose('data')" class="w3-bar-item w3-button">
+        <i id="chevronIcon-data" class="bi bi-chevron-right"></i> data
+    </button>
+    <div class="w3-dropdown-hover w3-right">
+        <button class="w3-button">
+            <i class="bi bi-three-dots-vertical"></i>
+        </button>
+        <div class="w3-dropdown-content w3-bar-block w3-border">
+            <a href="{% url 'data' %}" class="w3-bar-item w3-button">
+                <i class="bi bi-box-arrow-up-right"></i> Full Page
+            </a>
+            <a href="#" onclick="exportdata()" class="w3-bar-item w3-button">
+                <i class="bi bi-file-earmark-arrow-down"></i> Export
+            </a>
+        </div>
+    </div>
+</div>
 <div id="data" class="w3-container w3-hide">
-    <h4>Data</h4>
-    <p>Some information about Data.</p>
-    <a href="{% url 'data' %}" class="w3-btn w3-teal">Go to Full Data Page</a>
+    <p>Some text about data.</p>
 </div>
 
 <!-- Dictionary Section -->
-<button onclick="toggleOpenClose('dictionary')" class="w3-btn w3-block w3-black w3-left-align">
-    <i id="chevronIcon-dictionary" class="bi bi-chevron-right icon-margin"></i> Dictionary
-</button>
-<div id="dictionary" class="w3-container w3-hide">
-    <h4>Dictionary</h4>
-    <p>Definitions and other details for Dictionary.</p>
-    <a href="{% url 'dictionary' %}" class="w3-btn w3-teal">Go to Full Dictionary Page</a>
+<div class="w3-bar w3-white w3-margin-bottom w3-bottombar">   
+    <button onclick="toggleOpenClose('dictionary')" class="w3-bar-item w3-button">
+        <i id="chevronIcon-dictionary" class="bi bi-chevron-right"></i> dictionary
+    </button>
+    <div class="w3-dropdown-hover w3-right">
+        <button class="w3-button">
+            <i class="bi bi-three-dots-vertical"></i>
+        </button>
+        <div class="w3-dropdown-content w3-bar-block w3-border">
+            <a href="{% url 'dictionary' %}" class="w3-bar-item w3-button">
+                <i class="bi bi-box-arrow-up-right"></i> Full Page
+            </a>
+            <a href="#" onclick="exportdictionary()" class="w3-bar-item w3-button">
+                <i class="bi bi-file-earmark-arrow-down"></i> Export
+            </a>
+        </div>
+    </div>
 </div>
+<div id="dictionary" class="w3-container w3-hide">
+    <p>Some text about dictionary.</p>
+</div>
+
 
 {% endblock %}
 

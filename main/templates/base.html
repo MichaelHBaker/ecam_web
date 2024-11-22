@@ -14,12 +14,12 @@
     {% endblock %}
 </head>
 <body>
-    <header class="w3-container w3-teal">
-        <h4>Energy Charting and Metrics (ECAM web version)</h4>
+    <header class="w3-container">
+        <h5 class="w3-center">Energy Charting and Metrics (ECAM web version)</h5>
     </header>
 
-    <nav class="w3-bar w3-black">
-        <a href="#" class="w3-bar-item w3-button">Home</a>
+    <nav class="w3-bar">
+        <a href="{% url 'dashboard' %}" class="w3-bar-item w3-button">Home</a>
         <a href="#" class="w3-bar-item w3-button">About</a>
         <a href="#" class="w3-bar-item w3-button">Contact</a>
     </nav>
@@ -30,7 +30,7 @@
         {% endblock %}
     </div>
 
-    <footer class="w3-container w3-teal">
+    <footer class="w3-container">
         <h5>Footer</h5>
         <p>Copyright © {{ year }}</p>
     </footer>

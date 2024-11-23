@@ -82,14 +82,13 @@ WSGI_APPLICATION = 'ecam_web.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'ecam_web',  # The PostgreSQL database name
-        'USER': 'postgres',
-        'PASSWORD': 'RangeBreak99.',
-        'HOST': 'mikexps13',  # Typically localhost or a specific IP address
-        'PORT': '5432',  # Default PostgreSQL port
+        'NAME': 'ecam_web',
+        'HOST': '127.0.0.1',
+        'PORT': '5432',
+        'USER': 'mbaker@SBWCONSULTING',
         'OPTIONS': {
-            'options': '-c search_path=your_schema'  # Optional: specify the schema if needed
-        }
+            'sslmode': 'prefer',
+        },
     }
 }
 

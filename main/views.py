@@ -1,18 +1,31 @@
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from .forms import CSVUploadForm
+from .models import Project, Client
+from .forms import CSVUploadForm, ProjectFormSet, ClientFormSet
 import chardet
 import csv
 from io import StringIO
 import os
 from openpyxl import Workbook
 
+
 def index(request):
     return render(request, 'main/index.html')
 
 def dashboard(request):
-    return render(request, 'main/dashboard.html')
+    project_formset = ProjectFormSet(queryset=Project.objects.all())
+    client_formset = ClientFormSet(queryset=Client.objects.all())  # Add this line
+    context = {
+        'project_formset': project_formset,
+        'client_formset': client_formset  # Add this to the context
+    }
+    return render(request, 'main/dashboard.html', context)
+
+
+def load_projects_for_client(request, client_id):
+    projects = Project.objects.filter(client_id=client_id).values('name', 'project_type', 'start_date')
+    return JsonResponse({"projects": list(projects)})
 
 def locations(request):
     return render(request, 'main/locations.html')

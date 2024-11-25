@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.conf import settings
-from . import utils_create
+from . import utils_data
 
 TEST_FILES_DIR = os.path.join(settings.BASE_DIR, 'test_files')
 
@@ -26,10 +26,10 @@ class CSVUploadTestCase(TestCase):
         os.makedirs(TEST_FILES_DIR, exist_ok=True)
 
         # Generate CSV files using utility functions
-        for func_name in dir(utils_create):
+        for func_name in dir(utils_data):
             if func_name.startswith('create_') and func_name.endswith('_csv'):
                 file_path = os.path.join(TEST_FILES_DIR, f"{func_name}.csv")
-                getattr(utils_create, func_name)(file_path)
+                getattr(utils_data, func_name)(file_path)
                 cls.csv_files[func_name] = cls.selected_file(file_path)
 
     @classmethod

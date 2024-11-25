@@ -1,6 +1,15 @@
 from django.test import TestCase
 from django.urls import reverse
+from django.db import transaction 
 from ..views import dashboard
+from ..models import Client, Project, Location 
+from ..forms import ClientFormSet
+from . import utils_data
+
+class BaseTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        utils_data.create_model_table_data()
 
 class DashboardPageTestCase(TestCase):
     def setUp(self):
@@ -41,3 +50,30 @@ class PageRedirectionTestCase(TestCase):
         for section, url in section_urls.items():
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200, f"Failed to load {section} at {url}")
+
+
+class DashboardLocationTableTest(BaseTestCase):
+    def test_clients_table_content_with_formset(self):
+        url = reverse('dashboard')
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+        # Simulate the click on the "Locations" button (adjust POST data as needed)
+        response = self.client.post(url, {'show_clients': True}) 
+
+        # Get the ClientFormSet from the response context
+        formset = response.context['client_formset']  # Replace 'client_formset' with the actual context variable name
+
+        # Assert that the formset is an instance of ClientFormSet
+        self.assertIsInstance(formset, ClientFormSet)
+
+        # Assert that the formset has the expected number of forms
+        self.assertEqual(formset.total_form_count(), Client.objects.count())
+
+        # Loop through the forms in the formset and assert the data
+        for form in formset:
+            client = form.instance
+            self.assertIsInstance(client, Client)
+            self.assertEqual(form['name'].value(), client.name)
+            self.assertEqual(form['contact_email'].value(), client.contact_email)
+            # ... add assertions for other fields ...

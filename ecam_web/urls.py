@@ -27,4 +27,5 @@ urlpatterns = [
     path('measurements/', views.measurements, name='measurements'),
     path('data/', views.data, name='data'),
     path('dictionary/', views.dictionary, name='dictionary'),
+    path('load-projects-for-client/<int:client_id>', views.load_projects_for_client, name='load-projects-for-client'),
 ]

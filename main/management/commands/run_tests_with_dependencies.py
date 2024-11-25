@@ -3,6 +3,10 @@ import hashlib
 from django.core.management.base import BaseCommand
 from django.conf import settings
 from django.core.management import call_command
+from django.db import connection
+from ...tests import utils_data
+
+from main.models import Client, Project, Location
 
 class Command(BaseCommand):
     help = 'Run tests and regenerate test files if dependencies have changed'
@@ -19,7 +23,15 @@ class Command(BaseCommand):
             if os.path.exists(test_files_dir):
                 for file in os.listdir(test_files_dir):
                     os.remove(os.path.join(test_files_dir, file))
-            
+
+            # Delete all records from model tables in default db
+            Location.objects.all().delete()
+            Project.objects.all().delete()
+            Client.objects.all().delete()
+
+            #Create records for model tables in default db
+            utils_data.create_model_table_data()
+
             # Run tests (which will regenerate test files)
             call_command('test', verbosity=1)
             
@@ -30,7 +42,6 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.SUCCESS('No changes detected. Running tests...'))
             call_command('test', verbosity=1)
-
 
 def get_file_hash(filename):
     with open(filename, 'rb') as f:

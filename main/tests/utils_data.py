@@ -1,6 +1,11 @@
+from ..models import Client, Project, Location
+import datetime
+import decimal
 import csv
 import os
 import random
+
+
 
 def create_csv_file(file_path, data, delimiter=',', encoding='utf-8'):
     """
@@ -89,3 +94,49 @@ def create_mixed_data_types_csv(file_path):
         ['Charlie', '35', '5.9', 'TRUE']
     ]
     create_csv_file(file_path, data)
+
+def create_model_table_data(): 
+    client1 = Client.objects.create(
+        name="Acme Corp", contact_email="contact@acmecorp.com"
+    )
+    client2 = Client.objects.create(
+        name="Globex Inc", contact_email="info@globexinc.com", phone_number="555-123-4567"
+    )
+    # Create Projects
+    project1 = Project.objects.create(
+        name="Acme Audit",
+        client=client1,
+        project_type="Audit",
+        start_date="2024-01-15",
+        end_date="2024-03-15",
+    )
+    project2 = Project.objects.create(
+        name="Globex M&V",
+        client=client2,
+        project_type="M&V",
+        start_date="2024-05-01",
+    )
+
+    # Create Locations
+    location1 = Location.objects.create(
+        project=project1,
+        name="Acme Headquarters",
+        address="123 Main St, Anytown USA",
+        latitude=34.0522,
+        longitude=-118.2437,
+    )
+    Location.objects.create(
+        project=project1,
+        name="Acme Factory",
+        address="456 Elm St, Anytown USA",
+        parent=location1,  # Factory is a child of Headquarters
+        latitude=34.0422,
+        longitude=-118.2537,
+    )
+    Location.objects.create(
+        project=project2,
+        name="Globex Office",
+        address="789 Oak St, Othertown USA",
+        latitude=40.7128,
+        longitude=-74.0060,
+    )

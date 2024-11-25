@@ -15,7 +15,7 @@
 
 {% block content %}
 
-<!-- measurements Section -->
+<!-- locations Section -->
 <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">   
     <button onclick="toggleOpenClose('locations')" class="w3-bar-item w3-button">
         <i id="chevronIcon-locations" class="bi bi-chevron-right"></i> Locations
@@ -35,8 +35,44 @@
     </div>
 </div>
 <div id="locations" class="w3-container w3-hide">
-    <p>Some text about Locations.</p>
+    <!-- Client Table -->
+    <table class="w3-table w3-striped w3-hoverable w3-white">
+        <thead>
+            <tr class="w3-light-grey">
+                <th>Name</th>
+                <th>Contact Email</th>
+                <th>Phone Number</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for form in client_formset %}
+            <tr onclick="loadProjectsForClient('{{ form.instance.id }}')">
+                <td>{{ form.name }}</td>
+                <td>{{ form.contact_email }}</td>
+                <td>{{ form.phone_number }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Projects Table -->
+    <div id="projectsContainer" class="w3-responsive">
+        <table class="w3-table w3-striped w3-bordered w3-hoverable w3-white">
+            <thead>
+                <tr class="w3-light-grey">
+                    <th>Name</th>
+                    <th>Project Type</th>
+                    <th>Start Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Projects will be dynamically inserted here -->
+            </tbody>
+        </table>
+    </div>
 </div>
+
+
 
 <!-- Measurements Section -->
 <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">   
@@ -114,15 +150,36 @@
 <script>
     function toggleOpenClose(id) {
         var div = document.getElementById(id);
-        var iconId = 'chevronIcon-' + id;
-        var icon = document.getElementById(iconId);
-        if (div.className.indexOf("w3-show") === -1) {
-            div.className = div.className.replace("w3-hide", "w3-show");
-            icon.className = "bi bi-chevron-down";  
-        } else { 
-            div.className = div.className.replace("w3-show", "w3-hide");
-            icon.className = "bi bi-chevron-right"; 
+        var icon = document.getElementById('chevronIcon-' + id);
+        if (div.classList.contains("w3-show")) {
+            div.classList.remove("w3-show");
+            div.classList.add("w3-hide");
+            icon.className = "bi bi-chevron-right";
+        } else {
+            div.classList.remove("w3-hide");
+            div.classList.add("w3-show");
+            icon.className = "bi bi-chevron-down";
         }
     }
+    
+    function loadProjectsForClient(clientId) {
+        const url = `/load-projects-for-client/${clientId}`; // Ensure the URL matches your Django URLconf
+        fetch(url)
+        .then(response => response.json())
+        .then(data => {
+            const projectsContainer = document.getElementById('projectsContainer').querySelector('tbody');
+            projectsContainer.innerHTML = ''; // Clear previous projects
+            data.projects.forEach(project => {
+                const row = `<tr>
+                                <td>${project.name}</td>
+                                <td>${project.project_type}</td>
+                                <td>${project.start_date}</td>
+                            </tr>`;
+                projectsContainer.innerHTML += row;
+            });
+        })
+        .catch(error => console.error('Error loading projects:', error));
+    }
+    
 </script>
 {% endblock %}

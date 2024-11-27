@@ -16,14 +16,3 @@ class CSVUploadForm(forms.Form):
             raise forms.ValidationError('Please upload a valid CSV file')
         return file
 
-ClientFormSet = modelformset_factory(
-    Client,
-    fields=('name', 'contact_email', 'phone_number'),  # Adjust fields as necessary
-    extra=1,  # Adjust based on how many empty forms you want by default
-    can_delete=True  # Optional: to allow deletion of clients directly from the formset
-) 
-ProjectFormSet = modelformset_factory(
-    Project,
-    fields=('name', 'client', 'project_type', 'start_date', 'end_date'),  # adjust the fields as needed
-    extra=0
-)

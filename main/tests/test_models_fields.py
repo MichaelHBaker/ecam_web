@@ -97,12 +97,12 @@ class LocationModelTest(BaseTestCase):
         # Assert that a non-existent field is not present
         self.assertNotIn('invalid_field', fields) 
 
-        # Retrieve the locations created by the test data generation
+        # Retrieve the location created by the test data generation
         location1 = Location.objects.filter(name="Acme Headquarters").first()
         location2 = Location.objects.filter(name="Acme Factory").first()
         location3 = Location.objects.filter(name="Globex Office").first()
 
-        # Check if locations were found
+        # Check if location were found
         # self.assertIsNotNone(location1)
         self.assertIsNotNone(location2)
         self.assertIsNotNone(location3)

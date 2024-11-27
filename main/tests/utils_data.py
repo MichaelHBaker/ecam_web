@@ -1,4 +1,4 @@
-from ..models import Client, Project, Location
+from ..models import Client, Project, Location, Measurement
 import datetime
 import decimal
 import csv
@@ -117,7 +117,7 @@ def create_model_table_data():
         start_date="2024-05-01",
     )
 
-    # Create Locations
+    # Create Location
     location1 = Location.objects.create(
         project=project1,
         name="Acme Headquarters",
@@ -125,7 +125,7 @@ def create_model_table_data():
         latitude=34.0522,
         longitude=-118.2437,
     )
-    Location.objects.create(
+    location2 = Location.objects.create(
         project=project1,
         name="Acme Factory",
         address="456 Elm St, Anytown USA",
@@ -139,4 +139,25 @@ def create_model_table_data():
         address="789 Oak St, Othertown USA",
         latitude=40.7128,
         longitude=-74.0060,
+    )
+   # create measurement for location
+    Measurement.objects.create(
+        name="Main Power Meter",
+        description="Primary building power meter",
+        measurement_type="power",
+        location=location1  # Acme Headquarters
+    )
+    
+    Measurement.objects.create(
+        name="HVAC Temperature",
+        description="Main HVAC system temperature",
+        measurement_type="temperature",
+        location=location1
+    )
+    
+    Measurement.objects.create(
+        name="Process Line Pressure",
+        description="Manufacturing line pressure sensor",
+        measurement_type="pressure",
+        location=location2  # Acme Factory
     )

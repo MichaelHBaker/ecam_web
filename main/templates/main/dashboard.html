@@ -10,91 +10,118 @@
         transform: translateX(-10%);
         right: 0; /* Ensure it aligns to the right side of the button */
     }
+
+    
+    .tree-container ul {
+        list-style-type: none;
+        padding-left: 20px;
+    }
+    
+    .caret {
+        cursor: pointer;
+        user-select: none;
+        padding: 4px 8px;
+    }
+    
+    .caret::before {
+        content: "\25B6";
+        color: black;
+        display: inline-block;
+        margin-right: 6px;
+    }
+    
+    .caret-down::before {
+        transform: rotate(90deg);
+    }
+    
+    .nested {
+        display: none;
+    }
+    
+    .active {
+        display: block;
+    }
+    
+    .tree-item {
+        display: flex;
+        align-items: center;
+        padding: 4px;
+    }
+    
+    .tree-item:hover {
+        background-color: #f1f1f1;
+    }
+    
+    .item-actions {
+        display: none;
+        margin-left: 8px;
+    }
+    
+    .tree-item:hover .item-actions {
+        display: inline-block;
+            
 </style>
 {% endblock %}
 
 {% block content %}
 
-<!-- locations Section -->
-<div class="w3-bar w3-white w3-margin-bottom w3-bottombar">   
-    <button onclick="toggleOpenClose('locations')" class="w3-bar-item w3-button">
-        <i id="chevronIcon-locations" class="bi bi-chevron-right"></i> Locations
-    </button>
+<!-- location Section -->
+<div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
+    <span onclick="w3_open_container('location')" style="cursor:pointer">
+        <i class="bi bi-chevron-right"></i> Location
+    </span>
     <div class="w3-dropdown-hover w3-right">
-        <button class="w3-button">
-            <i class="bi bi-three-dots-vertical"></i>
-        </button>
         <div class="w3-dropdown-content w3-bar-block w3-border">
-            <a href="{% url 'locations' %}" class="w3-bar-item w3-button">
-                <i class="bi bi-box-arrow-up-right"></i> Full Page
-            </a>
-            <a href="#" onclick="exportLocations()" class="w3-bar-item w3-button">
-                <i class="bi bi-file-earmark-arrow-down"></i> Export
-            </a>
+            <a href="{% url 'location' %}" class="w3-bar-item w3-button">Full Page</a>
+            <a href="#" class="w3-bar-item w3-button" onclick="exportLocation()">Export</a>
         </div>
     </div>
 </div>
-<div id="locations" class="w3-container w3-hide">
-    <!-- Client Table -->
-    <table class="w3-table w3-striped w3-hoverable w3-white">
-        <thead>
-            <tr class="w3-light-grey">
-                <th>Name</th>
-                <th>Contact Email</th>
-                <th>Phone Number</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for form in client_formset %}
-            <tr onclick="loadProjectsForClient('{{ form.instance.id }}')">
-                <td>{{ form.name }}</td>
-                <td>{{ form.contact_email }}</td>
-                <td>{{ form.phone_number }}</td>
-            </tr>
+<div id="location" class="w3-container w3-hide">
+    {% for client in clients %}
+    <div class="tree-item">
+        <span class="caret">{{ client.name }}</span>
+        <ul class="nested">
+            {% for project in client.project.all %}
+            <li>
+                <span class="caret">{{ project.name }} ({{ project.get_project_type_display }})</span>
+                <ul class="nested">
+                    {% for location in project.location.all %}
+                        {% if not location.parent %}
+                        <li>
+                            {% include "main/location_tree_item.html" with location=location %}
+                        </li>
+                        {% endif %}
+                    {% endfor %}
+                </ul>
+            </li>
             {% endfor %}
-        </tbody>
-    </table>
-
-    <!-- Projects Table -->
-    <div id="projectsContainer" class="w3-responsive">
-        <table class="w3-table w3-striped w3-bordered w3-hoverable w3-white">
-            <thead>
-                <tr class="w3-light-grey">
-                    <th>Name</th>
-                    <th>Project Type</th>
-                    <th>Start Date</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Projects will be dynamically inserted here -->
-            </tbody>
-        </table>
+        </ul>
     </div>
+    {% endfor %}
 </div>
 
-
-
-<!-- Measurements Section -->
+<!-- Measurement Section -->
 <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">   
-    <button onclick="toggleOpenClose('measurements')" class="w3-bar-item w3-button">
-        <i id="chevronIcon-measurements" class="bi bi-chevron-right"></i> measurements
+    <button onclick="toggleOpenClose('measurement')" class="w3-bar-item w3-button">
+        <i id="chevronIcon-measurement" class="bi bi-chevron-right"></i> measurement
     </button>
     <div class="w3-dropdown-hover w3-right">
         <button class="w3-button">
             <i class="bi bi-three-dots-vertical"></i>
         </button>
         <div class="w3-dropdown-content w3-bar-block w3-border">
-            <a href="{% url 'measurements' %}" class="w3-bar-item w3-button">
+            <a href="{% url 'measurement' %}" class="w3-bar-item w3-button">
                 <i class="bi bi-box-arrow-up-right"></i> Full Page
             </a>
-            <a href="#" onclick="exportmeasurements()" class="w3-bar-item w3-button">
+            <a href="#" onclick="exportmeasurement()" class="w3-bar-item w3-button">
                 <i class="bi bi-file-earmark-arrow-down"></i> Export
             </a>
         </div>
     </div>
 </div>
-<div id="measurements" class="w3-container w3-hide">
-    <p>Some text about measurements.</p>
+<div id="measurement" class="w3-container w3-hide">
+    <p>Some text about measurement.</p>
 </div>
 
 <!-- Data Section -->
@@ -161,25 +188,54 @@
             icon.className = "bi bi-chevron-down";
         }
     }
-    
-    function loadProjectsForClient(clientId) {
-        const url = `/load-projects-for-client/${clientId}`; // Ensure the URL matches your Django URLconf
-        fetch(url)
-        .then(response => response.json())
-        .then(data => {
-            const projectsContainer = document.getElementById('projectsContainer').querySelector('tbody');
-            projectsContainer.innerHTML = ''; // Clear previous projects
-            data.projects.forEach(project => {
-                const row = `<tr>
-                                <td>${project.name}</td>
-                                <td>${project.project_type}</td>
-                                <td>${project.start_date}</td>
-                            </tr>`;
-                projectsContainer.innerHTML += row;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize tree toggles
+        var toggler = document.getElementsByClassName("caret");
+        for (var i = 0; i < toggler.length; i++) {
+            toggler[i].addEventListener("click", function(e) {
+                e.stopPropagation();
+                this.parentElement.querySelector(".nested").classList.toggle("active");
+                this.classList.toggle("caret-down");
             });
-        })
-        .catch(error => console.error('Error loading projects:', error));
-    }
+        }
+    });    
+    function w3_open_container(containerName) {
+        // Toggle arrows for all container titles
+        var containers = document.getElementsByClassName("w3-bar");
+        for (var i = 0; i < containers.length; i++) {
+            var titleSpan = containers[i].querySelector('span');
+            var icon = titleSpan ? titleSpan.querySelector('i') : null;
+            if (icon) {
+                if (titleSpan.onclick && titleSpan.onclick.toString().includes(containerName)) {
+                    // This is the clicked container
+                    if (document.getElementById(containerName).classList.contains("w3-hide")) {
+                        icon.classList.remove('bi-chevron-right');
+                        icon.classList.add('bi-chevron-down');
+                    } else {
+                        icon.classList.remove('bi-chevron-down');
+                        icon.classList.add('bi-chevron-right');
+                    }
+                } else {
+                    // Reset other containers
+                    icon.classList.remove('bi-chevron-down');
+                    icon.classList.add('bi-chevron-right');
+                }
+            }
+        }
     
-</script>
+        // Toggle container visibility
+        var containers = document.getElementsByClassName("w3-container");
+        for (var i = 0; i < containers.length; i++) {
+            if (containers[i].id !== containerName) {
+                containers[i].classList.add("w3-hide");
+            }
+        }
+        var x = document.getElementById(containerName);
+        if (x.classList.contains("w3-hide")) {
+            x.classList.remove("w3-hide");
+        } else {
+            x.classList.add("w3-hide");
+        }
+    }</script>
 {% endblock %}

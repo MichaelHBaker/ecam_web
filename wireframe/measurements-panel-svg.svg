@@ -20,7 +20,7 @@
 
   <!-- Header -->
   <path d="M5 15 L15 25 L5 35 Z" fill="#404040"/>
-  <text x="25" y="30" class="header" fill="#404040">Measurements</text>
+  <text x="25" y="30" class="header" fill="#404040">Measurement</text>
 
   <!-- Table header -->
   <rect x="0" y="40" width="745" height="30" fill="#d0d0d0" stroke="#808080" stroke-width="1"/>

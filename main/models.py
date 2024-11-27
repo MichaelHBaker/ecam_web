@@ -8,6 +8,9 @@ class Client(models.Model):
     def __str__(self):
         return self.name
 
+    def get_hierarchy(self):
+        return self.name
+
 class Project(models.Model):
     PROJECT_TYPES = [
         ('Audit', 'Audit'),
@@ -23,6 +26,9 @@ class Project(models.Model):
     def __str__(self):
         return f"{self.name} ({self.get_project_type_display()})"
 
+    def get_hierarchy(self):
+        return f"{self.client.get_hierarchy()} > {self.name}"
+
 class Location(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='locations')
     name = models.CharField(max_length=100)
@@ -36,11 +42,44 @@ class Location(models.Model):
 
     def get_hierarchy(self):
         """
-        Generate a string that shows the path from the top-level parent to this location.
+        Generate a string that shows the complete path from client to this location.
         """
+        # Start with the project hierarchy
+        hierarchy = f"{self.project.get_hierarchy()}"
+        
+        # Add location hierarchy
         ancestors = [self.name]
         p = self.parent
         while p is not None:
             ancestors.append(p.name)
             p = p.parent
-        return " > ".join(reversed(ancestors))
+        
+        # Combine project and location hierarchies
+        return f"{hierarchy} > {' > '.join(reversed(ancestors))}"
+
+class Measurement(models.Model):
+    MEASUREMENT_TYPES = [
+        ('power', 'Power (kW)'),
+        ('temperature', 'Temperature (°F)'),
+        ('pressure', 'Pressure (PSI)'),
+    ]
+
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    measurement_type = models.CharField(max_length=20, choices=MEASUREMENT_TYPES)
+    location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name='measurements')
+
+    def __str__(self):
+        return f"{self.name} ({self.get_measurement_type_display()})"
+
+    def get_hierarchy(self):
+        return f"{self.location.get_hierarchy()} > {self.name}"
+
+    @property
+    def unit(self):
+        units = {
+            'power': 'kW',
+            'temperature': '°F',
+            'pressure': 'PSI'
+        }
+        return units.get(self.measurement_type, '')

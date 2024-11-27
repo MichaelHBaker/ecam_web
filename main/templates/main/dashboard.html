@@ -66,14 +66,21 @@
 {% block content %}
 
 <!-- location Section -->
-<div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
-    <span onclick="w3_open_container('location')" style="cursor:pointer">
-        <i class="bi bi-chevron-right"></i> Location
-    </span>
+<div class="w3-bar w3-white w3-margin-bottom w3-bottombar">   
+    <button onclick="toggleOpenClose('location')" class="w3-bar-item w3-button">
+        <i id="chevronIcon-location" class="bi bi-chevron-right"></i> location
+    </button>
     <div class="w3-dropdown-hover w3-right">
+        <button class="w3-button">
+            <i class="bi bi-three-dots-vertical"></i>
+        </button>
         <div class="w3-dropdown-content w3-bar-block w3-border">
-            <a href="{% url 'location' %}" class="w3-bar-item w3-button">Full Page</a>
-            <a href="#" class="w3-bar-item w3-button" onclick="exportLocation()">Export</a>
+            <a href="{% url 'location' %}" class="w3-bar-item w3-button">
+                <i class="bi bi-box-arrow-up-right"></i> Full Page
+            </a>
+            <a href="#" onclick="exportlocation()" class="w3-bar-item w3-button">
+                <i class="bi bi-file-earmark-arrow-down"></i> Export
+            </a>
         </div>
     </div>
 </div>
@@ -82,11 +89,11 @@
     <div class="tree-item">
         <span class="caret">{{ client.name }}</span>
         <ul class="nested">
-            {% for project in client.project.all %}
+            {% for project in client.projects.all %}
             <li>
                 <span class="caret">{{ project.name }} ({{ project.get_project_type_display }})</span>
                 <ul class="nested">
-                    {% for location in project.location.all %}
+                    {% for location in project.locations.all %}
                         {% if not location.parent %}
                         <li>
                             {% include "main/location_tree_item.html" with location=location %}
@@ -237,5 +244,6 @@
         } else {
             x.classList.add("w3-hide");
         }
-    }</script>
+    }
+</script>
 {% endblock %}

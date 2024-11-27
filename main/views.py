@@ -22,7 +22,7 @@ def dashboard(request):
     ).all()
     
     context = {
-        'client': clients,
+        'clients': clients,
     }
     return render(request, 'main/dashboard.html', context)
 

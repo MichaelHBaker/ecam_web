@@ -57,8 +57,9 @@
         margin-left: 8px;
     }
     
-    .tree-item:hover .item-actions {
+    {% comment %} .tree-item:hover .item-actions {
         display: inline-block;
+    } {% endcomment %}
             
 </style>
 {% endblock %}
@@ -87,6 +88,35 @@
 <div id="location" class="w3-container w3-hide">
     {% for client in clients %}
     <div class="tree-item">
+        <button onclick="toggleOpenClose('{{ client.name }}-{{ client.id }}')" class="w3-bar-item w3-button">
+            <i id="chevronIcon-{{ client.name }}-{{ client.id }}" class="bi bi-chevron-right"></i> {{ client.name }}
+        </button>
+
+        <div id="{{ client.name }}-{{ client.id }}" class="w3-container w3-hide">
+            {% for project in client.projects.all %}
+            <div class="tree-item">
+                <button onclick="toggleOpenClose('{{ project.name }}-{{ project.id }}')" class="w3-bar-item w3-button">
+                    <i id="chevronIcon-{{ project.name }}-{{ project.id }}" class="bi bi-chevron-right"></i> {{ project.name }} ({{ project.get_project_type_display }})
+                </button>
+                <div id="{{ project.name }}-{{ project.id }}" class="w3-container w3-hide">
+                    {% for location in project.locations.all %}
+                        {% if not location.parent %}
+                        <li>
+                            {% include "main/location_tree_item.html" with location=location %}
+                        </li>
+                        {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% comment %} <div id="location" class="w3-container w3-hide">
+    {% for client in clients %}
+    <div class="tree-item">
         <span class="caret">{{ client.name }}</span>
         <ul class="nested">
             {% for project in client.projects.all %}
@@ -106,7 +136,7 @@
         </ul>
     </div>
     {% endfor %}
-</div>
+</div> {% endcomment %}
 
 <!-- Measurement Section -->
 <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">   
@@ -196,7 +226,7 @@
         }
     }
 
-    document.addEventListener('DOMContentLoaded', function() {
+    {% comment %} document.addEventListener('DOMContentLoaded', function() {
         // Initialize tree toggles
         var toggler = document.getElementsByClassName("caret");
         for (var i = 0; i < toggler.length; i++) {
@@ -206,44 +236,7 @@
                 this.classList.toggle("caret-down");
             });
         }
-    });    
-    function w3_open_container(containerName) {
-        // Toggle arrows for all container titles
-        var containers = document.getElementsByClassName("w3-bar");
-        for (var i = 0; i < containers.length; i++) {
-            var titleSpan = containers[i].querySelector('span');
-            var icon = titleSpan ? titleSpan.querySelector('i') : null;
-            if (icon) {
-                if (titleSpan.onclick && titleSpan.onclick.toString().includes(containerName)) {
-                    // This is the clicked container
-                    if (document.getElementById(containerName).classList.contains("w3-hide")) {
-                        icon.classList.remove('bi-chevron-right');
-                        icon.classList.add('bi-chevron-down');
-                    } else {
-                        icon.classList.remove('bi-chevron-down');
-                        icon.classList.add('bi-chevron-right');
-                    }
-                } else {
-                    // Reset other containers
-                    icon.classList.remove('bi-chevron-down');
-                    icon.classList.add('bi-chevron-right');
-                }
-            }
-        }
-    
-        // Toggle container visibility
-        var containers = document.getElementsByClassName("w3-container");
-        for (var i = 0; i < containers.length; i++) {
-            if (containers[i].id !== containerName) {
-                containers[i].classList.add("w3-hide");
-            }
-        }
-        var x = document.getElementById(containerName);
-        if (x.classList.contains("w3-hide")) {
-            x.classList.remove("w3-hide");
-        } else {
-            x.classList.add("w3-hide");
-        }
-    }
+    });     {% endcomment %}
+
 </script>
 {% endblock %}

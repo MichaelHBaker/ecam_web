@@ -17,6 +17,12 @@
         padding-left: 20px;
     }
     
+    .tree-headings {
+        padding-left: 20px;
+    }
+    .tree-heading-before {
+        padding-left: 6px;
+    }
     .caret {
         cursor: pointer;
         user-select: none;
@@ -41,13 +47,14 @@
     .active {
         display: block;
     }
-    
+       
     .tree-item {
         display: flex;
-        align-items: center;
+        flex-direction: column;
+        align-items: flex-start;
         padding: 4px;
     }
-    
+
     .tree-item:hover {
         background-color: #f1f1f1;
     }
@@ -57,9 +64,9 @@
         margin-left: 8px;
     }
     
-    {% comment %} .tree-item:hover .item-actions {
+    .tree-item:hover .item-actions {
         display: inline-block;
-    } {% endcomment %}
+    } 
             
 </style>
 {% endblock %}
@@ -86,57 +93,65 @@
     </div>
 </div>
 <div id="location" class="w3-container w3-hide">
+    <span class="tree-headings">
+        Clients
+        <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Projects</span>
+        <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Locations</span>
+        <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Measurements</span>
+    </span>
     {% for client in clients %}
-    <div class="tree-item">
-        <button onclick="toggleOpenClose('{{ client.name }}-{{ client.id }}')" class="w3-bar-item w3-button">
-            <i id="chevronIcon-{{ client.name }}-{{ client.id }}" class="bi bi-chevron-right"></i> {{ client.name }}
-        </button>
-
-        <div id="{{ client.name }}-{{ client.id }}" class="w3-container w3-hide">
-            {% for project in client.projects.all %}
-            <div class="tree-item">
-                <button onclick="toggleOpenClose('{{ project.name }}-{{ project.id }}')" class="w3-bar-item w3-button">
-                    <i id="chevronIcon-{{ project.name }}-{{ project.id }}" class="bi bi-chevron-right"></i> {{ project.name }} ({{ project.get_project_type_display }})
+        <div class="tree-item w3-bar">
+            <button onclick="toggleOpenClose('{{ client.name }}-{{ client.id }}')" class="w3-bar-item w3-button">
+                <i id="chevronIcon-{{ client.name }}-{{ client.id }}" class="bi bi-chevron-right"></i> {{ client.name }}
+            </button>
+            
+            <div class="w3-dropdown-hover w3-right">
+                <button class="w3-button">
+                    <i class="bi bi-three-dots-vertical"></i>
                 </button>
-                <div id="{{ project.name }}-{{ project.id }}" class="w3-container w3-hide">
-                    {% for location in project.locations.all %}
-                        {% if not location.parent %}
-                        <li>
-                            {% include "main/location_tree_item.html" with location=location %}
-                        </li>
-                        {% endif %}
-                    {% endfor %}
-                </div>
             </div>
-            {% endfor %}
+            <div class="w3-dropdown-content w3-bar-block w3-border">
+                <a href="#" class="w3-bar-item w3-button">
+                    <i class="bi bi-box-arrow-up-right"></i> Full Page
+                </a>
+                <a href="#" onclick="exportlocation()" class="w3-bar-item w3-button">
+                    <i class="bi bi-file-earmark-arrow-down"></i> Export
+                </a>
+            </div>
+    
+            <div id="{{ client.name }}-{{ client.id }}" class="w3-container w3-hide">
+                {% for project in client.projects.all %}
+                <div class="tree-item">
+                    <button onclick="toggleOpenClose('{{ project.name }}-{{ project.id }}')" class="w3-bar-item w3-button">
+                        <i id="chevronIcon-{{ project.name }}-{{ project.id }}" class="bi bi-chevron-right"></i> {{ project.name }} ({{ project.get_project_type_display }})
+                    </button>
+                    <div id="{{ project.name }}-{{ project.id }}" class="w3-container w3-hide">
+                        {% for location in project.locations.all %}
+                            <div class="tree-item">
+                                <button onclick="toggleOpenClose('{{ location.name }}-{{ location.id }}')" class="w3-bar-item w3-button">
+                                    <i id="chevronIcon-{{ location.name }}-{{ location.id }}" class="bi bi-chevron-right"></i> {{ location.name }}
+                                </button>
+                                <div id="{{ location.name }}-{{ location.id }}" class="w3-container w3-hide">
+                                {% for measurement in location.measurements.all %}
+                                    <div class="tree-item">
+                                        <button onclick="toggleOpenClose('{{ measurement.name }}-{{ measurement.id }}')" class="w3-bar-item w3-button">
+                                            <i id="{{ measurement.name }}-{{ measurement.id }}"></i> {{ measurement.name }}
+                                        </button>
+                                        <div id="{{ measurement.name }}-{{ measurement.id }}" class="w3-container w3-hide">
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                                </div>           
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
         </div>
-    </div>
     {% endfor %}
 </div>
 
-{% comment %} <div id="location" class="w3-container w3-hide">
-    {% for client in clients %}
-    <div class="tree-item">
-        <span class="caret">{{ client.name }}</span>
-        <ul class="nested">
-            {% for project in client.projects.all %}
-            <li>
-                <span class="caret">{{ project.name }} ({{ project.get_project_type_display }})</span>
-                <ul class="nested">
-                    {% for location in project.locations.all %}
-                        {% if not location.parent %}
-                        <li>
-                            {% include "main/location_tree_item.html" with location=location %}
-                        </li>
-                        {% endif %}
-                    {% endfor %}
-                </ul>
-            </li>
-            {% endfor %}
-        </ul>
-    </div>
-    {% endfor %}
-</div> {% endcomment %}
 
 <!-- Measurement Section -->
 <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">   
@@ -226,17 +241,6 @@
         }
     }
 
-    {% comment %} document.addEventListener('DOMContentLoaded', function() {
-        // Initialize tree toggles
-        var toggler = document.getElementsByClassName("caret");
-        for (var i = 0; i < toggler.length; i++) {
-            toggler[i].addEventListener("click", function(e) {
-                e.stopPropagation();
-                this.parentElement.querySelector(".nested").classList.toggle("active");
-                this.classList.toggle("caret-down");
-            });
-        }
-    });     {% endcomment %}
 
 </script>
 {% endblock %}

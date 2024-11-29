@@ -21,6 +21,7 @@ def dashboard(request):
     'projects__locations__children'
     ).all()
     
+
     context = {
         'clients': clients,
     }

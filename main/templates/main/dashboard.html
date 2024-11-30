@@ -156,6 +156,7 @@
         <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Locations</span>
         <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Measurements</span>
     </span>
+    
     {% for client in clients %}
         <div class="tree-item">
             <div class="tree-item-row">
@@ -176,23 +177,62 @@
                 </div>
             </div>
             <div id="{{ client.name }}-{{ client.id }}" class="w3-container w3-hide">
+
                 {% for project in client.projects.all %}
                 <div class="tree-item">
-                    <button onclick="toggleOpenClose('{{ project.name }}-{{ project.id }}')" class="w3-bar-item w3-button">
-                        <i id="chevronIcon-{{ project.name }}-{{ project.id }}" class="bi bi-chevron-right"></i> {{ project.name }} ({{ project.get_project_type_display }})
-                    </button>
+                    <div class="tree-item-row">
+                        <button onclick="toggleOpenClose('{{ project.name }}-{{ project.id }}')" class="w3-bar-item w3-button">
+                            <i id="chevronIcon-{{ project.name }}-{{ project.id }}" class="bi bi-chevron-right"></i> {{ project.name }} ({{ project.get_project_type_display }})
+                        </button>
+                        <div class="item-actions">
+                            <button class="w3-button">
+                                <i class="bi bi-three-dots-vertical"></i>
+                            </button>
+                            <div class="w3-dropdown-content w3-bar-block w3-border">
+                                <a href="#" class="w3-bar-item w3-button"><i class="bi bi-plus"></i> Add</a>
+                                <a href="#" class="w3-bar-item w3-button"><i class="bi bi-pencil"></i> Edit</a>
+                                <a href="#" class="w3-bar-item w3-button"><i class="bi bi-trash"></i> Delete</a>
+                            </div>
+                        </div>
+                    </div>
                     <div id="{{ project.name }}-{{ project.id }}" class="w3-container w3-hide">
+
                         {% for location in project.locations.all %}
                             <div class="tree-item">
-                                <button onclick="toggleOpenClose('{{ location.name }}-{{ location.id }}')" class="w3-bar-item w3-button">
-                                    <i id="chevronIcon-{{ location.name }}-{{ location.id }}" class="bi bi-chevron-right"></i> {{ location.name }}
-                                </button>
+                                <div class="tree-item-row">
+                                    <button onclick="toggleOpenClose('{{ location.name }}-{{ location.id }}')" class="w3-bar-item w3-button">
+                                        <i id="chevronIcon-{{ location.name }}-{{ location.id }}" class="bi bi-chevron-right"></i> {{ location.name }}
+                                    </button>
+                                    <div class="item-actions">
+                                        <button class="w3-button">
+                                            <i class="bi bi-three-dots-vertical"></i>
+                                        </button>
+                                        <div class="w3-dropdown-content w3-bar-block w3-border">
+                                            <a href="#" class="w3-bar-item w3-button"><i class="bi bi-plus"></i> Add</a>
+                                            <a href="#" class="w3-bar-item w3-button"><i class="bi bi-pencil"></i> Edit</a>
+                                            <a href="#" class="w3-bar-item w3-button"><i class="bi bi-trash"></i> Delete</a>
+                                        </div>
+                                    </div>
+                                </div>
                                 <div id="{{ location.name }}-{{ location.id }}" class="w3-container w3-hide">
+
                                 {% for measurement in location.measurements.all %}
                                     <div class="tree-item">
-                                        <button onclick="toggleOpenClose('{{ measurement.name }}-{{ measurement.id }}')" class="w3-bar-item w3-button">
-                                            <i id="{{ measurement.name }}-{{ measurement.id }}"></i> {{ measurement.name }}
-                                        </button>
+                                        <div class="tree-item-row">
+                                            <button onclick="toggleOpenClose('{{ measurement.name }}-{{ measurement.id }}')" class="w3-bar-item w3-button">
+                                                <i id="{{ measurement.name }}-{{ measurement.id }}"></i> {{ measurement.name }}
+                                            </button>
+                                            <div class="item-actions">
+                                                <button class="w3-button">
+                                                    <i class="bi bi-three-dots-vertical"></i>
+                                                </button>
+                                                <div class="w3-dropdown-content w3-bar-block w3-border">
+                                                    <a href="#" class="w3-bar-item w3-button"><i class="bi bi-plus"></i> Add</a>
+                                                    <a href="#" class="w3-bar-item w3-button"><i class="bi bi-pencil"></i> Edit</a>
+                                                    <a href="#" class="w3-bar-item w3-button"><i class="bi bi-trash"></i> Delete</a>
+                                                </div>
+                                            </div>
+                                        </div>
                                         <div id="{{ measurement.name }}-{{ measurement.id }}" class="w3-container w3-hide">
                                         </div>
                                     </div>

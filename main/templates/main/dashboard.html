@@ -47,8 +47,65 @@
     .active {
         display: block;
     }
-       
+
     .tree-item {
+        display: flex;
+        align-items: center; /* Align button and three dots vertically */
+        position: relative; /* Relative positioning for dropdown containment */
+        padding: 4px;
+        padding-left: 20px; /* Indent to mimic a tree structure */
+    }
+    
+    .tree-item > button {
+        flex: 1; /* Allow the button to take up available space */
+        text-align: left; /* Align button text to the left */
+        border: none;
+        background: none; /* Remove any default button background */
+    }
+    
+    .item-actions {
+        display: none; /* Hide the three dots by default */
+        position: relative; /* Position dropdown relative to the three dots container */
+    }
+    
+    .tree-item:hover .item-actions {
+        display: inline-block; /* Show the three dots when hovering over the tree-item */
+    }
+    
+    .item-actions > .w3-button {
+        border: none;
+        background: none; /* Remove default button styles */
+    }
+    
+    .w3-dropdown-content {
+        display: none; /* Hide dropdown by default */
+        position: absolute;
+        top: 100%; /* Position dropdown below the three dots */
+        right: 0; /* Align dropdown to the right */
+        background-color: white; /* Dropdown background */
+        border: 1px solid #ddd; /* Add border for visibility */
+        z-index: 10; /* Ensure it appears above other content */
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Subtle shadow for dropdown */
+        width: 150px; /* Optional: Fixed width for dropdown */
+    }
+    
+    .item-actions:hover .w3-dropdown-content {
+        display: block; /* Show dropdown when hovering over the three dots or the dropdown itself */
+    }
+    
+    .w3-dropdown-content a {
+        display: block;
+        padding: 8px;
+        text-decoration: none;
+        color: black;
+        background: white;
+    }
+    
+    .w3-dropdown-content a:hover {
+        background: #f1f1f1; /* Highlight item on hover */
+    }
+                                
+    {% comment %} .tree-item {
         display: flex;
         flex-direction: column;
         align-items: flex-start;
@@ -66,7 +123,7 @@
     
     .tree-item:hover .item-actions {
         display: inline-block;
-    } 
+    }  {% endcomment %}
             
 </style>
 {% endblock %}
@@ -100,25 +157,30 @@
         <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Measurements</span>
     </span>
     {% for client in clients %}
-        <div class="tree-item w3-bar">
+        <div class="tree-item">
+            <!-- Tree Button -->
             <button onclick="toggleOpenClose('{{ client.name }}-{{ client.id }}')" class="w3-bar-item w3-button">
                 <i id="chevronIcon-{{ client.name }}-{{ client.id }}" class="bi bi-chevron-right"></i> {{ client.name }}
             </button>
-            
-            <div class="w3-dropdown-hover w3-right">
+        
+            <!-- Three Dots Dropdown -->
+            <div class="item-actions">
                 <button class="w3-button">
                     <i class="bi bi-three-dots-vertical"></i>
                 </button>
+                <div class="w3-dropdown-content w3-bar-block w3-border">
+                    <a href="#" class="w3-bar-item w3-button">
+                        <i class="bi bi-plus"></i> Add
+                    </a>
+                    <a href="#" class="w3-bar-item w3-button">
+                        <i class="bi bi-pencil"></i> Edit
+                    </a>
+                    <a href="#" class="w3-bar-item w3-button">
+                        <i class="bi bi-trash"></i> Delete
+                    </a>
+                </div>
             </div>
-            <div class="w3-dropdown-content w3-bar-block w3-border">
-                <a href="#" class="w3-bar-item w3-button">
-                    <i class="bi bi-box-arrow-up-right"></i> Full Page
-                </a>
-                <a href="#" onclick="exportlocation()" class="w3-bar-item w3-button">
-                    <i class="bi bi-file-earmark-arrow-down"></i> Export
-                </a>
-            </div>
-    
+                                            
             <div id="{{ client.name }}-{{ client.id }}" class="w3-container w3-hide">
                 {% for project in client.projects.all %}
                 <div class="tree-item">

@@ -8,7 +8,13 @@
         transform: translateX(-10%);
     }
 
-    
+    .tree-headings {
+        padding-left: 35px;
+    }
+    .tree-heading-before {
+        padding-left: 6px;
+    }
+
     .caret::before {
         content: "\25B6";
         display: inline-block;
@@ -87,6 +93,12 @@
     </div>
 </div>
 <div id="location" class="w3-container w3-container-tree w3-hide">
+    <span class="tree-headings">
+        Clients
+        <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Projects</span>
+        <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Locations</span>
+        <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Measurements</span>
+    </span>
     {% for client in clients %}
     <div class="tree-item w3-hover-light-grey">
         <div class="tree-text">

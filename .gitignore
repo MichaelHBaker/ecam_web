@@ -28,8 +28,6 @@ share/python-wheels/
 MANIFEST
 
 # PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
 
@@ -60,7 +58,7 @@ coverage.xml
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
-media
+media/
 
 # Flask stuff:
 instance/
@@ -86,9 +84,6 @@ ipython_config.py
 .python-version
 
 # pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv users may expect a conflict.
 .Pipfile.lock
 
 # celery beat schedule file
@@ -132,3 +127,20 @@ dmypy.json
 
 # Test files
 test_files/
+
+# Node/React specific ignores
+frontend/node_modules/  # Node.js dependencies
+frontend/build/         # React build folder
+frontend/.env           # React environment variables
+
+# Logs and temporary files
+*.log
+*.tmp
+*.swp
+*.swo
+*.swn
+*.~*
+.DS_Store
+Thumbs.db
+desktop.ini
+cd

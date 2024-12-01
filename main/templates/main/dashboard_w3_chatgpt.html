@@ -1,0 +1,214 @@
+{% extends 'base.html' %}
+
+{% block title %}ECAM Web{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Dropdown alignment adjustments */
+    .w3-dropdown-content {
+        transform: translateX(-10%);
+        right: 0;
+    }
+
+    /* Caret icon styles */
+    .caret::before {
+        content: "\25B6";
+        display: inline-block;
+        margin-right: 6px;
+    }
+
+    .caret-down::before {
+        transform: rotate(90deg);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Location Section -->
+<div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
+    <button onclick="toggleOpenClose('location')" class="w3-bar-item w3-button">
+        <i id="chevronIcon-location" class="caret"></i> Location
+    </button>
+    <div class="w3-dropdown-hover w3-right">
+        <button class="w3-button">
+            <i class="bi bi-three-dots-vertical"></i>
+        </button>
+        <div class="w3-dropdown-content w3-bar-block w3-border">
+            <a href="{% url 'location' %}" class="w3-bar-item w3-button">
+                <i class="bi bi-box-arrow-up-right"></i> Full Page
+            </a>
+            <a href="#" onclick="exportlocation()" class="w3-bar-item w3-button">
+                <i class="bi bi-file-earmark-arrow-down"></i> Export
+            </a>
+        </div>
+    </div>
+</div>
+<div id="location" class="w3-container w3-hide">
+    {% for client in clients %}
+    <div class="w3-ul w3-hover-light-grey">
+        <div class="w3-bar">
+            <button onclick="toggleOpenClose('{{ client.name }}-{{ client.id }}')" class="w3-bar-item w3-button w3-block">
+                <i id="chevronIcon-{{ client.name }}-{{ client.id }}" class="caret"></i> {{ client.name }}
+            </button>
+            <div class="w3-dropdown-hover w3-right">
+                <button class="w3-button">
+                    <i class="bi bi-three-dots-vertical"></i>
+                </button>
+                <div class="w3-dropdown-content w3-bar-block w3-border">
+                    <a href="#" class="w3-bar-item w3-button"><i class="bi bi-plus"></i> Add</a>
+                    <a href="#" class="w3-bar-item w3-button"><i class="bi bi-pencil"></i> Edit</a>
+                    <a href="#" class="w3-bar-item w3-button"><i class="bi bi-trash"></i> Delete</a>
+                </div>
+            </div>
+        </div>
+        <div id="{{ client.name }}-{{ client.id }}" class="w3-container w3-hide w3-margin-left">
+            {% for project in client.projects.all %}
+            <div class="w3-ul w3-hover-light-grey">
+                <div class="w3-bar">
+                    <button onclick="toggleOpenClose('{{ project.name }}-{{ project.id }}')" class="w3-bar-item w3-button w3-block">
+                        <i id="chevronIcon-{{ project.name }}-{{ project.id }}" class="caret"></i> {{ project.name }} ({{ project.get_project_type_display }})
+                    </button>
+                    <div class="w3-dropdown-hover w3-right">
+                        <button class="w3-button">
+                            <i class="bi bi-three-dots-vertical"></i>
+                        </button>
+                        <div class="w3-dropdown-content w3-bar-block w3-border">
+                            <a href="#" class="w3-bar-item w3-button"><i class="bi bi-plus"></i> Add</a>
+                            <a href="#" class="w3-bar-item w3-button"><i class="bi bi-pencil"></i> Edit</a>
+                            <a href="#" class="w3-bar-item w3-button"><i class="bi bi-trash"></i> Delete</a>
+                        </div>
+                    </div>
+                </div>
+                <div id="{{ project.name }}-{{ project.id }}" class="w3-container w3-hide w3-margin-left">
+                    {% for location in project.locations.all %}
+                    <div class="w3-ul w3-hover-light-grey">
+                        <div class="w3-bar">
+                            <button onclick="toggleOpenClose('{{ location.name }}-{{ location.id }}')" class="w3-bar-item w3-button w3-block">
+                                <i id="chevronIcon-{{ location.name }}-{{ location.id }}" class="caret"></i> {{ location.name }}
+                            </button>
+                            <div class="w3-dropdown-hover w3-right">
+                                <button class="w3-button">
+                                    <i class="bi bi-three-dots-vertical"></i>
+                                </button>
+                                <div class="w3-dropdown-content w3-bar-block w3-border">
+                                    <a href="#" class="w3-bar-item w3-button"><i class="bi bi-plus"></i> Add</a>
+                                    <a href="#" class="w3-bar-item w3-button"><i class="bi bi-pencil"></i> Edit</a>
+                                    <a href="#" class="w3-bar-item w3-button"><i class="bi bi-trash"></i> Delete</a>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="{{ location.name }}-{{ location.id }}" class="w3-container w3-hide w3-margin-left">
+                            {% for measurement in location.measurements.all %}
+                            <div class="w3-ul w3-hover-light-grey">
+                                <div class="w3-bar">
+                                    <button onclick="toggleOpenClose('{{ measurement.name }}-{{ measurement.id }}')" class="w3-bar-item w3-button w3-block">
+                                        <i id="chevronIcon-{{ measurement.name }}-{{ measurement.id }}" class="caret"></i> {{ measurement.name }}
+                                    </button>
+                                    <div class="w3-dropdown-hover w3-right">
+                                        <button class="w3-button">
+                                            <i class="bi bi-three-dots-vertical"></i>
+                                        </button>
+                                        <div class="w3-dropdown-content w3-bar-block w3-border">
+                                            <a href="#" class="w3-bar-item w3-button"><i class="bi bi-plus"></i> Add</a>
+                                            <a href="#" class="w3-bar-item w3-button"><i class="bi bi-pencil"></i> Edit</a>
+                                            <a href="#" class="w3-bar-item w3-button"><i class="bi bi-trash"></i> Delete</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Measurement Section -->
+<div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
+    <button onclick="toggleOpenClose('measurement')" class="w3-bar-item w3-button">
+        <i id="chevronIcon-measurement" class="caret"></i> Measurement
+    </button>
+    <div class="w3-dropdown-hover w3-right">
+        <button class="w3-button">
+            <i class="bi bi-three-dots-vertical"></i>
+        </button>
+        <div class="w3-dropdown-content w3-bar-block w3-border">
+            <a href="{% url 'measurement' %}" class="w3-bar-item w3-button">
+                <i class="bi bi-box-arrow-up-right"></i> Full Page
+            </a>
+            <a href="#" onclick="exportmeasurement()" class="w3-bar-item w3-button">
+                <i class="bi bi-file-earmark-arrow-down"></i> Export
+            </a>
+        </div>
+    </div>
+</div>
+<div id="measurement" class="w3-container w3-hide">
+    <p>Content about Measurement.</p>
+</div>
+
+<!-- Data Section -->
+<div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
+    <button onclick="toggleOpenClose('data')" class="w3-bar-item w3-button">
+        <i id="chevronIcon-data" class="caret"></i> Data
+    </button>
+    <div class="w3-dropdown-hover w3-right">
+        <button class="w3-button">
+            <i class="bi bi-three-dots-vertical"></i>
+        </button>
+        <div class="w3-dropdown-content w3-bar-block w3-border">
+            <a href="{% url 'data' %}" class="w3-bar-item w3-button">
+                <i class="bi bi-box-arrow-up-right"></i> Full Page
+            </a>
+            <a href="#" onclick="exportdata()" class="w3-bar-item w3-button">
+                <i class="bi bi-file-earmark-arrow-down"></i> Export
+            </a>
+        </div>
+    </div>
+</div>
+<div id="data" class="w3-container w3-hide">
+    <p>Content about Data.</p>
+</div>
+
+<!-- Dictionary Section -->
+<div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
+    <button onclick="toggleOpenClose('dictionary')" class="w3-bar-item w3-button">
+        <i id="chevronIcon-dictionary" class="caret"></i> Dictionary
+    </button>
+    <div class="w3-dropdown-hover w3-right">
+        <button class="w3-button">
+            <i class="bi bi-three-dots-vertical"></i>
+        </button>
+        <div class="w3-dropdown-content w3-bar-block w3-border">
+            <a href="{% url 'dictionary' %}" class="w3-bar-item w3-button">
+                <i class="bi bi-box-arrow-up-right"></i> Full Page
+            </a>
+            <a href="#" onclick="exportdictionary()" class="w3-bar-item w3-button">
+                <i class="bi bi-file-earmark-arrow-down"></i> Export
+            </a>
+        </div>
+    </div>
+</div>
+<div id="dictionary" class="w3-container w3-hide">
+    <p>Content about Dictionary.</p>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function toggleOpenClose(id) {
+        var div = document.getElementById(id);
+        var icon = document.getElementById('chevronIcon-' + id);
+        div.classList.toggle('w3-show');
+        div.classList.toggle('w3-hide');
+        icon.classList.toggle('caret');
+        icon.classList.toggle('caret-down');
+    }
+</script>
+{% endblock %}

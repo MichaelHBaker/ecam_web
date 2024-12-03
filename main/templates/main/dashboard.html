@@ -102,7 +102,9 @@
     {% for client in clients %}
     <div class="tree-item w3-hover-light-grey">
         <div class="tree-text">
-            <button onclick="toggleOpenClose('{{ client.name }}-{{ client.id }}')" class="w3-button">
+            <button onclick="toggleOpenClose('{{ client.name }}-{{ client.id }}')" 
+                    class="w3-button" 
+                    title="Email: {{ client.contact_email }}, Phone: {{ client.phone_number}}" >
                 <i id="chevronIcon-{{ client.name }}-{{ client.id }}" class="bi bi-chevron-right"></i> {{ client.name }}
             </button>
         </div>
@@ -181,6 +183,15 @@
         {% endfor %}
     </div>
     {% endfor %}
+</div>
+
+<div id="EditCard" class="w3-card-4 w3-margin w3-white" style="width:300px; display:none">
+    <div class="w3-container">
+        <form id="EditForm">
+            <!-- Dynamically added fields will go here -->
+        </form>
+        <button class="w3-button w3-blue w3-margin-top" onclick="saveDetails()">Submit</button>
+    </div>
 </div>
 
 <!-- Measurement Section -->

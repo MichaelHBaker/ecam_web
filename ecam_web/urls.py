@@ -27,8 +27,4 @@ urlpatterns = [
     path('measurement/', views.measurement, name='measurement'),
     path('data/', views.data, name='data'),
     path('dictionary/', views.dictionary, name='dictionary'),
-    path('client-operation/', views.client_operation, name='client-operation'),
-    path('project-operation/', views.project_operation, name='project-operation'),
-    path('location-operation/', views.location_operation, name='location-operation'),
-    path('measurement-operation/', views.measurement_operation, name='measurement-operation'),
 ]

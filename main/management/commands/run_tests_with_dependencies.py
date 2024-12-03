@@ -6,7 +6,7 @@ from django.core.management import call_command
 from django.db import connection
 from ...tests import utils_data
 
-from main.models import Client, Project, Location
+from main.models import Client, Project, Location, Measurement
 
 class Command(BaseCommand):
     help = 'Run tests and regenerate test files if dependencies have changed'
@@ -25,6 +25,8 @@ class Command(BaseCommand):
                     os.remove(os.path.join(test_files_dir, file))
 
             # Delete all records from model tables in default db
+
+            Measurement.objects.all().delete()
             Location.objects.all().delete()
             Project.objects.all().delete()
             Client.objects.all().delete()

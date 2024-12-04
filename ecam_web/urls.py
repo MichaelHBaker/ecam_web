@@ -27,4 +27,6 @@ urlpatterns = [
     path('measurement/', views.measurement, name='measurement'),
     path('data/', views.data, name='data'),
     path('dictionary/', views.dictionary, name='dictionary'),
+    path('render-edit-form/', views.render_edit_form, name='render_edit_form'),
+    path('edit-form-submit/', views.handle_edit_form_submission, name='handle_edit_form_submission'),
 ]

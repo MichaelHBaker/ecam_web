@@ -114,7 +114,7 @@
             </button>
             <div class="w3-dropdown-content w3-bar-block w3-border">
                 <a href="#" class="w3-bar-item w3-button"><i class="bi bi-plus"></i> Add</a>
-                <a href="#" class="w3-bar-item w3-button"><i class="bi bi-pencil"></i> Edit</a>
+                <a href="#" class="w3-bar-item w3-button" onclick="showEditCard('client', '{{ client.id }}')"><i class="bi bi-pencil"></i> Edit</a>
                 <a href="#" class="w3-bar-item w3-button"><i class="bi bi-trash"></i> Delete</a>
             </div>
         </div>
@@ -185,14 +185,7 @@
     {% endfor %}
 </div>
 
-<div id="EditCard" class="w3-card-4 w3-margin w3-white" style="width:300px; display:none">
-    <div class="w3-container">
-        <form id="EditForm">
-            <!-- Dynamically added fields will go here -->
-        </form>
-        <button class="w3-button w3-blue w3-margin-top" onclick="saveDetails()">Submit</button>
-    </div>
-</div>
+<div id="editFormContainer"></div>
 
 <!-- Measurement Section -->
 <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
@@ -280,5 +273,15 @@
             icon.className = "bi bi-chevron-down";
         }
     }
+
+    function showEditCard(entityType, entityId) {
+        const url = `/render-edit-form/?entity_type=${entityType}&entity_id=${entityId}`;  // Ensure the URL is set up in urls.py
+        fetch(url)
+            .then(response => response.text())
+            .then(html => {
+                document.getElementById('editFormContainer').innerHTML = html;  // Ensure there's a div with this id in your HTML
+            });
+    }
+    
 </script>
 {% endblock %}

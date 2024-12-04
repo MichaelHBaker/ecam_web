@@ -2,6 +2,7 @@ from django.test import TestCase
 from django.urls import reverse
 from ..views import dashboard
 from ..models import Client, Project, Location, Measurement
+from ..forms import ClientForm, ProjectForm, LocationForm, MeasurementForm
 from . import utils_data
 
 class BaseTestCase(TestCase):
@@ -103,3 +104,76 @@ class LocationHierarchyTests(BaseTestCase):
             "Acme Corp > Acme Audit > Acme Headquarters > Main Power Meter"
         )
 
+
+class TreeEditFormTestCase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        # Setup once for all tests in this class
+        cls.client = Client.objects.create(name="Test Client", contact_email="contact@testclient.com")
+        cls.project = Project.objects.create(name="Test Project", client=cls.client, project_type="Audit", start_date="2024-01-15")
+
+    def test_valid_client_form(self):
+        form_data = {
+            'name': 'New Client',
+            'contact_email': 'newclient@example.com'
+        }
+        form = ClientForm(data=form_data)
+        self.assertTrue(form.is_valid())
+        new_client = form.save()
+        self.assertEqual(Client.objects.count(), 2)
+
+    def test_valid_project_form(self):
+        form_data = {
+            'name': 'New Project',
+            'client': self.client,
+            'project_type': 'Development',
+            'start_date': "2024-01-15"
+        }
+        form = ProjectForm(data=form_data)
+        self.assertTrue(form.is_valid())
+        new_project = form.save()
+        self.assertEqual(Project.objects.count(), 2)
+
+    def test_valid_location_form(self):
+        form_data = {
+            'name': 'New Location',
+            'project': self.project,
+            'address': '123 New St, New City'
+        }
+        form = LocationForm(data=form_data)
+        self.assertTrue(form.is_valid())
+        new_location = form.save()
+        self.assertEqual(Location.objects.count(), 1)
+
+    def test_valid_measurement_form(self):
+        form_data = {
+            'name': 'New Measurement',
+            'description': 'New measurement description',
+            'measurement_type': 'Temperature',
+            'location': Location.objects.create(
+                name="Project Location", project=self.project).id
+        }
+        form = MeasurementForm(data=form_data)
+        self.assertTrue(form.is_valid())
+        new_measurement = form.save()
+        self.assertEqual(Measurement.objects.count(), 1)
+
+    def test_invalid_client_form(self):
+        form_data = {}
+        form = ClientForm(data=form_data)
+        self.assertFalse(form.is_valid())
+
+    def test_invalid_project_form(self):
+        form_data = {'name': 'Invalid Project'}
+        form = ProjectForm(data=form_data)
+        self.assertFalse(form.is_valid())
+
+    def test_invalid_location_form(self):
+        form_data = {'name': ''}
+        form = LocationForm(data=form_data)
+        self.assertFalse(form.is_valid())
+
+    def test_invalid_measurement_form(self):
+        form_data = {'name': ''}
+        form = MeasurementForm(data=form_data)
+        self.assertFalse(form.is_valid())

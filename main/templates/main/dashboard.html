@@ -65,7 +65,23 @@
         width: 200px; /* Set a fixed width for section buttons */
         text-align: left; /* Align text to the left */
         padding-left: 16px; /* Optional padding */
+    
+    #editFormContainer {
+        float: right;
+        {% comment %} display: none; /* Initially hidden */
+        position: fixed; /* Stay in place even on page scroll */
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 1000;
+        width: 90%;
+        max-width: 500px; /* Max width of the modal */
+        background-color: white;
+        padding: 20px;
+        border-radius: 5px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1); {% endcomment %}
     }
+}
         
     
 </style>
@@ -275,13 +291,26 @@
     }
 
     function showEditCard(entityType, entityId) {
-        const url = `/render-edit-form/?entity_type=${entityType}&entity_id=${entityId}`;  // Ensure the URL is set up in urls.py
+        const url = `/render-edit-form/?entity_type=${entityType}&entity_id=${entityId}`;
         fetch(url)
             .then(response => response.text())
             .then(html => {
-                document.getElementById('editFormContainer').innerHTML = html;  // Ensure there's a div with this id in your HTML
-            });
+                const editFormContainer = document.getElementById('editFormContainer');
+                const clientDiv = document.getElementById(entityType + '-' + entityId); // Assuming IDs are like 'client-123'
+    
+                editFormContainer.innerHTML = html;
+                editFormContainer.style.display = 'block';
+    
+                if (clientDiv) {
+                    const rect = clientDiv.getBoundingClientRect(); // Gets the position relative to the viewport
+                    editFormContainer.style.position = 'fixed'; // Fixed positioning relative to the viewport
+                    editFormContainer.style.left = `${rect.right}px`;
+                    editFormContainer.style.top = `${rect.top + window.scrollY}px`; // Adjust for vertical scroll
+                }
+            })
+            .catch(error => console.error('Error loading the form:', error));
     }
+        
     
 </script>
 {% endblock %}

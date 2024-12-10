@@ -31,6 +31,23 @@ def dashboard(request):
     return render(request, 'main/dashboard.html', context)
 
 
+
+def edit_client(request, client_id):
+    client = get_object_or_404(Client, id=client_id)
+    if request.method == 'POST':
+        form = ClientForm(request.POST, instance=client)
+        if form.is_valid():
+            print("Form data before save:", form.cleaned_data)
+            form.save()
+            return redirect('dashboard')
+        else:
+            print(form.errors)
+            return render(request, 'edit-client.html', {'form': form})
+    else:
+        form = ClientForm(instance=client)
+    return render(request, 'main/edit-client.html', {'form': form, 'client': client})
+
+
 def render_edit_form(request):
     entity_type = request.GET.get('entity_type')
     entity_id = request.GET.get('entity_id')

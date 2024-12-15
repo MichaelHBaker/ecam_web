@@ -16,6 +16,10 @@ class CSVUploadForm(forms.Form):
             raise forms.ValidationError('Please upload a valid CSV file')
         return file
 
+class ClientNameForm(forms.ModelForm):
+    class Meta:
+        model = Client
+        fields = ['name']
 
 class ClientForm(forms.ModelForm):
     class Meta:

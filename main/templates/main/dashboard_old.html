@@ -66,65 +66,42 @@
         text-align: left; /* Align text to the left */
         padding-left: 16px; /* Optional padding */
 
-
-        
-
-
-
-    .modal {
-        display: none; 
-        position: fixed; 
-        z-index: 1; 
-        left: 0;
-        top: 0;
-        width: 100%; 
-        height: 100%; 
-        overflow: auto; 
-        background-color: rgb(0,0,0); 
-        background-color: rgba(0,0,0,0.4); 
-    }
+        .modal {
+            display: none; 
+            position: fixed; 
+            z-index: 1; 
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            overflow: auto; 
+            background-color: rgb(0,0,0); 
+            background-color: rgba(0,0,0,0.4); 
+        }
     
-    .modal-content {
-        background-color: #fefefe;
-        margin: 15% auto; 
-        padding: 20px;
-        border: 1px solid #888;
-        width: 80%; 
-    }
-    
-    .close {
-        color: #aaa;
-        float: right;
-        font-size: 28px;
-        font-weight: bold;
-    }
-    
-    .close:hover,
-    .close:focus {
-        color: black;
-        text-decoration: none;
-        cursor: pointer;
-    }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto; 
+            padding: 20px;
+            border: 1px solid #888;
+            width: 80%; 
+        }
         
-
-
-    {% comment %} #editFormContainer {
-        float: right;
-        display: none; /* Initially hidden */
-        position: fixed; /* Stay in place even on page scroll */
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
-        z-index: 1000;
-        width: 90%;
-        max-width: 500px; /* Max width of the modal */
-        background-color: white;
-        padding: 20px;
-        border-radius: 5px;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.1); {% endcomment %}
-    }
-}
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
         
+        .close:hover,
+        .close:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }       
+    }
+       
     
 </style>
 {% endblock %}
@@ -157,36 +134,41 @@
         <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Locations</span>
         <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Measurements</span>
     </span>
-
     {% for client in clients %}
     <div class="tree-item w3-hover-light-grey">
         <div class="tree-text">
-            <button onclick="toggleOpenClose('{{ client.id }}')" class="w3-button" title="Email: {{ client.contact_email }}, Phone: {{ client.phone_number}}">
-                <i id="chevronIcon-{{ client.id }}" class="bi bi-chevron-right"></i> {{ client.name }}
+            <button onclick="toggleOpenClose('{{ client.name }}-{{ client.id }}')" 
+                    class="w3-button" 
+                    title="Email: {{ client.contact_email }}, Phone: {{ client.phone_number}}" >
+                <i id="chevronIcon-{{ client.name }}-{{ client.id }}" class="bi bi-chevron-right"></i> {{ client.name }}
             </button>
         </div>
-        {% if edit_client_id == client.id %}
-        <div id="form-{{ client.id }}" style="display:block;">
-            <form method="POST" action="{% url 'dashboard' %}">
-                {% csrf_token %}
-                <input type="hidden" name="client_id" value="{{ client.id }}">
-                <input type="text" name="name" value="{{ client.name }}" required>
-                <button type="submit" class="w3-button w3-green">Save</button>
-            </form>
-        </div>
-        {% endif %}
         <div class="item-actions">
             <button class="w3-button">
                 <i class="bi bi-three-dots-vertical"></i>
             </button>
             <div class="w3-dropdown-content w3-bar-block w3-border">
                 <a href="#" class="w3-bar-item w3-button"><i class="bi bi-plus"></i> Add Client</a>
-                <a href="{% url 'dashboard' %}?edit={{ client.id }}" class="w3-bar-item w3-button"><i class="bi bi-pencil"></i> Edit</a>
+                {% comment %} 
+                part of modal form design
+                <a href="#" class="w3-bar-item w3-button" onclick="showEditCard('client', '{{ client.id }}')"><i class="bi bi-pencil"></i> Edit</a> 
+                {% endcomment %}
+                <a href="#" class="w3-bar-item w3-button"><i class="bi bi-pencil"></i> Edit</a>
                 <a href="#" class="w3-bar-item w3-button"><i class="bi bi-trash"></i> Delete</a>
             </div>
         </div>
-    </div>
 
+        {% comment %} 
+        Part of modal form design
+        <div id="editModal" class="modal">
+            <div class="modal-content">
+                <div id="formContent"></div>
+            </div>
+        </div>         
+        {% endcomment %}
+        
+
+    </div>
     <div id="{{ client.name }}-{{ client.id }}" class="w3-container w3-hide w3-margin-left">
         {% for project in client.projects.all %}
         
@@ -256,7 +238,6 @@
     {% endfor %}
 </div>
 
-{% comment %} <div id="editFormContainer"></div> {% endcomment %}
 
 <!-- Measurement Section -->
 <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
@@ -345,7 +326,98 @@
         }
     }
 
+document.addEventListener('DOMContentLoaded', function() {
+    initializeTreeItems();
+});
+
+function initializeTreeItems() {
+    document.querySelectorAll('.tree-item').forEach(item => {
+        const form = item.querySelector('form');
+        const viewMode = item.querySelector('.item-view');
+        const editMode = item.querySelector('.item-edit');
+        const editTrigger = item.querySelector('.edit-trigger');
+        const treeToggle = item.querySelector('.tree-toggle');
         
+        // Toggle children
+        treeToggle?.addEventListener('click', () => {
+            const children = item.querySelector('.children');
+            if (children) {
+                children.style.display = children.style.display === 'none' ? 'block' : 'none';
+                treeToggle.querySelector('i').classList.toggle('bi-chevron-down');
+            }
+        });
+        
+        // Edit mode
+        editTrigger?.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            viewMode.style.display = 'none';
+            editMode.style.display = 'block';
+            editMode.querySelector('input').focus();
+        });
+        
+        // Handle field changes
+        form.querySelectorAll('.inline-field').forEach(field => {
+            field.addEventListener('change', () => {
+                submitForm(form);
+            });
+            
+            field.addEventListener('keydown', e => {
+                if (e.key === 'Escape') {
+                    viewMode.style.display = 'block';
+                    editMode.style.display = 'none';
+                }
+            });
+        });
+    });
+}
+
+async function submitForm(form) {
+    try {
+        const response = await fetch(form.action, {
+            method: 'POST',
+            body: new FormData(form)
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            updateDisplayValues(form, data.data);
+        } else {
+            showError(form, data.errors);
+        }
+    } catch (error) {
+        showError(form, 'Save failed');
+    }
+}
+
+
+{% comment %} 
+part of modal form design
+    function showEditCard(type, id) {
+        console.log("Function called with type:", type, "and id:", id);  // Check if function is called
+        const modal = document.getElementById('editModal');
+        const formContent = document.getElementById('formContent');
+        const span = document.getElementsByClassName("close")[0];
+    
+        fetch(`/edit-client/${id}/`)
+        .then(response => response.text())
+        .then(html => {
+            console.log("Received HTML:", html);
+            formContent.innerHTML = html;
+            modal.style.display = "block";
+        });
+    
+        span.onclick = function() {
+            modal.style.display = "none";
+        }
+    
+        window.onclick = function(event) {
+            if (event.target === modal) {
+                modal.style.display = "none";
+            }
+        }
+    } {% endcomment %}
+
     
 </script>
 {% endblock %}

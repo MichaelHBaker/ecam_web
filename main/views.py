@@ -3,7 +3,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods, require_POST
 from django.core.exceptions import ValidationError
 from .models import Project, Client, Location, Measurement
-from .forms import ClientForm, ProjectForm, LocationForm, MeasurementForm
+from .forms import ClientForm, ProjectForm, LocationForm, MeasurementForm, ClientNameForm
 
 
 import chardet
@@ -15,79 +15,28 @@ from openpyxl import Workbook
 def index(request):
     return render(request, 'main/index.html')
 
+
 def dashboard(request):
-    # Efficiently prefetch all related data for the tree
-    clients = Client.objects.prefetch_related(
-    'projects',
-    'projects__locations',
-    'projects__locations__measurements',
-    'projects__locations__children'
-    ).all()
-    
+    clients = Client.objects.all()
+    edit_client_id = request.GET.get('edit')  # ID of the client to edit, if provided
 
-    context = {
-        'clients': clients,
-    }
-    return render(request, 'main/dashboard.html', context)
+    try:
+        edit_client_id = int(edit_client_id) if edit_client_id else None
+    except ValueError:
+        edit_client_id = None
 
-
-
-def edit_client(request, client_id):
-    client = get_object_or_404(Client, id=client_id)
     if request.method == 'POST':
-        form = ClientForm(request.POST, instance=client)
+        client_id = int(request.POST.get('client_id'))
+        client = Client.objects.get(pk=client_id)
+        form = ClientNameForm(request.POST, instance=client)
         if form.is_valid():
-            print("Form data before save:", form.cleaned_data)
             form.save()
             return redirect('dashboard')
-        else:
-            print(form.errors)
-            return render(request, 'edit-client.html', {'form': form})
-    else:
-        form = ClientForm(instance=client)
-    return render(request, 'main/edit-client.html', {'form': form, 'client': client})
 
-
-def render_edit_form(request):
-    entity_type = request.GET.get('entity_type')
-    entity_id = request.GET.get('entity_id')
-    form_classes = {
-        'client': ClientForm,
-        'project': ProjectForm,
-        'location': LocationForm,
-        'measurement': MeasurementForm
-    }
-    form_class = form_classes.get(entity_type)
-    instance = get_object_or_404(form_class.Meta.model, pk=entity_id) if entity_id else None
-    form = form_class(instance=instance)
-    
-    # Correct handling for the entity_type in the template
-    entity_type_clean = instance.__class__.__name__.lower() if instance else entity_type
-
-    return render(request, 'main/location_tree_edit_form.html', {'form': form, 'entity_type': entity_type_clean})
-
-
-
-@require_POST
-def handle_edit_form_submission(request):
-    entity_type = request.POST.get('entity_type')
-    entity_id = request.POST.get('entity_id')
-    form_class = {
-        'client': ClientForm,
-        'project': ProjectForm,
-        'location': LocationForm,
-        'measurement': MeasurementForm
-    }.get(entity_type)
-    instance = form_class.Meta.model.objects.get(pk=entity_id) if entity_id else None
-    form = form_class(request.POST, instance=instance)
-    
-    if form.is_valid():
-        form.save()
-        # Redirect back to the dashboard
-        return redirect('dashboard')
-    else:
-        # Handle errors, potentially by re-rendering the form with errors
-        return render(request, 'main/location_tree_edit_form.html', {'form': form})
+    return render(request, 'main/dashboard.html', {
+        'clients': clients,
+        'edit_client_id': edit_client_id,
+    })
 
 @require_http_methods(["POST"])
 def excel_upload(request):

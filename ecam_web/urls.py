@@ -27,5 +27,5 @@ urlpatterns = [
     path('measurement/', views.measurement, name='measurement'),
     path('data/', views.data, name='data'),
     path('dictionary/', views.dictionary, name='dictionary'),
-    
+    path('update-client/', views.update_client, name='update_client'),    
 ]

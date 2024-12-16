@@ -1,9 +1,11 @@
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods, require_POST
+from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
 from .models import Project, Client, Location, Measurement
 from .forms import ClientForm, ProjectForm, LocationForm, MeasurementForm, ClientNameForm
+
 
 
 import chardet
@@ -37,6 +39,28 @@ def dashboard(request):
         'clients': clients,
         'edit_client_id': edit_client_id,
     })
+
+
+@require_http_methods(["POST"])  # Ensure that only POST requests are handled
+@csrf_exempt  # Exempting CSRF for demonstration purposes; consider CSRF protection for production
+def update_client(request):
+    # Extract the client ID and new name from the POST request
+    client_id = request.POST.get('client_id')
+    new_name = request.POST.get('name')
+
+    # Try to find the client by ID and update the name
+    try:
+        client = Client.objects.get(id=client_id)
+        client.name = new_name
+        client.save()
+
+        # Return the new name in a JsonResponse
+        return JsonResponse({'updatedName': new_name})
+
+    except Client.DoesNotExist:
+        # If no client is found, return an error message
+        return JsonResponse({'error': 'Client not found'}, status=404)
+
 
 @require_http_methods(["POST"])
 def excel_upload(request):

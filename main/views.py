@@ -3,9 +3,18 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
-from .models import Project, Client, Location, Measurement
-from .forms import ClientForm, ProjectForm, LocationForm, MeasurementForm, ClientNameForm
+from django.contrib.auth import authenticate, login
 
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.authentication import SessionAuthentication, BasicAuthentication
+from rest_framework.permissions import IsAuthenticated  # or AllowAny if you want to allow anonymous access
+
+
+from .models import Client, Project, Location, Measurement
+from .serializers import ClientSerializer, ProjectSerializer, LocationSerializer, MeasurementSerializer
+# from .forms import ClientForm, ProjectForm, LocationForm, MeasurementForm, ClientNameForm
 
 
 import chardet
@@ -14,52 +23,41 @@ from io import StringIO
 import os
 from openpyxl import Workbook
 
+
 def index(request):
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return redirect('dashboard')
+        else:
+            # Add error message if login fails
+            return render(request, 'main/index.html', {'error': 'Invalid credentials'})
     return render(request, 'main/index.html')
 
 
+class ClientViewSet(viewsets.ModelViewSet):
+    queryset = Client.objects.all()
+    serializer_class = ClientSerializer
+    authentication_classes = [SessionAuthentication, BasicAuthentication]
+    permission_classes = [IsAuthenticated]  # or [AllowAny]
+
 def dashboard(request):
-    clients = Client.objects.all()
-    edit_client_id = request.GET.get('edit')  # ID of the client to edit, if provided
+    # Efficiently prefetch all related data for the tree
+    clients = Client.objects.prefetch_related(
+    'projects',
+    'projects__locations',
+    'projects__locations__measurements',
+    'projects__locations__children'
+    ).all()
+    
 
-    try:
-        edit_client_id = int(edit_client_id) if edit_client_id else None
-    except ValueError:
-        edit_client_id = None
-
-    if request.method == 'POST':
-        client_id = int(request.POST.get('client_id'))
-        client = Client.objects.get(pk=client_id)
-        form = ClientNameForm(request.POST, instance=client)
-        if form.is_valid():
-            form.save()
-            return redirect('dashboard')
-
-    return render(request, 'main/dashboard.html', {
+    context = {
         'clients': clients,
-        'edit_client_id': edit_client_id,
-    })
-
-
-@require_http_methods(["POST"])  # Ensure that only POST requests are handled
-@csrf_exempt  # Exempting CSRF for demonstration purposes; consider CSRF protection for production
-def update_client(request):
-    # Extract the client ID and new name from the POST request
-    client_id = request.POST.get('client_id')
-    new_name = request.POST.get('name')
-
-    # Try to find the client by ID and update the name
-    try:
-        client = Client.objects.get(id=client_id)
-        client.name = new_name
-        client.save()
-
-        # Return the new name in a JsonResponse
-        return JsonResponse({'updatedName': new_name})
-
-    except Client.DoesNotExist:
-        # If no client is found, return an error message
-        return JsonResponse({'error': 'Client not found'}, status=404)
+    }
+    return render(request, 'main/dashboard.html', context)
 
 
 @require_http_methods(["POST"])
@@ -136,3 +134,50 @@ def data(request):
 
 def dictionary(request):
     return render(request, 'main/dictionary.html')
+
+
+
+
+class ClientViewSet(viewsets.ModelViewSet):
+    queryset = Client.objects.all()
+    serializer_class = ClientSerializer
+
+class ProjectViewSet(viewsets.ModelViewSet):
+    queryset = Project.objects.all()
+    serializer_class = ProjectSerializer
+
+    def get_queryset(self):
+        queryset = Project.objects.all()
+        client_id = self.request.query_params.get('client', None)
+        if client_id:
+            queryset = queryset.filter(client_id=client_id)
+        return queryset
+
+class LocationViewSet(viewsets.ModelViewSet):
+    queryset = Location.objects.all()
+    serializer_class = LocationSerializer
+
+    def get_queryset(self):
+        queryset = Location.objects.all()
+        project_id = self.request.query_params.get('project', None)
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        return queryset
+    
+    @action(detail=False, methods=['get'])
+    def root_locations(self, request):
+        """Get only root locations (those without parents)"""
+        locations = Location.objects.filter(parent=None)
+        serializer = self.get_serializer(locations, many=True)
+        return Response(serializer.data)
+
+class MeasurementViewSet(viewsets.ModelViewSet):
+    queryset = Measurement.objects.all()
+    serializer_class = MeasurementSerializer
+
+    def get_queryset(self):
+        queryset = Measurement.objects.all()
+        location_id = self.request.query_params.get('location', None)
+        if location_id:
+            queryset = queryset.filter(location_id=location_id)
+        return queryset

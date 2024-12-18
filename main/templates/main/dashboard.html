@@ -143,20 +143,23 @@
             <form id="clientForm-{{ client.id }}" onsubmit="return updateClient(event, '{{ client.id }}')">
                 {% csrf_token %}
                 <input type="hidden" name="client_id" value="{{ client.id }}">
-                <button type="button" onclick="toggleOpenClose('{{ client.id }}')" class="w3-button" title="Email: {{ client.contact_email }}, Phone: {{ client.phone_number}}">
-                    <i id="chevronIcon-{{ client.id }}" class="bi bi-chevron-right"></i>
+                <button type="button" onclick="toggleOpenClose('{{ client.name }}-{{ client.id }}')" class="w3-button" title="Email: {{ client.contact_email }}, Phone: {{ client.phone_number}}">
+                    <i id="chevronIcon-{{ client.name }}-{{ client.id }}" class="bi bi-chevron-right"></i>
                     <span 
                         id="clientName-{{ client.id }}"
                         contenteditable="false"
                         onclick="event.stopPropagation()"
                     >{{ client.name }}</span>
                 </button>
+
+    {% comment %} next step is to add the other fields to the line for editing, use blur for update? {% endcomment %}
+
                 <span id="editControls-{{ client.id }}" style="display:none; margin-left: 4px;">
-                    <button type="submit" class="w3-button w3-green w3-tiny" onclick="event.stopPropagation()">
-                        <i class="bi bi-check"></i>
+                    <button type="submit" class="w3-button w3-tiny w3-padding-small" onclick="event.stopPropagation()">
+                        <i class="bi bi-check w3-xlarge"></i>
                     </button>
-                    <button type="button" class="w3-button w3-red w3-tiny" onclick="cancelEdit(event, '{{ client.id }}')">
-                        <i class="bi bi-x"></i>
+                    <button type="button" class="w3-button w3-tiny w3-padding-small" onclick="cancelEdit(event, '{{ client.id }}')">
+                        <i class="bi bi-x w3-xlarge" ></i>
                     </button>
                 </span>
             </form>
@@ -174,46 +177,6 @@
                 <a href="#" class="w3-bar-item w3-button"><i class="bi bi-trash"></i> Delete</a>
             </div>
         </div>
-
-
-
-
-
-
-
-
-
-
-
-        {% comment %} <div class="tree-text">
-            <button onclick="toggleOpenClose('{{ client.id }}')" class="w3-button" title="Email: {{ client.contact_email }}, Phone: {{ client.phone_number}}">
-                <i id="chevronIcon-{{ client.id }}" class="bi bi-chevron-right"></i>
-                <span id="clientName-{{ client.id }}">{{ client.name }}</span>
-            </button>
-        </div>
-        <div id="form-{{ client.id }}" style="display:none;">
-            <form id="clientForm-{{ client.id }}" onsubmit="return updateClient(event, '{{ client.id }}')">
-                {% csrf_token %}
-                <input type="hidden" name="client_id" value="{{ client.id }}">
-                <input type="text" name="name" value="{{ client.name }}" required>
-                <button type="submit" class="w3-button w3-green">Save</button>
-            </form>
-        </div> {% endcomment %}
-
-        {% comment %} <div class="item-actions">
-            <button class="w3-button">
-                <i class="bi bi-three-dots-vertical"></i>
-            </button>
-            <div class="w3-dropdown-content w3-bar-block w3-border">
-                <a href="#" class="w3-bar-item w3-button"><i class="bi bi-plus"></i> Add Client</a>
-                <a href="#" onclick="editClient('{{ client.id }}'); return false;" class="w3-bar-item w3-button">
-                    <i class="bi bi-pencil"></i> Edit
-                </a>
-                <a href="#" class="w3-bar-item w3-button"><i class="bi bi-trash"></i> Delete</a>
-            </div>
-        </div> {% endcomment %}
-
-
     </div>
 
     <div id="{{ client.name }}-{{ client.id }}" class="w3-container w3-hide w3-margin-left">
@@ -237,7 +200,6 @@
             </div>
         </div>
         
-        
         <div id="{{ project.name }}-{{ project.id }}" class="w3-container w3-hide w3-margin-left">
             {% for location in project.locations.all %}
             <div class="tree-item w3-hover-light-grey">
@@ -257,6 +219,7 @@
                     </div>
                 </div>
             </div>
+
             <div id="{{ location.name }}-{{ location.id }}" class="w3-container w3-hide w3-margin-left">
                 {% for measurement in location.measurements.all %}
                 <div class="tree-item w3-hover-light-grey">
@@ -360,6 +323,10 @@
 {% block extra_js %}
 <script>
     function toggleOpenClose(id) {
+        var dosomething = () => {
+            console.log(div);
+        };
+        dosomething();
         var div = document.getElementById(id);
         var icon = document.getElementById('chevronIcon-' + id);
         if (div.classList.contains('w3-show')) {
@@ -373,129 +340,149 @@
         }
     }
 
-function editClient(clientId) {
-    const nameSpan = document.getElementById(`clientName-${clientId}`);
-    const editControls = document.getElementById(`editControls-${clientId}`);
-    
-    // Store original name for cancel functionality
-    nameSpan.dataset.originalName = nameSpan.textContent;
-    
-    // Enable editing and show controls
-    nameSpan.contentEditable = "true";
-    editControls.style.display = 'inline-block';
-    
-    // Focus and move cursor to end
-    nameSpan.focus();
-    const range = document.createRange();
-    const selection = window.getSelection();
-    range.selectNodeContents(nameSpan);
-    range.collapse(false);
-    selection.removeAllRanges();
-    selection.addRange(range);
-    
-    return false;
-}
+    const CSRF_TOKEN = document.querySelector('[name=csrfmiddlewaretoken]').value;
 
-function cancelEdit(event, clientId) {
-    event.stopPropagation();
-    const nameSpan = document.getElementById(`clientName-${clientId}`);
-    const editControls = document.getElementById(`editControls-${clientId}`);
-    
-    // Restore original name and disable editing
-    nameSpan.textContent = nameSpan.dataset.originalName;
-    nameSpan.contentEditable = "false";
-    
-    // Hide edit controls
-    editControls.style.display = 'none';
-    nameSpan.blur();
-}
-
-function updateClient(event, clientId) {
-    event.preventDefault();
-    event.stopPropagation();
-    
-    const form = document.getElementById(`clientForm-${clientId}`);
-    const nameSpan = document.getElementById(`clientName-${clientId}`);
-    const editControls = document.getElementById(`editControls-${clientId}`);
-    const newName = nameSpan.textContent.trim();
-    const formData = new FormData(form);
-    formData.append('name', newName);
-    
-    fetch('{% url "update_client" %}', {
-        method: 'POST',
-        body: formData,
-        headers: {
-            'X-CSRFToken': formData.get('csrfmiddlewaretoken')
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        nameSpan.textContent = data.updatedName;
-        // Disable editing and hide controls
-        nameSpan.contentEditable = "false";
-        editControls.style.display = 'none';
-    })
-    .catch(error => {
-        alert('Error updating client name: ' + error);
-        cancelEdit(event, clientId);
-    });
-    
-    return false;
-}
-
-
-
-
-
-
-
-
-
-
-
-    {% comment %} function editClient(clientId) {
-        // Hide any other visible forms first
-        document.querySelectorAll('[id^="form-"]').forEach(form => {
-            form.style.display = 'none';
-        });
-        
-    
-        // Show the form for this client
-        const form = document.getElementById(`form-${clientId}`);
-        form.style.display = 'block';
-        
-        // Focus on the input
-        form.querySelector('input[name="name"]').focus();
-        
-        return false; // Prevent default link behavior
-    }
-    
-    function updateClient(event, clientId) {
-        event.preventDefault();
-        
-        const form = document.getElementById(`clientForm-${clientId}`);
-        const formData = new FormData(form);
-        
-        fetch('{% url "update_client" %}', {
-            method: 'POST',
-            body: formData,
+    const apiFetch = async (endpoint, options = {}) => {
+        const defaultOptions = {
             headers: {
-                'X-CSRFToken': formData.get('csrfmiddlewaretoken')
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            // Update the displayed client name
-            document.getElementById(`clientName-${clientId}`).textContent = data.updatedName;
-            // Hide the form
-            document.getElementById(`form-${clientId}`).style.display = 'none';
-        })
-        .catch(error => {
-            alert('Error updating client name: ' + error);
+                'Content-Type': 'application/json',
+                'X-CSRFToken': CSRF_TOKEN
+            },
+            credentials: 'same-origin'
+        };
+        
+        const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+        const apiEndpoint = `/api${cleanEndpoint}`;
+        
+        const response = await fetch(apiEndpoint, {
+            ...defaultOptions,
+            ...options,
         });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || `API Error: ${response.statusText}`);
+        }
+        
+        return response.json();
+    };
+    
+    function editClient(clientId) {
+        const nameSpan = document.getElementById(`clientName-${clientId}`);
+        const editControls = document.getElementById(`editControls-${clientId}`);
+        
+        // Store original name for cancel functionality
+        nameSpan.dataset.originalName = nameSpan.textContent;
+        
+        // Enable editing and show controls
+        nameSpan.contentEditable = "true";
+        editControls.style.display = 'inline-block';
+        
+        // Focus and move cursor to end
+        nameSpan.focus();
+        const range = document.createRange();
+        const selection = window.getSelection();
+        range.selectNodeContents(nameSpan);
+        range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
         
         return false;
-    } {% endcomment %}
+    }
+    
+    function cancelEdit(event, clientId) {
+        event.stopPropagation();
+        const nameSpan = document.getElementById(`clientName-${clientId}`);
+        const editControls = document.getElementById(`editControls-${clientId}`);
+        
+        // Restore original name and disable editing
+        nameSpan.contentEditable = "false";
+        nameSpan.textContent = nameSpan.dataset.originalName;
+        
+        // Hide edit controls
+        editControls.style.display = 'none';
+        nameSpan.blur();
+    }
+    
+    async function updateClient(event, clientId) {
+        event.preventDefault();
+        event.stopPropagation();
+        
+        const nameSpan = document.getElementById(`clientName-${clientId}`);
+        const editControls = document.getElementById(`editControls-${clientId}`);
+        const newName = nameSpan.textContent.trim();
+        
+        try {
+            const response = await apiFetch(`clients/${clientId}/`, {
+                method: 'PATCH',
+                body: JSON.stringify({
+                    name: newName
+                })
+            });
+            
+            // Update UI with response data
+            nameSpan.textContent = response.name;
+            nameSpan.contentEditable = "false";
+            editControls.style.display = 'none';
+            
+        } catch (error) {
+            console.error('Error updating client:', error);
+            alert('Error updating client name: ' + error.message);
+            cancelEdit(event, clientId);
+        }
+        
+        return false;
+    }
+    
+    function deleteClient(clientId) {
+        if (!confirm('Are you sure you want to delete this client?')) {
+            return;
+        }
+        
+        try {
+            apiFetch(`clients/${clientId}/`, {
+                method: 'DELETE'
+            }).then(() => {
+                // Remove client element from DOM
+                const clientElement = document.querySelector(`#form-${clientId}`).closest('.tree-item');
+                const clientContainer = document.getElementById(`${clientElement.textContent.trim()}-${clientId}`);
+                
+                clientElement.remove();
+                if (clientContainer) {
+                    clientContainer.remove();
+                }
+            });
+            
+        } catch (error) {
+            console.error('Error deleting client:', error);
+            alert('Error deleting client. Please try again.');
+        }
+    }
+    
+    function addClient() {
+        const newClientName = prompt('Enter new client name:');
+        
+        if (!newClientName) return;
+        
+        try {
+            apiFetch('clients/', {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: newClientName,
+                    contact_email: '',
+                    phone_number: ''
+                })
+            }).then(() => {
+                // Reload the page to show new client
+                window.location.reload();
+            });
+            
+        } catch (error) {
+            console.error('Error adding client:', error);
+            alert('Error adding client. Please try again.');
+        }
+    }
+    
 
               
 </script>

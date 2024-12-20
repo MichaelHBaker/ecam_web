@@ -110,8 +110,8 @@
 
 <!-- Location Section -->
 <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
-    <button onclick="toggleOpenClose('location')" class="w3-bar-item w3-button section-button">
-        <i id="chevronIcon-location" class="bi bi-chevron-right"></i> Location
+    <button onclick="toggleOpenClose('id_location')" class="w3-bar-item w3-button section-button">
+        <i id="id_chevronIcon-id_location" class="bi bi-chevron-right"></i> Location
     </button>
     <div class="w3-dropdown-hover">
         <button class="w3-button">
@@ -127,7 +127,7 @@
         </div>
     </div>
 </div>
-<div id="location" class="w3-container w3-container-tree w3-hide">
+<div id="id_location" class="w3-container w3-container-tree w3-hide">
     <span class="tree-headings">
         Clients
         <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Projects</span>
@@ -139,12 +139,12 @@
     <div class="tree-item w3-hover-light-grey">
 
 
-        <div id="form-{{ client.id }}" class="tree-text">
-            <form id="clientForm-{{ client.id }}" onsubmit="return updateClient(event, '{{ client.id }}')">
+        <div id="id_form-{{ client.id }}" class="tree-text">
+            <form id="id_clientForm-{{ client.id }}" onsubmit="return updateClient(event, '{{ client.id }}')">
                 {% csrf_token %}
                 <input type="hidden" name="client_id" value="{{ client.id }}">
-                <button type="button" onclick="toggleOpenClose('{{ client.name }}-{{ client.id }}')" class="w3-button" title="Email: {{ client.contact_email }}, Phone: {{ client.phone_number}}">
-                    <i id="chevronIcon-{{ client.name }}-{{ client.id }}" class="bi bi-chevron-right"></i>
+                <button type="button" onclick="toggleOpenClose('id_{{ client.name|slugify }}-{{ client.id }}')" class="w3-button" title="Email: {{ client.contact_email }}, Phone: {{ client.phone_number}}">
+                    <i id="id_chevronIcon-id_{{ client.name|slugify }}-{{ client.id }}" class="bi bi-chevron-right"></i>
                     <span 
                         id="clientName-{{ client.id }}"
                         contenteditable="false"
@@ -179,7 +179,7 @@
         </div>
     </div>
 
-    <div id="{{ client.name }}-{{ client.id }}" class="w3-container w3-hide w3-margin-left">
+    <div id="id_{{ client.name|slugify }}-{{ client.id }}" class="w3-container w3-hide w3-margin-left">
         {% for project in client.projects.all %}
         
         <div class="tree-item w3-hover-light-grey">
@@ -323,12 +323,8 @@
 {% block extra_js %}
 <script>
     function toggleOpenClose(id) {
-        var dosomething = () => {
-            console.log(div);
-        };
-        dosomething();
         var div = document.getElementById(id);
-        var icon = document.getElementById('chevronIcon-' + id);
+        var icon = document.getElementById('id_chevronIcon-' + id);
         if (div.classList.contains('w3-show')) {
             div.classList.remove('w3-show');
             div.classList.add('w3-hide');

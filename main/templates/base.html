@@ -10,6 +10,34 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <!-- Google Icons -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+    <!-- Global Form Styles -->
+    <style>
+        /* Global :valid input styles */
+        input:valid {
+            border: 2px solid green;
+            box-shadow: 0 0 5px green;
+        }
+
+        /* Global :invalid input styles */
+        input:invalid {
+            border: 2px solid red;
+            box-shadow: 0 0 5px red;
+        }
+
+        /* Global :focus input styles */
+        input:focus {
+            outline: none;
+            border: 2px solid blue;
+            box-shadow: 0 0 5px blue;
+        }
+
+        /* Optional rounded styles using W3.CSS */
+        input.w3-input {
+            border-radius: 5px; /* Rounded corners */
+        }
+    </style>
+
     {% block extra_css %}
     {% endblock %}
 </head>

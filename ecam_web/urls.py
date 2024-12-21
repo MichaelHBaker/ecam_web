@@ -22,6 +22,9 @@ from main import views
 # Create a router and register our viewsets
 router = routers.DefaultRouter()
 router.register(r'clients', views.ClientViewSet)
+router.register(r'projects', views.ProjectViewSet, basename='project')
+router.register(r'locations', views.LocationViewSet, basename='location')
+router.register(r'measurements', views.MeasurementViewSet, basename='measurement')
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -34,3 +37,4 @@ urlpatterns = [
     path('dictionary/', views.dictionary, name='dictionary'),
     path('api/', include(router.urls)),  # Add this line for DRF URLs
 ]
+

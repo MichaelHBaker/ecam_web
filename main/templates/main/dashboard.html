@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}ECAM Web{% endblock %}
 
@@ -138,8 +139,31 @@
     {% for client in clients %}
     <div class="tree-item w3-hover-light-grey">
 
-
         <div id="id_form-{{ client.id }}" class="tree-text">
+            <form id="id_clientForm-{{ client.id }}" onsubmit="return updateClient(event, '{{ client.id }}')">
+                {% csrf_token %}
+                <input type="hidden" name="client_id" value="{{ client.id }}">
+        
+                <button type="button" onclick="toggleOpenClose('id_{{ client.name|slugify }}-{{ client.id }}')" class="w3-button" title="Email: {{ client.contact_email }}, Phone: {{ client.phone_number}}">
+                    <i id="id_chevronIcon-id_{{ client.name|slugify }}-{{ client.id }}" class="bi bi-chevron-right"></i>
+                    <span id="clientName-{{ client.id }}" contenteditable="false" onclick="event.stopPropagation()">{{ client.name }}</span>
+                </button>
+        
+                <span id="id_editControls-{{ client.id }}" style="display:none; margin-left: 4px;">
+                    <input id="id_clientEmail-{{ client.id }}" type="email" name="contact_email" value="{{ client.contact_email }}" style="display: none;" placeholder="Email" />
+                    <input id="id_clientPhone-{{ client.id }}" type="tel" name="phone_number" value="{{ client.phone_number }}" style="display: none;" placeholder="Phone" />
+                    
+                    <button type="submit" class="w3-button w3-tiny w3-padding-small" onclick="event.stopPropagation()">
+                        <i class="bi bi-check w3-xlarge"></i>
+                    </button>
+                    <button type="button" class="w3-button w3-tiny w3-padding-small" onclick="cancelEdit(event, '{{ client.id }}')">
+                        <i class="bi bi-x w3-xlarge"></i>
+                    </button>
+                </span>
+            </form>
+        </div>
+
+        {% comment %} <div id="id_form-{{ client.id }}" class="tree-text">
             <form id="id_clientForm-{{ client.id }}" onsubmit="return updateClient(event, '{{ client.id }}')">
                 {% csrf_token %}
                 <input type="hidden" name="client_id" value="{{ client.id }}">
@@ -152,8 +176,6 @@
                     >{{ client.name }}</span>
                 </button>
 
-    {% comment %} next step is to add the other fields to the line for editing, use blur for update? {% endcomment %}
-
                 <span id="editControls-{{ client.id }}" style="display:none; margin-left: 4px;">
                     <button type="submit" class="w3-button w3-tiny w3-padding-small" onclick="event.stopPropagation()">
                         <i class="bi bi-check w3-xlarge"></i>
@@ -163,7 +185,7 @@
                     </button>
                 </span>
             </form>
-        </div>
+        </div> {% endcomment %}
 
         <div class="item-actions">
             <button class="w3-button">
@@ -171,9 +193,24 @@
             </button>
             <div class="w3-dropdown-content w3-bar-block w3-border">
                 <a href="#" class="w3-bar-item w3-button"><i class="bi bi-plus"></i> Add Client</a>
-                <a href="#" onclick="editClient('{{ client.id }}'); return false;" class="w3-bar-item w3-button">
+
+                <a 
+                    href="#" 
+                    onclick="
+                        editItem(
+                            'client', 
+                            '{{ client.id }}', 
+                            ['name', 'contact_email', 'phone_number']
+                        ); 
+                        return false;" 
+                    class="w3-bar-item w3-button"
+                >
                     <i class="bi bi-pencil"></i> Edit
-                </a>
+                </a>                          
+
+                {% comment %} <a href="#" onclick="editClient('{{ client.id }}'); return false;" class="w3-bar-item w3-button">
+                    <i class="bi bi-pencil"></i> Edit
+                </a> {% endcomment %}
                 <a href="#" class="w3-bar-item w3-button"><i class="bi bi-trash"></i> Delete</a>
             </div>
         </div>
@@ -363,28 +400,27 @@
         return response.json();
     };
     
-    function editClient(clientId) {
-        const nameSpan = document.getElementById(`clientName-${clientId}`);
-        const editControls = document.getElementById(`editControls-${clientId}`);
-        
-        // Store original name for cancel functionality
-        nameSpan.dataset.originalName = nameSpan.textContent;
-        
-        // Enable editing and show controls
-        nameSpan.contentEditable = "true";
-        editControls.style.display = 'inline-block';
-        
-        // Focus and move cursor to end
-        nameSpan.focus();
-        const range = document.createRange();
-        const selection = window.getSelection();
-        range.selectNodeContents(nameSpan);
-        range.collapse(false);
-        selection.removeAllRanges();
-        selection.addRange(range);
-        
-        return false;
-    }
+    function editItem(type, id) {
+    const nameSpan = document.getElementById(`${type}Name-${id}`);
+    const emailInput = document.getElementById(`${type}Email-${id}`);
+    const phoneInput = document.getElementById(`${type}Phone-${id}`);
+    const editControls = document.getElementById(`${type}EditControls-${id}`);
+
+    // Store original values
+    if (nameSpan) nameSpan.dataset.originalName = nameSpan.textContent.trim();
+    if (emailInput) emailInput.dataset.originalValue = emailInput.value.trim();
+    if (phoneInput) phoneInput.dataset.originalValue = phoneInput.value.trim();
+
+    // Enable editing
+    if (nameSpan) nameSpan.contentEditable = "true";
+    if (emailInput) emailInput.style.display = "inline";
+    if (phoneInput) phoneInput.style.display = "inline";
+    editControls.style.display = "inline-block";
+
+    // Focus on name field if it exists
+    if (nameSpan) nameSpan.focus();
+}
+
     
     function cancelEdit(event, clientId) {
         event.stopPropagation();

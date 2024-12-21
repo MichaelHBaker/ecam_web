@@ -44,17 +44,12 @@ class Location(models.Model):
         """
         Generate a string that shows the complete path from client to this location.
         """
-        # Start with the project hierarchy
         hierarchy = f"{self.project.get_hierarchy()}"
-        
-        # Add location hierarchy
         ancestors = [self.name]
         p = self.parent
         while p is not None:
             ancestors.append(p.name)
             p = p.parent
-        
-        # Combine project and location hierarchies
         return f"{hierarchy} > {' > '.join(reversed(ancestors))}"
 
 class Measurement(models.Model):

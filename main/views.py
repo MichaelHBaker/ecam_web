@@ -14,7 +14,7 @@ from rest_framework.permissions import IsAuthenticated  # or AllowAny if you wan
 
 from .models import Client, Project, Location, Measurement
 from .serializers import ClientSerializer, ProjectSerializer, LocationSerializer, MeasurementSerializer
-# from .forms import ClientForm, ProjectForm, LocationForm, MeasurementForm, ClientNameForm
+# from .forms import ClientForm, ProjectForm, LocationForm, MeasurementForm, ClientNameForm 
 
 
 import chardet
@@ -42,7 +42,25 @@ class ClientViewSet(viewsets.ModelViewSet):
     queryset = Client.objects.all()
     serializer_class = ClientSerializer
     authentication_classes = [SessionAuthentication, BasicAuthentication]
-    permission_classes = [IsAuthenticated]  # or [AllowAny]
+    permission_classes = [IsAuthenticated]
+
+class ProjectViewSet(viewsets.ModelViewSet):
+    queryset = Project.objects.all()
+    serializer_class = ProjectSerializer
+    authentication_classes = [SessionAuthentication, BasicAuthentication]
+    permission_classes = [IsAuthenticated]
+
+class LocationViewSet(viewsets.ModelViewSet):
+    queryset = Location.objects.all()
+    serializer_class = LocationSerializer
+    authentication_classes = [SessionAuthentication, BasicAuthentication]
+    permission_classes = [IsAuthenticated]
+
+class MeasurementViewSet(viewsets.ModelViewSet):
+    queryset = Measurement.objects.all()
+    serializer_class = MeasurementSerializer
+    authentication_classes = [SessionAuthentication, BasicAuthentication]
+    permission_classes = [IsAuthenticated]
 
 def dashboard(request):
     # Efficiently prefetch all related data for the tree

@@ -63,20 +63,41 @@ class MeasurementViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
 def dashboard(request):
-    # Efficiently prefetch all related data for the tree
+    # Existing prefetch
     clients = Client.objects.prefetch_related(
-    'projects',
-    'projects__locations',
-    'projects__locations__measurements',
-    'projects__locations__children'
+        'projects',
+        'projects__locations',
+        'projects__locations__measurements',
+        'projects__locations__children'
     ).all()
     
+    # Function to get field metadata from model
+    def get_field_metadata(model, field_names):
+        fields = []
+        for name in field_names:
+            field = model._meta.get_field(name)
+            field_info = {
+                'name': name,
+                'type': 'select' if hasattr(field, 'choices') and field.choices else field.get_internal_type()
+            }
+            if field_info['type'] == 'select':
+                field_info['choices'] = field.choices
+            fields.append(field_info)
+        return fields
+
+    # Define field lists for each model
+    model_fields = {
+        'client': get_field_metadata(Client, ['name', 'contact_email', 'phone_number']),
+        'project': get_field_metadata(Project, ['name', 'project_type', 'start_date', 'end_date']),
+        'location': get_field_metadata(Location, ['name', 'address', 'latitude', 'longitude']),
+        'measurement': get_field_metadata(Measurement, ['name', 'description', 'measurement_type'])
+    }
 
     context = {
         'clients': clients,
+        'model_fields': model_fields
     }
     return render(request, 'main/dashboard.html', context)
-
 
 @require_http_methods(["POST"])
 def excel_upload(request):

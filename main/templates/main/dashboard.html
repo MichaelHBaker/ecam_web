@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
-
+{% load custom_tags %}
 
 {% block title %}ECAM Web{% endblock %}
 
@@ -134,6 +134,9 @@
         font-weight: normal;
     }
     
+    .tree-item-field.editing ~ #clientDisplayName {
+        display: none;
+    }
 </style>
 {% endblock %}
 
@@ -183,61 +186,29 @@
                 >
                     <i id="id_chevronIcon-id_{{ client.name|slugify }}-{{ client.id }}" class="bi bi-chevron-right"></i>
                 </button>
-
-                <!-- Editable Fields Container -->
+                
+                <!-- Fields Container -->
                 <div class="fields-container">
-                    <!-- Editable Name Field -->
-                    <input 
-                        id="id_clientName-{{ client.id }}" 
-                        type="text" 
-                        name="name" 
-                        value="{{ client.name }}" 
-                        class="tree-item-name"
-                        readonly
-                    >
-
-                    <!-- Editable Email Field -->
-                    <input 
-                        id="id_clientContact_email-{{ client.id }}" 
-                        type="email" 
-                        name="contact_email" 
-                        value="{{ client.contact_email }}" 
-                        class="tree-item-field" 
-                        style="display: none;" 
-                        placeholder="Email"
-                    >
-
-                    <!-- Editable Phone Field -->
-                    <input 
-                        id="id_clientPhone_number-{{ client.id }}" 
-                        type="tel" 
-                        name="phone_number" 
-                        value="{{ client.phone_number }}" 
-                        class="tree-item-field" 
-                        style="display: none;" 
-                        placeholder="Phone"
-                    >
+                    {% for field in model_fields.client %}
+                        <input 
+                            id="id_client{{ field.name|capfirst|cut:" " }}-{{ client.id }}" 
+                            type="{{ field.type }}" 
+                            name="{{ field.name }}" 
+                            value="{{ client|get_field_value:field.name }}" 
+                            class="tree-item-field"
+                            style="display: {% if field.name == 'name' %}inline{% else %}none{% endif %};"
+                            title="{% if field.name == 'name' %}email: {{ client.contact_email }}, phone: {{ client.phone_number }}{% endif %};"
+                            readonly
+                        >
+                    {% endfor %}
                 </div>
 
                 <!-- Edit Controls -->
                 <span id="id_clientEditControls-{{ client.id }}" style="display:none; margin-left: 4px;">
-                    <!-- Save Button -->
-                    <button 
-                        type="submit" 
-                        class="w3-button"
-                        style="padding: 0 4px;"
-                        onclick="event.stopPropagation()"
-                    >
+                    <button type="submit" class="w3-button" style="padding: 0 4px;" onclick="event.stopPropagation()">
                         <i class="bi bi-check w3-large"></i>
                     </button>
-
-                    <!-- Cancel Button -->
-                    <button 
-                        type="button" 
-                        class="w3-button"
-                        style="padding: 0 4px;"
-                        onclick="crud.cancelEdit(event, 'client', '{{ client.id }}', ['name', 'contact_email', 'phone_number'])"
-                    >
+                    <button type="button" class="w3-button" style="padding: 0 4px;" onclick="crud.cancelEdit(event, 'client', '{{ client.id }}', [{% for field in model_fields.client %}'{{ field.name }}'{% if not forloop.last %}, {% endif %}{% endfor %}])">
                         <i class="bi bi-x w3-large"></i>
                     </button>
                 </span>
@@ -254,7 +225,7 @@
                 <a 
                     href="#" 
                     class="w3-bar-item w3-button"
-                    onclick="crud.addItem('client'); return false;"
+                    onclick="crud.addItem('client', ['name', 'contact_email', 'phone_number']); return false;"
                 >
                     <i class="bi bi-plus"></i> Add Client
                 </a>

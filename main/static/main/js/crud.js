@@ -187,3 +187,157 @@ export const deleteItem = async (type, id) => {
         alert(errorMessage);
     }
 };
+
+// Add new item function
+export const addItem = async (type, fields, parentId = null) => {
+    try {
+        // Fetch schema information first
+        const schema = await apiFetch(`/${type}s/`, {
+            method: 'OPTIONS'
+        });
+        
+        const fieldInfo = schema.actions.POST;
+
+        // Create form container
+        const tempId = 'temp-new-item';
+        const tempContainer = document.createElement('div');
+        tempContainer.id = tempId;
+        tempContainer.className = 'tree-item w3-hover-light-grey';
+        
+        const form = document.createElement('form');
+        form.className = 'fields-container';
+        form.id = `id_${type}Form-${tempId}`;
+
+        // Add fields based on schema information
+        fields.forEach(field => {
+            const fieldSchema = fieldInfo[field] || {};
+            const input = document.createElement(fieldSchema.choices ? 'select' : 'input');
+            input.id = `id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${tempId}`;
+            input.name = field;
+            input.className = 'tree-item-field editing';
+
+            if (fieldSchema.choices) {
+                // Handle choice fields
+                const emptyOption = document.createElement('option');
+                emptyOption.value = '';
+                emptyOption.textContent = `Select ${field.replace(/_/g, ' ')}`;
+                input.appendChild(emptyOption);
+
+                fieldSchema.choices.forEach(([value, label]) => {
+                    const option = document.createElement('option');
+                    option.value = value;
+                    option.textContent = label;
+                    input.appendChild(option);
+                });
+            } else {
+                // Handle input fields
+                input.type = getInputType(fieldSchema.type);
+                input.placeholder = field.replace(/_/g, ' ');
+                
+                if (fieldSchema.type === 'decimal') {
+                    input.step = 'any';
+                }
+            }
+
+            if (fieldSchema.required === false) {
+                input.required = false;
+            }
+
+            form.appendChild(input);
+        });
+
+        // Add save/cancel controls
+        const controls = document.createElement('span');
+        controls.id = `id_${type}EditControls-${tempId}`;
+        controls.style.display = 'inline-flex';
+        controls.innerHTML = `
+            <button type="submit" class="w3-button" style="padding: 0 4px;">
+                <i class="bi bi-check w3-large"></i>
+            </button>
+            <button type="button" class="w3-button" style="padding: 0 4px;">
+                <i class="bi bi-x w3-large"></i>
+            </button>
+        `;
+        form.appendChild(controls);
+
+        tempContainer.appendChild(form);
+
+        // Determine insert location and parent relationship
+        let insertLocation;
+        let parentData = {};
+        
+        if (parentId) {
+            // Find the foreign key field from schema that's not in our fields list
+            const parentField = Object.entries(fieldInfo)
+                .find(([key, value]) => 
+                    value.type === 'field' && 
+                    value.required && 
+                    !fields.includes(key)
+                )?.[0];
+
+            if (parentField) {
+                insertLocation = document.getElementById(`id_${parentId}`);
+                parentData = { [parentField]: parentId };
+            }
+        } else {
+            insertLocation = document.querySelector('.tree-headings');
+        }
+        
+        insertLocation.after(tempContainer);
+
+        // Handle form submission
+        form.onsubmit = async (event) => {
+            event.preventDefault();
+            
+            try {
+                const data = { ...parentData };
+                
+                fields.forEach(field => {
+                    const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${tempId}`);
+                    if (element) {
+                        const value = element.value.trim();
+                        data[field] = value || null;
+                    }
+                });
+
+                await apiFetch(`/${type}s/`, {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+
+                window.location.reload();
+
+            } catch (error) {
+                console.error(`Error creating ${type}:`, error);
+                alert(error.message || `Failed to create ${type}. Please try again.`);
+            }
+        };
+
+        // Handle cancel
+        controls.querySelector('button[type="button"]').onclick = () => {
+            tempContainer.remove();
+        };
+
+        // Focus first field
+        form.querySelector('input, select').focus();
+
+    } catch (error) {
+        console.error('Error fetching schema:', error);
+        alert('Failed to load form. Please try again.');
+    }
+};
+
+// Helper function to map DRF types to HTML input types
+const getInputType = (drfType) => {
+    const typeMap = {
+        string: 'text',
+        integer: 'number',
+        decimal: 'number',
+        boolean: 'checkbox',
+        date: 'date',
+        datetime: 'datetime-local',
+        email: 'email',
+        url: 'url'
+    };
+    return typeMap[drfType] || 'text';
+};

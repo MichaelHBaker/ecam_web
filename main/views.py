@@ -1,16 +1,16 @@
-from django.shortcuts import render, get_object_or_404, redirect
+from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods, require_POST
-from django.views.decorators.csrf import csrf_exempt
-from django.core.exceptions import ValidationError
 from django.contrib.auth import authenticate, login
+from django.template import Template as DjangoTemplate
+from django.template import Context as DjangoContext
 
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework import status 
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
 from rest_framework.permissions import IsAuthenticated  # or AllowAny if you want to allow anonymous access
-
 
 from .models import Client, Project, Location, Measurement
 from .serializers import ClientSerializer, ProjectSerializer, LocationSerializer, MeasurementSerializer
@@ -62,6 +62,35 @@ class MeasurementViewSet(viewsets.ModelViewSet):
     authentication_classes = [SessionAuthentication, BasicAuthentication]
     permission_classes = [IsAuthenticated]
 
+class TemplateViewSet(viewsets.ViewSet):
+    @action(detail=False, methods=['post'])
+    def render(self, request):
+        try:
+            # Get template string and context from request
+            template_string = request.data.get('template', '')
+            context_data = request.data.get('context', {})
+            
+            # Create template directly from string
+            template = DjangoTemplate(template_string)
+            context = DjangoContext(context_data)
+            
+            # Render the template
+            rendered_html = template.render(context)
+            
+            return Response({
+                'html': rendered_html,
+                'ok': True
+            })
+            
+        except Exception as e:
+            return Response(
+                {
+                    'error': str(e),
+                    'ok': False
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
 def dashboard(request):
     # Existing prefetch
     clients = Client.objects.prefetch_related(

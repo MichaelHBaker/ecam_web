@@ -25,6 +25,7 @@ router.register(r'clients', views.ClientViewSet)
 router.register(r'projects', views.ProjectViewSet, basename='project')
 router.register(r'locations', views.LocationViewSet, basename='location')
 router.register(r'measurements', views.MeasurementViewSet, basename='measurement')
+router.register(r'templates', views.TemplateViewSet, basename='template')  # New ViewSet registration
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -35,6 +36,5 @@ urlpatterns = [
     path('measurement/', views.measurement, name='measurement'),
     path('data/', views.data, name='data'),
     path('dictionary/', views.dictionary, name='dictionary'),
-    path('api/', include(router.urls)),  # Add this line for DRF URLs
+    path('api/', include(router.urls)),  # This now includes the templates endpoint
 ]
-

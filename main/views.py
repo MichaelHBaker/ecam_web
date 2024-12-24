@@ -1,4 +1,4 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods, require_POST
 from django.contrib.auth import authenticate, login
@@ -44,11 +44,32 @@ class ClientViewSet(viewsets.ModelViewSet):
     authentication_classes = [SessionAuthentication, BasicAuthentication]
     permission_classes = [IsAuthenticated]
 
+    def perform_destroy(self, instance):
+        # Handle cascading delete of children
+        projects = instance.projects.all()
+        for project in projects:
+            project.delete()  # This will trigger cascading delete
+        instance.delete()
+
 class ProjectViewSet(viewsets.ModelViewSet):
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
     authentication_classes = [SessionAuthentication, BasicAuthentication]
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = Project.objects.all()
+        client_id = self.request.query_params.get('client', None)
+        if client_id:
+            queryset = queryset.filter(client_id=client_id)
+        return queryset
+
+    def perform_destroy(self, instance):
+        # Handle cascading delete of children
+        locations = instance.locations.all()
+        for location in locations:
+            location.delete()  # This will trigger cascading delete
+        instance.delete()
 
 class LocationViewSet(viewsets.ModelViewSet):
     queryset = Location.objects.all()
@@ -56,11 +77,47 @@ class LocationViewSet(viewsets.ModelViewSet):
     authentication_classes = [SessionAuthentication, BasicAuthentication]
     permission_classes = [IsAuthenticated]
 
+    def get_queryset(self):
+        queryset = Location.objects.all()
+        project_id = self.request.query_params.get('project', None)
+        parent_id = self.request.query_params.get('parent', None)
+        
+        if project_id:
+            queryset = queryset.filter(project_id=project_id)
+        if parent_id:
+            queryset = queryset.filter(parent_id=parent_id)
+        return queryset
+    
+    def perform_destroy(self, instance):
+        # Handle cascading delete of children
+        measurements = instance.measurements.all()
+        for measurement in measurements:
+            measurement.delete()
+        # Handle child locations
+        child_locations = instance.children.all()
+        for location in child_locations:
+            location.delete()
+        instance.delete()
+
+    @action(detail=False, methods=['get'])
+    def root_locations(self, request):
+        """Get only root locations (those without parents)"""
+        locations = Location.objects.filter(parent=None)
+        serializer = self.get_serializer(locations, many=True)
+        return Response(serializer.data)
+
 class MeasurementViewSet(viewsets.ModelViewSet):
     queryset = Measurement.objects.all()
     serializer_class = MeasurementSerializer
     authentication_classes = [SessionAuthentication, BasicAuthentication]
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = Measurement.objects.all()
+        location_id = self.request.query_params.get('location', None)
+        if location_id:
+            queryset = queryset.filter(location_id=location_id)
+        return queryset
 
 class TemplateViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'])
@@ -70,9 +127,44 @@ class TemplateViewSet(viewsets.ViewSet):
             template_string = request.data.get('template', '')
             context_data = request.data.get('context', {})
             
-            # Create template directly from string
-            template = DjangoTemplate(template_string)
-            context = DjangoContext(context_data)
+            # Add CSRF token to context
+            context_data['csrf_token'] = get_token(request)
+            
+            # Add model_fields if not present (needed for recursive rendering)
+            if 'model_fields' not in context_data:
+                context_data['model_fields'] = {
+                    'client': {
+                        'level': 1,
+                        'fields': get_field_metadata(Client, ['name', 'contact_email', 'phone_number']),
+                        'child_type': 'project'
+                    },
+                    'project': {
+                        'level': 2,
+                        'fields': get_field_metadata(Project, ['name', 'project_type', 'start_date', 'end_date']),
+                        'child_type': 'location',
+                        'parent_type': 'client'
+                    },
+                    'location': {
+                        'level': 3,
+                        'fields': get_field_metadata(Location, ['name', 'address', 'latitude', 'longitude']),
+                        'child_type': 'measurement',
+                        'parent_type': 'project'
+                    },
+                    'measurement': {
+                        'level': 4,
+                        'fields': get_field_metadata(Measurement, ['name', 'description', 'measurement_type']),
+                        'parent_type': 'location'
+                    }
+                }
+            
+            # Register template tags for template rendering
+            from django.template import engines
+            django_engine = engines['django']
+            template = django_engine.from_string(template_string)
+            
+            # Create context ensuring template tags are available
+            from django.template import Context
+            context = Context(context_data)
             
             # Render the template
             rendered_html = template.render(context)
@@ -90,9 +182,22 @@ class TemplateViewSet(viewsets.ViewSet):
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
-        
+
+def get_field_metadata(model, field_names):
+    fields = []
+    for name in field_names:
+        field = model._meta.get_field(name)
+        field_info = {
+            'name': name,
+            'type': 'select' if hasattr(field, 'choices') and field.choices else field.get_internal_type()
+        }
+        if field_info['type'] == 'select':
+            field_info['choices'] = field.choices
+        fields.append(field_info)
+    return fields
+
 def dashboard(request):
-    # Existing prefetch
+    # Prefetch related data
     clients = Client.objects.prefetch_related(
         'projects',
         'projects__locations',
@@ -100,26 +205,30 @@ def dashboard(request):
         'projects__locations__children'
     ).all()
     
-    # Function to get field metadata from model
-    def get_field_metadata(model, field_names):
-        fields = []
-        for name in field_names:
-            field = model._meta.get_field(name)
-            field_info = {
-                'name': name,
-                'type': 'select' if hasattr(field, 'choices') and field.choices else field.get_internal_type()
-            }
-            if field_info['type'] == 'select':
-                field_info['choices'] = field.choices
-            fields.append(field_info)
-        return fields
-
-    # Define field lists for each model
+    # Define model fields with hierarchy information
     model_fields = {
-        'client': get_field_metadata(Client, ['name', 'contact_email', 'phone_number']),
-        'project': get_field_metadata(Project, ['name', 'project_type', 'start_date', 'end_date']),
-        'location': get_field_metadata(Location, ['name', 'address', 'latitude', 'longitude']),
-        'measurement': get_field_metadata(Measurement, ['name', 'description', 'measurement_type'])
+        'client': {
+            'level': 1,
+            'fields': get_field_metadata(Client, ['name', 'contact_email', 'phone_number']),
+            'child_type': 'project'
+        },
+        'project': {
+            'level': 2,
+            'fields': get_field_metadata(Project, ['name', 'project_type', 'start_date', 'end_date']),
+            'child_type': 'location',
+            'parent_type': 'client'
+        },
+        'location': {
+            'level': 3,
+            'fields': get_field_metadata(Location, ['name', 'address', 'latitude', 'longitude']),
+            'child_type': 'measurement',
+            'parent_type': 'project'
+        },
+        'measurement': {
+            'level': 4,
+            'fields': get_field_metadata(Measurement, ['name', 'description', 'measurement_type']),
+            'parent_type': 'location'
+        }
     }
 
     context = {
@@ -128,7 +237,7 @@ def dashboard(request):
     }
     return render(request, 'main/dashboard.html', context)
 
-@require_http_methods(["POST"])
+
 def excel_upload(request):
     if 'csv_file' not in request.FILES:
         return JsonResponse({'error': 'CSV file is required'}, status=400)

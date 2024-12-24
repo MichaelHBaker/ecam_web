@@ -1,8 +1,34 @@
-// CSRF Token for authenticated requests
+// CSRF Token setup
 export const CSRF_TOKEN = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
 if (!CSRF_TOKEN) {
-    console.warn('CSRF token not found in the DOM. Ensure it is included for authenticated requests.');
+    console.warn('CSRF token not found in the DOM.');
 }
+
+// Model hierarchy configuration - this should match your Django configuration
+export const MODEL_FIELDS = {
+    'client': {
+        level: 1,
+        fields: ['name', 'contact_email', 'phone_number'],
+        child_type: 'project',
+    },
+    'project': {
+        level: 2,
+        fields: ['name', 'project_type', 'start_date', 'end_date'],
+        child_type: 'location',
+        parent_type: 'client'
+    },
+    'location': {
+        level: 3,
+        fields: ['name', 'address', 'latitude', 'longitude'],
+        child_type: 'measurement',
+        parent_type: 'project'
+    },
+    'measurement': {
+        level: 4,
+        fields: ['name', 'description', 'measurement_type'],
+        parent_type: 'location'
+    }
+};
 
 // Helper function to reset fields
 const resetFields = (type, id, fields) => {
@@ -23,7 +49,7 @@ const resetFields = (type, id, fields) => {
     }
 };
 
-// Generalized API fetch function with improved error handling
+// Generalized API fetch function
 export const apiFetch = async (endpoint, options = {}, basePath = '/api') => {
     const defaultOptions = {
         headers: {
@@ -42,32 +68,33 @@ export const apiFetch = async (endpoint, options = {}, basePath = '/api') => {
             ...options,
         });
 
-        const errorData = await response.json().catch(() => ({}));
+        const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-            switch (response.status) {
-                case 400:
-                    throw new Error('Invalid data provided. Please check your input.');
-                case 401:
-                    throw new Error('Authentication required. Please log in.');
-                case 403:
-                    throw new Error('You do not have permission to perform this action.');
-                case 404:
-                    throw new Error('The requested resource was not found.');
-                default:
-                    throw new Error(errorData.detail || `API Error: ${response.statusText}`);
-            }
+            const errorMessages = {
+                400: 'Invalid data provided. Please check your input.',
+                401: 'Authentication required. Please log in.',
+                403: 'You do not have permission to perform this action.',
+                404: 'The requested resource was not found.'
+            };
+            throw new Error(errorMessages[response.status] || data.detail || `API Error: ${response.statusText}`);
         }
 
-        return errorData;
+        return data;
     } catch (error) {
         console.error(`Error fetching ${apiEndpoint}:`, error.message);
         throw error;
     }
 };
 
-// Generalized edit function
+// Edit function
 export const editItem = (type, id, fields) => {
+    const modelInfo = MODEL_FIELDS[type];
+    if (!modelInfo) {
+        console.error(`Unknown item type: ${type}`);
+        return;
+    }
+
     fields.forEach((field) => {
         const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
         if (!element) {
@@ -75,42 +102,36 @@ export const editItem = (type, id, fields) => {
             return;
         }
 
-        // Store original value
         element.dataset.originalValue = element.value.trim();
-        
-        // Make editable
         element.removeAttribute('readonly');
-        
-        // Make visible
         element.style.display = "inline";
-        
-        // Add editing style
         element.classList.add('editing');
-        
-        // Remove w3-input class if present
-        element.classList.remove('w3-input');
     });
 
-    // Show edit controls inline
     const editControls = document.getElementById(`id_${type}EditControls-${id}`);
     if (editControls) {
         editControls.style.display = "inline-flex";
     }
 
-    // Focus the name field
     const nameField = document.getElementById(`id_${type}Name-${id}`);
     if (nameField) {
         nameField.focus();
     }
 };
 
-// Generalized update function
+// Update function
 export const updateItem = async (event, type, id, fields) => {
     event.preventDefault();
 
     try {
-        // Collect data from fields
+        const modelInfo = MODEL_FIELDS[type];
+        if (!modelInfo) {
+            throw new Error(`Unknown item type: ${type}`);
+        }
+
         const data = {};
+        
+        // Collect field data
         fields.forEach((field) => {
             const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
             if (element) {
@@ -118,15 +139,16 @@ export const updateItem = async (event, type, id, fields) => {
             }
         });
 
-        console.log('Collected data:', data);
+        // Get parent ID if it exists
+        const parentIdInput = event.target.querySelector('input[name="parent_id"]');
+        if (parentIdInput && modelInfo.parent_type) {
+            data[`${modelInfo.parent_type}_id`] = parentIdInput.value;
+        }
 
-        // Send the update request
         const response = await apiFetch(`/${type}s/${id}/`, {
             method: 'PATCH',
             body: JSON.stringify(data),
         });
-
-        console.log('Update successful:', response);
 
         // Update original values and reset UI
         fields.forEach((field) => {
@@ -138,15 +160,19 @@ export const updateItem = async (event, type, id, fields) => {
 
         resetFields(type, id, fields);
 
+        // Update the display name if it changed
+        const nameSpan = document.getElementById(`${type}DisplayName-${id}`);
+        if (nameSpan && data.name) {
+            nameSpan.textContent = data.name;
+        }
+
     } catch (error) {
         console.error('Error in updateItem:', error);
-        // Show user-friendly error message
-        const errorMessage = error.message || 'An error occurred while updating. Please try again.';
-        alert(errorMessage);
+        alert(error.message || 'An error occurred while updating. Please try again.');
     }
 };
 
-// Generalized cancel edit function
+// Cancel edit function
 export const cancelEdit = (event, type, id, fields) => {
     event.preventDefault();
 
@@ -157,14 +183,13 @@ export const cancelEdit = (event, type, id, fields) => {
             return;
         }
         
-        // Restore original value
         element.value = element.dataset.originalValue;
     });
 
     resetFields(type, id, fields);
 };
 
-// Generalized delete function
+// Delete function
 export const deleteItem = async (type, id) => {
     if (!confirm('Are you sure you want to delete this item?')) {
         return;
@@ -172,42 +197,65 @@ export const deleteItem = async (type, id) => {
 
     try {
         await apiFetch(`/${type}s/${id}/`, { method: 'DELETE' });
-        console.log('Delete successful');
-
-        // Remove the entire tree item
-        const itemElement = document.getElementById(`id_form-${id}`).closest('.tree-item');
+        
+        // Remove the tree item and its container
+        const itemElement = document.getElementById(`id_form-${type}-${id}`).closest('.tree-item');
+        const containerElement = document.getElementById(`id_${type}-${id}`);
+        
         if (itemElement) {
             itemElement.remove();
-        } else {
-            console.warn(`Tree item for ${type} with ID ${id} not found.`);
+        }
+        if (containerElement) {
+            containerElement.remove();
         }
     } catch (error) {
         console.error('Delete failed:', error);
-        const errorMessage = error.message || 'Failed to delete the item. Please try again.';
-        alert(errorMessage);
+        alert(error.message || 'Failed to delete the item. Please try again.');
     }
 };
 
 // Add new item function
 export const addItem = async (type, fields, parentId = null) => {
     try {
-        // Fetch schema information first
+        const modelInfo = MODEL_FIELDS[type];
+        if (!modelInfo) {
+            throw new Error(`Unknown item type: ${type}`);
+        }
+
+        // Fetch schema information
         const schema = await apiFetch(`/${type}s/`, {
             method: 'OPTIONS'
         });
         const fieldInfo = schema.actions.POST;
 
-        // Create form container
-        const tempId = 'temp-new-item';
+        // Create temporary container
+        const tempId = `temp-new-${type}`;
         const tempContainer = document.createElement('div');
         tempContainer.id = tempId;
         tempContainer.className = 'tree-item w3-hover-light-grey';
 
+        // Create form
         const form = document.createElement('form');
-        form.className = 'fields-container';
         form.id = `id_${type}Form-${tempId}`;
+        form.className = 'fields-container';
 
-        // Add fields based on schema information
+        // Add CSRF token
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = CSRF_TOKEN;
+        form.appendChild(csrfInput);
+
+        // Add parent ID if exists
+        if (parentId && modelInfo.parent_type) {
+            const parentInput = document.createElement('input');
+            parentInput.type = 'hidden';
+            parentInput.name = 'parent_id';
+            parentInput.value = parentId;
+            form.appendChild(parentInput);
+        }
+
+        // Add fields
         fields.forEach(field => {
             const fieldSchema = fieldInfo[field] || {};
             const input = document.createElement(fieldSchema.choices ? 'select' : 'input');
@@ -229,13 +277,8 @@ export const addItem = async (type, fields, parentId = null) => {
                     input.appendChild(option);
                 });
             } else {
-                // Handle input fields
                 input.type = getInputType(fieldSchema.type);
                 input.placeholder = field.replace(/_/g, ' ');
-
-                if (fieldSchema.type === 'decimal') {
-                    input.step = 'any';
-                }
             }
 
             if (fieldSchema.required) {
@@ -245,7 +288,7 @@ export const addItem = async (type, fields, parentId = null) => {
             form.appendChild(input);
         });
 
-        // Add save/cancel controls
+        // Add controls
         const controls = document.createElement('span');
         controls.id = `id_${type}EditControls-${tempId}`;
         controls.style.display = 'inline-flex';
@@ -258,46 +301,26 @@ export const addItem = async (type, fields, parentId = null) => {
             </button>
         `;
         form.appendChild(controls);
-
         tempContainer.appendChild(form);
 
-        // Determine insert location and parent relationship
+        // Insert form
         let insertLocation;
-        let parentData = {};
         if (parentId) {
-            // Find the foreign key field from schema that's not in our fields list
-            const parentField = Object.entries(fieldInfo)
-                .find(([key, value]) =>
-                    value.type === 'field' &&
-                    value.required &&
-                    !fields.includes(key)
-                )?.[0];
-
-            if (!parentField) {
-                throw new Error('Could not determine parent relationship field');
-            }
-
-            insertLocation = document.getElementById(`id_${parentId}`);
+            insertLocation = document.getElementById(`id_${modelInfo.parent_type}-${parentId}`);
             if (!insertLocation) {
-                throw new Error(`Parent element with ID ${parentId} not found`);
+                throw new Error(`Parent container not found for ${modelInfo.parent_type} ${parentId}`);
             }
-
-            parentData = { [parentField]: parentId };
         } else {
             insertLocation = document.querySelector('.tree-headings');
-            if (!insertLocation) {
-                throw new Error('Could not find tree headings element');
-            }
         }
-
         insertLocation.after(tempContainer);
 
         // Handle form submission
         form.onsubmit = async (event) => {
             event.preventDefault();
             try {
-                // Collect and validate form data
-                const data = { ...parentData };
+                // Collect form data
+                const data = {};
                 fields.forEach(field => {
                     const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${tempId}`);
                     if (element) {
@@ -309,72 +332,40 @@ export const addItem = async (type, fields, parentId = null) => {
                     }
                 });
 
-                // Create the item
+                // Add parent relationship if needed
+                if (parentId && modelInfo.parent_type) {
+                    data[`${modelInfo.parent_type}_id`] = parentId;
+                }
+
+                // Create item
                 const newItem = await apiFetch(`/${type}s/`, {
                     method: 'POST',
                     body: JSON.stringify(data)
                 });
 
-                console.log(`${type} created successfully:`, newItem);
+                // Render new item
+                const context = {
+                    item: newItem,
+                    level_type: type,
+                    model_fields: MODEL_FIELDS,
+                    parent: parentId ? { id: parentId } : null
+                };
 
-                try {
-                    // Construct the template
-                    const template = `
-                        <div class="tree-item w3-hover-light-grey">
-                            <div class="tree-text">
-                                {% if type != 'measurement' %}
-                                    <button
-                                        type="button"
-                                        onclick="toggleOpenClose('id_{{ newItem.name|slugify }}-{{ newItem.id }}')"
-                                        class="w3-button icon"
-                                        title="Click to open/close {{ type }} details"
-                                    >
-                                        <i id="id_chevronIcon-id_{{ newItem.name|slugify }}-{{ newItem.id }}" class="bi bi-chevron-right"></i>
-                                    </button>
-                                {% endif %}
-                                <span id="id_{{ type }}Name-{{ newItem.id }}">{{ newItem.name }}</span>
-                            </div>
-                            <div class="item-actions">
-                                <button class="w3-button">
-                                    <i class="bi bi-three-dots-vertical"></i>
-                                </button>
-                                <div class="w3-dropdown-content w3-bar-block w3-border">
-                                    <a href="#" class="w3-bar-item w3-button" onclick="crud.editItem('{{ type }}', '{{ newItem.id }}', '${fields}'); return false;">
-                                        <i class="bi bi-pencil"></i> Edit
-                                    </a>
-                                    <a href="#" class="w3-bar-item w3-button" onclick="crud.deleteItem('{{ type }}', '{{ newItem.id }}'); return false;">
-                                        <i class="bi bi-trash"></i> Delete
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    `;
+                const renderResponse = await apiFetch('/templates/render/', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        template: '{% include "main/tree_item.html" %}',
+                        context: context
+                    })
+                });
 
-                    // Render the template
-                    const renderResponse = await apiFetch('/templates/render/', {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            template: template,
-                            context: {
-                                type: type,
-                                newItem: newItem,
-                                fields: fields
-                            }
-                        })
-                    });
-
-                    if (!renderResponse.html) {
-                        throw new Error('No HTML content returned from template rendering');
-                    }
-
-                    // Insert the rendered HTML
-                    insertLocation.insertAdjacentHTML('afterend', renderResponse.html);
-                    tempContainer.remove();
-
-                } catch (templateError) {
-                    console.error('Template rendering error:', templateError);
-                    throw new Error('Failed to render new item template');
+                if (!renderResponse.html) {
+                    throw new Error('No HTML content returned from template rendering');
                 }
+
+                // Insert rendered HTML
+                insertLocation.insertAdjacentHTML('afterend', renderResponse.html);
+                tempContainer.remove();
 
             } catch (error) {
                 console.error(`Error creating ${type}:`, error);
@@ -395,7 +386,6 @@ export const addItem = async (type, fields, parentId = null) => {
         alert(error.message || 'Failed to initialize form. Please try again.');
     }
 };
-
 
 // Helper function to map DRF types to HTML input types
 const getInputType = (drfType) => {

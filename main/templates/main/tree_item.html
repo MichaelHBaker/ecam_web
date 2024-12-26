@@ -57,7 +57,8 @@
         <div class="w3-dropdown-content w3-bar-block w3-border">
             {% if next_level_type %}
                 <a href="#" class="w3-bar-item w3-button"
-                   onclick="crud.addItem('{{ next_level_type }}', {{ model_fields|get_item:next_level_type|get_item:'fields'|safe }}, '{{ item.id }}'); return false;">
+                   {% comment %} onclick="crud.addItem('{{ next_level_type }}', {{ model_fields|get_item:next_level_type|get_item:'fields'|safe }}, '{{ item.id }}'); return false;"> {% endcomment %}
+                   onclick="crud.addItem('{{ next_level_type }}', [{% for field in model_fields|get_item:next_level_type|get_item:'fields' %}'{{ field.name }}'{% if not forloop.last %}, {% endif %}{% endfor %}], '{{ item.name|slugify }}', '{{ item.id }}'); return false;">
                     <i class="bi bi-plus"></i> Add {{ next_level_type|title }}
                 </a>
             {% endif %}

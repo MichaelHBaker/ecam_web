@@ -4,6 +4,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from django.contrib.auth import authenticate, login
 from django.template import Template as DjangoTemplate
 from django.template import Context as DjangoContext
+from django.middleware.csrf import get_token
 
 from rest_framework import viewsets
 from rest_framework.decorators import action

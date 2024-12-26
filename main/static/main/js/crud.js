@@ -215,7 +215,7 @@ export const deleteItem = async (type, id) => {
 };
 
 // Add new item function
-export const addItem = async (type, fields, parentId = null) => {
+export const addItem = async (type, fields, parentName='', parentId = null) => {
     try {
         const modelInfo = MODEL_FIELDS[type];
         if (!modelInfo) {
@@ -247,16 +247,17 @@ export const addItem = async (type, fields, parentId = null) => {
         form.appendChild(csrfInput);
 
         // Add parent ID if exists
-        if (parentId && modelInfo.parent_type) {
-            const parentInput = document.createElement('input');
-            parentInput.type = 'hidden';
-            parentInput.name = 'parent_id';
-            parentInput.value = parentId;
-            form.appendChild(parentInput);
-        }
+        // if (parentId && modelInfo.parent_type) {
+        //     const parentInput = document.createElement('input');
+        //     parentInput.type = 'hidden';
+        //     parentInput.name = 'parent_id';
+        //     parentInput.value = parentId;
+        //     form.appendChild(parentInput);
+        // }
 
         // Add fields
         fields.forEach(field => {
+            console.log(field);
             const fieldSchema = fieldInfo[field] || {};
             const input = document.createElement(fieldSchema.choices ? 'select' : 'input');
             input.id = `id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${tempId}`;
@@ -269,11 +270,11 @@ export const addItem = async (type, fields, parentId = null) => {
                 emptyOption.value = '';
                 emptyOption.textContent = `Select ${field.replace(/_/g, ' ')}`;
                 input.appendChild(emptyOption);
-
-                fieldSchema.choices.forEach(([value, label]) => {
+                console.log("choice even if blank" + fieldSchema.choices);
+                fieldSchema.choices.forEach(choice => {
                     const option = document.createElement('option');
-                    option.value = value;
-                    option.textContent = label;
+                    option.value = choice.value;
+                    option.textContent = choice.display_name;
                     input.appendChild(option);
                 });
             } else {
@@ -306,7 +307,7 @@ export const addItem = async (type, fields, parentId = null) => {
         // Insert form
         let insertLocation;
         if (parentId) {
-            insertLocation = document.getElementById(`id_${modelInfo.parent_type}-${parentId}`);
+            insertLocation = document.getElementById(`id_${modelInfo.parent_type}-${parentName}-${parentId}`);
             if (!insertLocation) {
                 throw new Error(`Parent container not found for ${modelInfo.parent_type} ${parentId}`);
             }

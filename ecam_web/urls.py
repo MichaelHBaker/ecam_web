@@ -25,7 +25,6 @@ router.register(r'clients', views.ClientViewSet)
 router.register(r'projects', views.ProjectViewSet, basename='project')
 router.register(r'locations', views.LocationViewSet, basename='location')
 router.register(r'measurements', views.MeasurementViewSet, basename='measurement')
-router.register(r'templates', views.TemplateViewSet, basename='template')
 router.register(r'model-fields', views.ModelFieldsViewSet, basename='model-fields')  
 
 urlpatterns = [

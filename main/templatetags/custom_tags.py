@@ -45,22 +45,63 @@ def render_tree_item(item, level_type, model_fields, parent=None):
     """
     Recursively renders tree items
     """
-    level_info = model_fields[level_type]
-    next_level_type = level_info.get('child_type')
-    children_attr = f"{next_level_type}s" if next_level_type else None
-    
-    # Ensure fields is a list of strings, not a dict
-    fields = level_info['fields']
-    if isinstance(fields, dict):
-        fields = list(fields.keys())
-    
-    return {
-        'item': item,
-        'level_type': level_type,
-        'model_fields': model_fields,
-        'next_level_type': next_level_type,
-        'children_attr': children_attr,
-        'parent': parent,
-        'fields': fields,  # Now guaranteed to be a list
-        'level': level_info['level']
-    }
+    try:
+        # Debug before access
+        print(f"Debug - level_type: {level_type}")
+        print(f"Debug - model_fields keys: {list(model_fields.keys())}")
+        
+        if not isinstance(model_fields, dict):
+            raise ValueError(f"model_fields is not a dict. Got {type(model_fields)}")
+            
+        if level_type not in model_fields:
+            print(f"KeyError - '{level_type}' not in {list(model_fields.keys())}")
+            # Provide default structure if key missing
+            level_info = {
+                'level': 1,
+                'fields': [{'name': 'name', 'type': 'string'}],
+                'child_type': None
+            }
+        else:
+            level_info = model_fields[level_type]
+
+        next_level_type = level_info.get('child_type')
+        children_attr = f"{next_level_type}s" if next_level_type else None
+        
+        # Handle fields
+        fields = level_info.get('fields', [])
+        if isinstance(fields, dict):
+            fields = [{'name': k, 'type': v.get('type', 'string')} for k, v in fields.items()]
+        elif isinstance(fields, list) and fields and isinstance(fields[0], str):
+            fields = [{'name': f, 'type': 'string'} for f in fields]
+            
+        context = {
+            'item': item,
+            'level_type': level_type,
+            'model_fields': model_fields,
+            'next_level_type': next_level_type,
+            'children_attr': children_attr,
+            'parent': parent,
+            'fields': fields,
+            'level': level_info.get('level', 1)
+        }
+        
+        # Debug the output context
+        print(f"Debug - output context: {context}")
+        
+        return context
+        
+    except Exception as e:
+        print(f"Error in render_tree_item: {str(e)}")
+        print(f"model_fields type: {type(model_fields)}")
+        print(f"model_fields content: {model_fields}")
+        # Return a minimal valid context in case of error
+        return {
+            'item': item,
+            'level_type': level_type,
+            'model_fields': model_fields,
+            'next_level_type': None,
+            'children_attr': None,
+            'parent': parent,
+            'fields': [{'name': 'name', 'type': 'string'}],
+            'level': 1
+        }

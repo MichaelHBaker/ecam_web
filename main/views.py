@@ -12,10 +12,12 @@ from rest_framework.response import Response
 from rest_framework import status 
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
 from rest_framework.permissions import IsAuthenticated  # or AllowAny if you want to allow anonymous access
+from rest_framework.exceptions import ValidationError
+from rest_framework.views import APIView
 
 from .models import Client, Project, Location, Measurement
-from .serializers import ClientSerializer, ProjectSerializer, LocationSerializer, MeasurementSerializer
-# from .forms import ClientForm, ProjectForm, LocationForm, MeasurementForm, ClientNameForm 
+from .serializers import ClientSerializer, ProjectSerializer, LocationSerializer, MeasurementSerializer, ModelFieldsSerializer
+from .utils import get_field_metadata
 
 
 import chardet
@@ -131,33 +133,11 @@ class TemplateViewSet(viewsets.ViewSet):
             # Add CSRF token to context
             context_data['csrf_token'] = get_token(request)
             
-            # Add model_fields if not present (needed for recursive rendering)
+            # Check if model_fields are present in the context data
             if 'model_fields' not in context_data:
-                context_data['model_fields'] = {
-                    'client': {
-                        'level': 1,
-                        'fields': get_field_metadata(Client, ['name', 'contact_email', 'phone_number']),
-                        'child_type': 'project'
-                    },
-                    'project': {
-                        'level': 2,
-                        'fields': get_field_metadata(Project, ['name', 'project_type', 'start_date', 'end_date']),
-                        'child_type': 'location',
-                        'parent_type': 'client'
-                    },
-                    'location': {
-                        'level': 3,
-                        'fields': get_field_metadata(Location, ['name', 'address', 'latitude', 'longitude']),
-                        'child_type': 'measurement',
-                        'parent_type': 'project'
-                    },
-                    'measurement': {
-                        'level': 4,
-                        'fields': get_field_metadata(Measurement, ['name', 'description', 'measurement_type']),
-                        'parent_type': 'location'
-                    }
-                }
-            
+                raise ValidationError("Missing required 'model_fields' in context data")
+
+
             # Register template tags for template rendering
             from django.template import engines
             django_engine = engines['django']
@@ -184,60 +164,34 @@ class TemplateViewSet(viewsets.ViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-def get_field_metadata(model, field_names):
-    fields = []
-    for name in field_names:
-        field = model._meta.get_field(name)
-        field_info = {
-            'name': name,
-            'type': 'select' if hasattr(field, 'choices') and field.choices else field.get_internal_type()
-        }
-        if field_info['type'] == 'select':
-            field_info['choices'] = field.choices
-        fields.append(field_info)
-    return fields
 
+class ModelFieldsViewSet(viewsets.ViewSet):
+    authentication_classes = [SessionAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def list(self, request):
+        serializer = ModelFieldsSerializer(instance=None)
+        return Response(serializer.to_representation(None))
+    
 def dashboard(request):
-    # Prefetch related data
+    # Prefetch related data to optimize database queries
     clients = Client.objects.prefetch_related(
         'projects',
         'projects__locations',
         'projects__locations__measurements',
         'projects__locations__children'
     ).all()
-    
-    # Define model fields with hierarchy information
-    model_fields = {
-        'client': {
-            'level': 1,
-            'fields': get_field_metadata(Client, ['name', 'contact_email', 'phone_number']),
-            'child_type': 'project'
-        },
-        'project': {
-            'level': 2,
-            'fields': get_field_metadata(Project, ['name', 'project_type', 'start_date', 'end_date']),
-            'child_type': 'location',
-            'parent_type': 'client'
-        },
-        'location': {
-            'level': 3,
-            'fields': get_field_metadata(Location, ['name', 'address', 'latitude', 'longitude']),
-            'child_type': 'measurement',
-            'parent_type': 'project'
-        },
-        'measurement': {
-            'level': 4,
-            'fields': get_field_metadata(Measurement, ['name', 'description', 'measurement_type']),
-            'parent_type': 'location'
-        }
-    }
 
+    # Use serializer but get data directly
+    serializer = ModelFieldsSerializer(instance=None)
+    model_fields = serializer.to_representation(None)  # Call to_representation directly
+    
     context = {
         'clients': clients,
         'model_fields': model_fields
     }
+    
     return render(request, 'main/dashboard.html', context)
-
 
 def excel_upload(request):
     if 'csv_file' not in request.FILES:

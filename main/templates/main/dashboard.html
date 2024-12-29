@@ -1,5 +1,4 @@
 {% extends 'base.html' %}
-{% load static %}
 {% load custom_tags %}
 
 {% block title %}ECAM Web{% endblock %}
@@ -263,12 +262,6 @@
             icon.className = "bi bi-chevron-down";
         }
     }
-</script>
-
-<!-- Module JavaScript -->
-<script type="module">
-    import * as CRUD from "{% static 'main/js/crud.js' %}"; 
-    window.crud = CRUD; // Expose the CRUD module globally
 </script>
 
 {% endblock %}

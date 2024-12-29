@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Client, Project, Location, Measurement
+from .utils import get_field_metadata
 
 class MeasurementSerializer(serializers.ModelSerializer):
     measurement_type_display = serializers.CharField(source='get_measurement_type_display', read_only=True)
@@ -39,3 +40,46 @@ class ClientSerializer(serializers.ModelSerializer):
     class Meta:
         model = Client
         fields = ['id', 'name', 'contact_email', 'phone_number', 'projects']
+
+class ModelFieldsSerializer(serializers.Serializer):
+    def to_representation(self, instance):
+        result = {
+            'client': {
+                'level': 1,
+                'fields': [
+                    {'name': 'name', 'type': 'string'},
+                    {'name': 'contact_email', 'type': 'email'},
+                    {'name': 'phone_number', 'type': 'string'}
+                ],
+                'child_type': 'project'
+            },
+            'project': {
+                'level': 2,
+                'fields': [
+                    {'name': 'name', 'type': 'string'},
+                    {'name': 'project_type', 'type': 'choice'}
+                ],
+                'child_type': 'location',
+                'parent_type': 'client'
+            },
+            'location': {
+                'level': 3,
+                'fields': [
+                    {'name': 'name', 'type': 'string'},
+                    {'name': 'address', 'type': 'string'}
+                ],
+                'child_type': 'measurement',
+                'parent_type': 'project'
+            },
+            'measurement': {
+                'level': 4,
+                'fields': [
+                    {'name': 'name', 'type': 'string'},
+                    {'name': 'description', 'type': 'string'},
+                    {'name': 'measurement_type', 'type': 'choice'}
+                ],
+                'parent_type': 'location'
+            }
+        }
+        print("ModelFieldsSerializer output:", result)  # Debug print
+        return result

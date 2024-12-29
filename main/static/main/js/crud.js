@@ -4,50 +4,9 @@ if (!CSRF_TOKEN) {
     console.warn('CSRF token not found in the DOM.');
 }
 
-// Model hierarchy configuration - this should match your Django configuration
-export const MODEL_FIELDS = {
-    'client': {
-        level: 1,
-        fields: ['name', 'contact_email', 'phone_number'],
-        child_type: 'project',
-    },
-    'project': {
-        level: 2,
-        fields: ['name', 'project_type', 'start_date', 'end_date'],
-        child_type: 'location',
-        parent_type: 'client'
-    },
-    'location': {
-        level: 3,
-        fields: ['name', 'address', 'latitude', 'longitude'],
-        child_type: 'measurement',
-        parent_type: 'project'
-    },
-    'measurement': {
-        level: 4,
-        fields: ['name', 'description', 'measurement_type'],
-        parent_type: 'location'
-    }
-};
-
-// Helper function to reset fields
-const resetFields = (type, id, fields) => {
-    fields.forEach((field) => {
-        const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
-        if (element) {
-            element.setAttribute('readonly', 'readonly');
-            element.classList.remove('editing');
-            if (field !== 'name') {
-                element.style.display = "none";
-            }
-        }
-    });
-
-    const editControls = document.getElementById(`id_${type}EditControls-${id}`);
-    if (editControls) {
-        editControls.style.display = "none";
-    }
-};
+// Initialize MODEL_FIELDS
+export let MODEL_FIELDS = null;
+let modelFieldsPromise = null;
 
 // Generalized API fetch function
 export const apiFetch = async (endpoint, options = {}, basePath = '/api') => {
@@ -87,35 +46,86 @@ export const apiFetch = async (endpoint, options = {}, basePath = '/api') => {
     }
 };
 
-// Edit function
-export const editItem = (type, id, fields) => {
-    const modelInfo = MODEL_FIELDS[type];
-    if (!modelInfo) {
-        console.error(`Unknown item type: ${type}`);
-        return;
+// Initialize MODEL_FIELDS from API
+export const initializeModelFields = async () => {
+    if (modelFieldsPromise) {
+        return modelFieldsPromise;
     }
 
+    modelFieldsPromise = apiFetch('/model-fields/')
+        .then(data => {
+            MODEL_FIELDS = data;
+            return data;
+        })
+        .catch(error => {
+            console.error('Failed to initialize MODEL_FIELDS:', error);
+            throw error;
+        });
+
+    return modelFieldsPromise;
+};
+
+// Helper function to ensure MODEL_FIELDS is initialized
+const ensureInitialized = async () => {
+    if (!MODEL_FIELDS) {
+        await initializeModelFields();
+    }
+    return MODEL_FIELDS;
+};
+
+// Helper function to reset fields
+const resetFields = (type, id, fields) => {
     fields.forEach((field) => {
         const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
-        if (!element) {
-            console.warn(`Element not found: id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
-            return;
+        if (element) {
+            element.setAttribute('readonly', 'readonly');
+            element.classList.remove('editing');
+            if (field !== 'name') {
+                element.style.display = "none";
+            }
         }
-
-        element.dataset.originalValue = element.value.trim();
-        element.removeAttribute('readonly');
-        element.style.display = "inline";
-        element.classList.add('editing');
     });
 
     const editControls = document.getElementById(`id_${type}EditControls-${id}`);
     if (editControls) {
-        editControls.style.display = "inline-flex";
+        editControls.style.display = "none";
     }
+};
 
-    const nameField = document.getElementById(`id_${type}Name-${id}`);
-    if (nameField) {
-        nameField.focus();
+// Edit function
+export const editItem = async (type, id, fields) => {
+    try {
+        const modelFields = await ensureInitialized();
+        const modelInfo = modelFields[type];
+        if (!modelInfo) {
+            throw new Error(`Unknown item type: ${type}`);
+        }
+
+        fields.forEach((field) => {
+            const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
+            if (!element) {
+                console.warn(`Element not found: id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
+                return;
+            }
+
+            element.dataset.originalValue = element.value.trim();
+            element.removeAttribute('readonly');
+            element.style.display = "inline";
+            element.classList.add('editing');
+        });
+
+        const editControls = document.getElementById(`id_${type}EditControls-${id}`);
+        if (editControls) {
+            editControls.style.display = "inline-flex";
+        }
+
+        const nameField = document.getElementById(`id_${type}Name-${id}`);
+        if (nameField) {
+            nameField.focus();
+        }
+    } catch (error) {
+        console.error('Error in editItem:', error);
+        alert(error.message || 'An error occurred while editing. Please try again.');
     }
 };
 
@@ -124,14 +134,14 @@ export const updateItem = async (event, type, id, fields) => {
     event.preventDefault();
 
     try {
-        const modelInfo = MODEL_FIELDS[type];
+        const modelFields = await ensureInitialized();
+        const modelInfo = modelFields[type];
         if (!modelInfo) {
             throw new Error(`Unknown item type: ${type}`);
         }
 
         const data = {};
         
-        // Collect field data
         fields.forEach((field) => {
             const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
             if (element) {
@@ -139,7 +149,6 @@ export const updateItem = async (event, type, id, fields) => {
             }
         });
 
-        // Get parent ID if it exists
         const parentIdInput = event.target.querySelector('input[name="parent_id"]');
         if (parentIdInput && modelInfo.parent_type) {
             data[`${modelInfo.parent_type}_id`] = parentIdInput.value;
@@ -150,7 +159,6 @@ export const updateItem = async (event, type, id, fields) => {
             body: JSON.stringify(data),
         });
 
-        // Update original values and reset UI
         fields.forEach((field) => {
             const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
             if (element) {
@@ -160,7 +168,6 @@ export const updateItem = async (event, type, id, fields) => {
 
         resetFields(type, id, fields);
 
-        // Update the display name if it changed
         const nameSpan = document.getElementById(`${type}DisplayName-${id}`);
         if (nameSpan && data.name) {
             nameSpan.textContent = data.name;
@@ -196,9 +203,9 @@ export const deleteItem = async (type, id) => {
     }
 
     try {
+        await ensureInitialized();
         await apiFetch(`/${type}s/${id}/`, { method: 'DELETE' });
         
-        // Remove the tree item and its container
         const itemElement = document.getElementById(`id_form-${type}-${id}`).closest('.tree-item');
         const containerElement = document.getElementById(`id_${type}-${id}`);
         
@@ -217,47 +224,33 @@ export const deleteItem = async (type, id) => {
 // Add new item function
 export const addItem = async (type, fields, parentName='', parentId = null) => {
     try {
-        const modelInfo = MODEL_FIELDS[type];
+        const modelFields = await ensureInitialized();
+        const modelInfo = modelFields[type];
         if (!modelInfo) {
             throw new Error(`Unknown item type: ${type}`);
         }
 
-        // Fetch schema information
         const schema = await apiFetch(`/${type}s/`, {
             method: 'OPTIONS'
         });
         const fieldInfo = schema.actions.POST;
 
-        // Create temporary container
         const tempId = `temp-new-${type}`;
         const tempContainer = document.createElement('div');
         tempContainer.id = tempId;
         tempContainer.className = 'tree-item w3-hover-light-grey';
 
-        // Create form
         const form = document.createElement('form');
         form.id = `id_${type}Form-${tempId}`;
         form.className = 'fields-container';
 
-        // Add CSRF token
         const csrfInput = document.createElement('input');
         csrfInput.type = 'hidden';
         csrfInput.name = 'csrfmiddlewaretoken';
         csrfInput.value = CSRF_TOKEN;
         form.appendChild(csrfInput);
 
-        // Add parent ID if exists
-        // if (parentId && modelInfo.parent_type) {
-        //     const parentInput = document.createElement('input');
-        //     parentInput.type = 'hidden';
-        //     parentInput.name = 'parent_id';
-        //     parentInput.value = parentId;
-        //     form.appendChild(parentInput);
-        // }
-
-        // Add fields
         fields.forEach(field => {
-            console.log(field);
             const fieldSchema = fieldInfo[field] || {};
             const input = document.createElement(fieldSchema.choices ? 'select' : 'input');
             input.id = `id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${tempId}`;
@@ -265,12 +258,11 @@ export const addItem = async (type, fields, parentName='', parentId = null) => {
             input.className = 'tree-item-field editing';
 
             if (fieldSchema.choices) {
-                // Handle choice fields
                 const emptyOption = document.createElement('option');
                 emptyOption.value = '';
                 emptyOption.textContent = `Select ${field.replace(/_/g, ' ')}`;
                 input.appendChild(emptyOption);
-                console.log("choice even if blank" + fieldSchema.choices);
+
                 fieldSchema.choices.forEach(choice => {
                     const option = document.createElement('option');
                     option.value = choice.value;
@@ -289,7 +281,6 @@ export const addItem = async (type, fields, parentName='', parentId = null) => {
             form.appendChild(input);
         });
 
-        // Add controls
         const controls = document.createElement('span');
         controls.id = `id_${type}EditControls-${tempId}`;
         controls.style.display = 'inline-flex';
@@ -304,7 +295,6 @@ export const addItem = async (type, fields, parentName='', parentId = null) => {
         form.appendChild(controls);
         tempContainer.appendChild(form);
 
-        // Insert form
         let insertLocation;
         if (parentId) {
             insertLocation = document.getElementById(`id_${modelInfo.parent_type}-${parentName}-${parentId}`);
@@ -316,11 +306,9 @@ export const addItem = async (type, fields, parentName='', parentId = null) => {
         }
         insertLocation.after(tempContainer);
 
-        // Handle form submission
         form.onsubmit = async (event) => {
             event.preventDefault();
             try {
-                // Collect form data
                 const data = {};
                 fields.forEach(field => {
                     const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${tempId}`);
@@ -333,22 +321,19 @@ export const addItem = async (type, fields, parentName='', parentId = null) => {
                     }
                 });
 
-                // Add parent relationship if needed
                 if (parentId && modelInfo.parent_type) {
                     data[`${modelInfo.parent_type}_id`] = parentId;
                 }
 
-                // Create item
                 const newItem = await apiFetch(`/${type}s/`, {
                     method: 'POST',
                     body: JSON.stringify(data)
                 });
 
-                // Render new item
                 const context = {
                     item: newItem,
                     level_type: type,
-                    model_fields: MODEL_FIELDS,
+                    model_fields: modelFields,
                     parent: parentId ? { id: parentId } : null
                 };
 
@@ -364,7 +349,6 @@ export const addItem = async (type, fields, parentName='', parentId = null) => {
                     throw new Error('No HTML content returned from template rendering');
                 }
 
-                // Insert rendered HTML
                 insertLocation.insertAdjacentHTML('afterend', renderResponse.html);
                 tempContainer.remove();
 
@@ -374,12 +358,10 @@ export const addItem = async (type, fields, parentName='', parentId = null) => {
             }
         };
 
-        // Handle cancel
         controls.querySelector('button[type="button"]').onclick = () => {
             tempContainer.remove();
         };
 
-        // Focus first field
         form.querySelector('input, select')?.focus();
 
     } catch (error) {
@@ -402,3 +384,8 @@ const getInputType = (drfType) => {
     };
     return typeMap[drfType] || 'text';
 };
+
+// Initialize the page
+initializeModelFields().catch(error => {
+    console.error('Failed to initialize MODEL_FIELDS:', error);
+});

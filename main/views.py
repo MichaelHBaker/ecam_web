@@ -202,15 +202,10 @@ class MeasurementViewSet(TreeItemMixin, viewsets.ModelViewSet):
         except Exception as e:
             raise serializers.ValidationError(str(e))
 
-from rest_framework.permissions import AllowAny
 class ModelFieldsViewSet(viewsets.ViewSet):
     authentication_classes = [SessionAuthentication]
     permission_classes = [IsAuthenticated]
 
-    # def list(self, request):
-    #     serializer = ModelFieldsSerializer(instance=None)
-
-    #     return Response(serializer.data)
     def list(self, request):
         serializer = ModelFieldsSerializer()
         data = serializer.to_representation(None)  # Explicitly call to_representation

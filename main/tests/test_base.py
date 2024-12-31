@@ -1,68 +1,57 @@
+# tests/test_base.py
+from django.test import TestCase
 from rest_framework.test import APITestCase
 from django.contrib.auth.models import User
+from django.urls import reverse
 from ..models import Client, Project, Location, Measurement
+from .utils_data import create_model_table_data
 
-class BaseTestCase(APITestCase):
-    """Base test case with common setup and helper methods"""
+class BaseTestCase(TestCase):
+    """Base test case for non-API tests"""
     
     @classmethod
     def setUpTestData(cls):
+        """Called once at the beginning of the test run"""
         # Create test user
         cls.user = User.objects.create_user(
             username='testuser',
             password='testpass',
             email='test@example.com'
         )
+        
+        create_model_table_data()
+
+        # Get pre-created test data
+        cls.test_client = Client.objects.get(name="Acme Corp")
+        cls.test_project = Project.objects.get(name="Acme Audit")
+        cls.test_location = Location.objects.get(name="Acme Headquarters")
+        cls.test_measurement = Measurement.objects.get(name="Main Power Meter")
 
     def setUp(self):
-        # Authenticate for each test
+        """Called before each test method"""
+        self.client.login(username='testuser', password='testpass')
+
+
+class BaseAPITestCase(APITestCase):
+    """Base test case for API tests"""
+    
+    @classmethod
+    def setUpTestData(cls):
+        """Share the same test data setup as BaseTestCase"""
+        cls.user = User.objects.create_user(
+            username='testuser',
+            password='testpass',
+            email='test@example.com'
+        )
+
+        create_model_table_data()
+
+        # Get pre-created test data
+        cls.test_client = Client.objects.get(name="Acme Corp")
+        cls.test_project = Project.objects.get(name="Acme Audit")
+        cls.test_location = Location.objects.get(name="Acme Headquarters")
+        cls.test_measurement = Measurement.objects.get(name="Main Power Meter")
+
+    def setUp(self):
+        """Called before each test method"""
         self.client.force_authenticate(user=self.user)
-        
-    def create_test_client(self, **kwargs):
-        """Helper to create a test client"""
-        defaults = {
-            'name': 'Test Client',
-            'contact_email': 'test@client.com',
-            'phone_number': '123-456-7890'
-        }
-        defaults.update(kwargs)
-        return Client.objects.create(**defaults)
-
-    def create_test_project(self, client=None, **kwargs):
-        """Helper to create a test project"""
-        if not client:
-            client = self.create_test_client()
-        defaults = {
-            'name': 'Test Project',
-            'project_type': 'Audit',
-            'start_date': '2024-01-01',
-            'client': client
-        }
-        defaults.update(kwargs)
-        return Project.objects.create(**defaults)
-
-    def create_test_location(self, project=None, **kwargs):
-        """Helper to create a test location"""
-        if not project:
-            project = self.create_test_project()
-        defaults = {
-            'name': 'Test Location',
-            'address': '123 Test St',
-            'project': project,
-            'latitude': '45.0',
-            'longitude': '-75.0'
-        }
-        defaults.update(kwargs)
-        return Location.objects.create(**defaults)
-
-    def create_test_measurement(self, location=None, **kwargs):
-        """Helper to create a test measurement"""
-        if not location:
-            location = self.create_test_location()
-        defaults = {
-            'name': 'Test Measurement',
-            'measurement_type': 'power',
-            'location': location
-        }
-        defaults.update(kwargs)
-        return Measurement.objects.create(**defaults)

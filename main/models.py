@@ -20,7 +20,7 @@ class Project(models.Model):
     name = models.CharField(max_length=100)
     client = models.ForeignKey(Client, on_delete=models.CASCADE, related_name='projects')
     project_type = models.CharField(max_length=20, choices=PROJECT_TYPES)
-    start_date = models.DateField()
+    start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
 
     def __str__(self):

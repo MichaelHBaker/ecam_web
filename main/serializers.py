@@ -119,11 +119,12 @@ class ModelFieldsSerializer(serializers.Serializer):
                 ],
                 'child_type': 'project'
             },
-            'project': {
+             'project': {
                 'level': 2,
                 'fields': [
                     {'name': 'name', 'type': 'string', 'required': True},
-                    {'name': 'project_type', 'type': 'choice', 'required': True},
+                    {'name': 'project_type', 'type': 'choice', 'required': True, 
+                     'choices': [{'value': c[0], 'display': c[1]} for c in Project.PROJECT_TYPES]},
                 ],
                 'child_type': 'location',
                 'parent_type': 'client'
@@ -142,7 +143,8 @@ class ModelFieldsSerializer(serializers.Serializer):
                 'fields': [
                     {'name': 'name', 'type': 'string', 'required': True},
                     {'name': 'description', 'type': 'string', 'required': False},
-                    {'name': 'measurement_type', 'type': 'choice', 'required': True}
+                    {'name': 'measurement_type', 'type': 'choice', 'required': True,
+                     'choices': [{'value': c[0], 'display': c[1]} for c in Measurement.MEASUREMENT_TYPES]}
                 ],
                 'parent_type': 'location'
             }

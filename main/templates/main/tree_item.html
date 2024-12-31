@@ -27,10 +27,10 @@
             <!-- Expand/Collapse Button -->
             {% if next_level_type %}
                 <button type="button" 
-                        onclick="toggleOpenClose('id_{{ level_type }}-{{ item.name|slugify }}-{{ item.id }}')" 
+                        onclick="toggleOpenClose('id_{{ level_type }}-{{ item.id }}')" 
                         class="w3-button"
                         title="Click to open/close {{ level_type }} details">
-                    <i id="id_chevronIcon-id_{{ level_type }}-{{ item.name|slugify }}-{{ item.id }}" 
+                    <i id="id_chevronIcon-id_{{ level_type }}-{{ item.id }}" 
                        class="bi bi-chevron-right"></i>
                 </button>
             {% endif %}
@@ -70,8 +70,7 @@
         <div class="w3-dropdown-content w3-bar-block w3-border">
             {% if next_level_type %}
                 <a href="#" class="w3-bar-item w3-button"
-                   {% comment %} onclick="crud.addItem('{{ next_level_type }}', {{ model_fields|get_item:next_level_type|get_item:'fields'|safe }}, '{{ item.id }}'); return false;"> {% endcomment %}
-                   onclick="crud.addItem('{{ next_level_type }}', [{% for field in model_fields|get_item:next_level_type|get_item:'fields' %}'{{ field.name }}'{% if not forloop.last %}, {% endif %}{% endfor %}], '{{ item.name|slugify }}', '{{ item.id }}'); return false;">
+                   onclick="crud.addItem('{{ next_level_type }}', [{% for field in model_fields|get_item:next_level_type|get_item:'fields' %}'{{ field.name }}'{% if not forloop.last %}, {% endif %}{% endfor %}], '{{ item.id }}'); return false;">
                     <i class="bi bi-plus"></i> Add {{ next_level_type|title }}
                 </a>
             {% endif %}
@@ -90,7 +89,7 @@
 </div>
 
 {% if next_level_type and children_attr %}
-    <div id="id_{{ level_type }}-{{ item.name|slugify }}-{{ item.id }}" class="w3-container w3-hide w3-margin-left">
+    <div id="id_{{ level_type }}-{{ item.id }}" class="w3-container w3-hide w3-margin-left">
         {% for child in item|get_attr:children_attr %}
             {% render_tree_item child next_level_type model_fields item %}
         {% endfor %}

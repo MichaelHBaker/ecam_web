@@ -15,29 +15,37 @@ export const apiFetch = async (endpoint, options = {}, basePath = '/api') => {
             'Content-Type': 'application/json',
             'X-CSRFToken': CSRF_TOKEN,
         },
-        credentials: 'same-origin',
+        credentials: 'include',  // Ensure cookies are sent
     };
 
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
     const apiEndpoint = `${basePath}${cleanEndpoint}`;
-
-    console.log('API Endpoint:', apiEndpoint);
     
     try {
         const response = await fetch(apiEndpoint, {
             ...defaultOptions,
             ...options,
+            headers: {
+                ...defaultOptions.headers,
+                ...(options.headers || {}),
+            },
         });
 
-        const data = await response.json().catch(() => ({}));
+        // Handle different response types
+        const contentType = response.headers.get('content-type');
+        let data;
+        
+        if (contentType?.includes('application/json')) {
+            data = await response.json();
+        } else if (response.status === 204) {
+            // No content
+            return null;
+        } else {
+            data = await response.text();
+        }
 
         if (!response.ok) {
-            // Handle DRF validation errors
-            if (response.status === 400 && data.detail) {
-                throw new Error(data.detail);
-            }
-
-            if (response.status === 400) {
+            if (response.status === 400 && typeof data === 'object') {
                 const errors = [];
                 Object.entries(data).forEach(([field, messages]) => {
                     if (Array.isArray(messages)) {
@@ -49,14 +57,7 @@ export const apiFetch = async (endpoint, options = {}, basePath = '/api') => {
                 throw new Error(errors.join('\n'));
             }
 
-            const errorMessages = {
-                401: 'Authentication required. Please log in.',
-                403: 'You do not have permission to perform this action.',
-                404: 'The requested resource was not found.',
-                500: 'Server error occurred. Please try again later.'
-            };
-
-            throw new Error(errorMessages[response.status] || data.detail || `API Error: ${response.statusText}`);
+            throw new Error(data.detail || `API Error: ${response.statusText}`);
         }
 
         return data;
@@ -72,10 +73,9 @@ export const initializeModelFields = async () => {
         return modelFieldsPromise;
     }
 
-    modelFieldsPromise = apiFetch('/model-fields/', { basePath: '/api' })
+    modelFieldsPromise = apiFetch('/model-fields/')
         .then(data => {
             MODEL_FIELDS = data;
-            console.log('Initialized MODEL_FIELDS:', MODEL_FIELDS);
             return data;
         })
         .catch(error => {
@@ -86,7 +86,6 @@ export const initializeModelFields = async () => {
     return modelFieldsPromise;
 };
 
-
 // Helper function to ensure MODEL_FIELDS is initialized
 const ensureInitialized = async () => {
     if (!MODEL_FIELDS) {
@@ -95,108 +94,228 @@ const ensureInitialized = async () => {
     return MODEL_FIELDS;
 };
 
-// Helper function to reset fields
-const resetFields = (type, id, fields) => {
-    fields.forEach((field) => {
+// Helper functions for input handling and field creation
+
+// Enhanced input type mapping
+const getInputType = (drfType) => {
+    const typeMap = {
+        string: 'text',
+        integer: 'number',
+        decimal: 'number',
+        boolean: 'checkbox',
+        date: 'date',
+        datetime: 'datetime-local',
+        email: 'email',
+        url: 'url',
+        choice: 'select'
+    };
+    return typeMap[drfType] || 'text';
+};
+
+// Choice field value mapping helper
+const mapChoiceValue = (value, choices, toInternal = false) => {
+    if (!choices) return value;
+    
+    if (toInternal) {
+        const choice = choices.find(c => c.display === value);
+        return choice ? choice.value : value;
+    } else {
+        const choice = choices.find(c => c.value === value);
+        return choice ? choice.display : value;
+    }
+};
+
+// Create form field with proper configuration
+const createField = (field, type, tempId, fieldInfo) => {
+    const element = fieldInfo?.type === 'choice' ? 'select' : 'input';
+    const input = document.createElement(element);
+    input.id = `id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${tempId}`;
+    input.name = field;
+    input.className = 'tree-item-field editing';
+
+    if (fieldInfo?.type === 'choice' && fieldInfo.choices) {
+        // Add empty option
+        const emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.textContent = `Select ${field.replace(/_/g, ' ')}`;
+        input.appendChild(emptyOption);
+
+        // Add field choices
+        fieldInfo.choices.forEach(choice => {
+            const option = document.createElement('option');
+            option.value = choice.display;  // Use display value for visual consistency
+            option.textContent = choice.display;
+            input.appendChild(option);
+        });
+    } else {
+        input.type = getInputType(fieldInfo?.type);
+        input.placeholder = field.replace(/_/g, ' ');
+    }
+
+    if (fieldInfo?.required) {
+        input.required = true;
+    }
+
+    return input;
+};
+
+// Create edit controls for forms
+const createEditControls = (type, id) => {
+    const controls = document.createElement('span');
+    controls.id = `id_${type}EditControls-${id}`;
+    controls.style.display = 'inline-flex';
+    controls.innerHTML = `
+        <button type="submit" class="w3-button" style="padding: 0 4px;">
+            <i class="bi bi-check w3-large"></i>
+        </button>
+        <button type="button" class="w3-button" style="padding: 0 4px;">
+            <i class="bi bi-x w3-large"></i>
+        </button>
+    `;
+    return controls;
+};
+
+// Collect and validate form data
+const collectFormData = (type, id, fields, modelInfo) => {
+    const data = {};
+    fields.forEach(field => {
         const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
         if (element) {
-            element.setAttribute('readonly', 'readonly');
-            element.classList.remove('editing');
-            if (field !== 'name') {
-                element.style.display = "none";
+            const value = element.value.trim();
+            const fieldConfig = modelInfo.fields.find(f => f.name === field);
+
+            if (!value && fieldConfig?.required) {
+                throw new Error(`${field.replace(/_/g, ' ')} is required`);
+            }
+
+            if (fieldConfig?.type === 'choice' && fieldConfig.choices) {
+                data[field] = mapChoiceValue(value, fieldConfig.choices, true);
+            } else {
+                data[field] = value || null;
             }
         }
     });
-
-    const editControls = document.getElementById(`id_${type}EditControls-${id}`);
-    if (editControls) {
-        editControls.style.display = "none";
-    }
+    return data;
 };
 
-// Helper function to get container element for a type
-const getContainerElement = (type, id, modelInfo, parentName = '') => {
-    if (!modelInfo.parent_type) {
-        // Top level - find last item of same type or headings
-        const lastItem = Array.from(document.querySelectorAll('.tree-item'))
-            .filter(item => item.querySelector(`[id^="id_${type}Name-"]`))
-            .pop();
-        return lastItem || document.querySelector('.tree-headings');
-    } else if (parentName) {
-        // Child item - get parent's container
-        return document.getElementById(`id_${modelInfo.parent_type}-${parentName}-${id}`);
-    }
-    return null;
-};
-
-// Helper function to create chevron button
-const createChevronButton = (type, name, id, hasChildren = true) => {
-    if (!hasChildren) return null;
+// Display form errors
+const showFormError = (form, error, type) => {
+    const errorId = `id_${type}Error-${form.id}`;
+    let errorDisplay = document.getElementById(errorId);
     
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'w3-button';
-    button.onclick = () => toggleOpenClose(`id_${type}-${name}-${id}`);
-    button.title = `Click to open/close ${type} details`;
-    
-    const icon = document.createElement('i');
-    icon.id = `id_chevronIcon-id_${type}-${name}-${id}`;
-    icon.className = 'bi bi-chevron-right';
-    
-    button.appendChild(icon);
-    return button;
-};
-
-// Toggle open/close function
-export const toggleOpenClose = (id) => {
-    const div = document.getElementById(id);
-    const icon = document.getElementById(`id_chevronIcon-${id}`);
-    if (!div || !icon) return;
-
-    if (div.classList.contains('w3-show')) {
-        div.classList.remove('w3-show');
-        div.classList.add('w3-hide');
-        icon.className = "bi bi-chevron-right";
-    } else {
-        div.classList.remove('w3-hide');
-        div.classList.add('w3-show');
-        icon.className = "bi bi-chevron-down";
+    if (!errorDisplay) {
+        errorDisplay = document.createElement('div');
+        errorDisplay.id = errorId;
+        errorDisplay.className = 'w3-text-red';
+        errorDisplay.style.marginTop = '4px';
     }
+    
+    errorDisplay.textContent = error.message;
+    form.appendChild(errorDisplay);
 };
 
-// Edit function
-export const editItem = async (type, id, fields) => {
+// Main CRUD operations
+
+// Add new item function
+export const addItem = async (type, fields, parentId = null) => {
     try {
-        await ensureInitialized();
+        const modelFields = await ensureInitialized();
+        const modelInfo = modelFields[type];
+        if (!modelInfo) {
+            throw new Error(`Unknown item type: ${type}`);
+        }
 
-        console.log('Initialized MODEL_FIELDS:', MODEL_FIELDS);
+        // Get field metadata including choices
+        const fieldInfo = await apiFetch(`/${type}s/`, { method: 'OPTIONS' });
+        
+        // Create temporary form container with unique ID
+        const tempId = `temp-${type}-${Date.now()}`;
+        const tempContainer = document.createElement('div');
+        tempContainer.id = tempId;
+        tempContainer.className = 'tree-item w3-hover-light-grey';
 
-        fields.forEach((field) => {
-            const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
-            if (element) {
-                element.dataset.originalValue = element.value.trim();
-                element.removeAttribute('readonly');
-                element.style.display = "inline";
-                element.classList.add('editing');
-            }
+        // Create form with fields
+        const form = document.createElement('form');
+        form.id = `id_${type}Form-${tempId}`;
+        form.className = 'fields-container';
+
+        // Add CSRF token
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = CSRF_TOKEN;
+        form.appendChild(csrfInput);
+
+        // Add parent ID if needed
+        if (parentId && modelInfo.parent_type) {
+            const parentInput = document.createElement('input');
+            parentInput.type = 'hidden';
+            parentInput.name = 'parent_id';
+            parentInput.value = parentId;
+            form.appendChild(parentInput);
+        }
+
+        // Create and add fields
+        fields.forEach(field => {
+            const fieldConfig = modelInfo.fields.find(f => f.name === field);
+            const fieldElement = createField(field, type, tempId, fieldConfig);
+            form.appendChild(fieldElement);
         });
 
-        const editControls = document.getElementById(`id_${type}EditControls-${id}`);
-        if (editControls) {
-            editControls.style.display = "inline-flex";
+        // Add edit controls
+        const controls = createEditControls(type, tempId);
+        form.appendChild(controls);
+        tempContainer.appendChild(form);
+
+        // Find parent container and insert form
+        const parentContainer = parentId ? 
+            document.getElementById(`id_${modelInfo.parent_type}-${parentId}`) : 
+            document.querySelector('.tree-headings');
+
+        if (!parentContainer) {
+            throw new Error('Parent container not found');
         }
 
-        const nameField = document.getElementById(`id_${type}Name-${id}`);
-        if (nameField) {
-            nameField.focus();
-        }
+        parentContainer.after(tempContainer);
+
+        // Handle form submission
+        form.onsubmit = async (event) => {
+            event.preventDefault();
+            try {
+                const data = collectFormData(type, tempId, fields, modelInfo);
+
+                // Add parent relationship if needed
+                if (parentId && modelInfo.parent_type) {
+                    data[modelInfo.parent_type] = parseInt(parentId, 10);
+                }
+
+                const response = await apiFetch(`/${type}s/`, {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+
+                // Replace temp form with new item HTML
+                parentContainer.insertAdjacentHTML('afterend', response.html);
+                tempContainer.remove();
+            } catch (error) {
+                showFormError(form, error, type);
+            }
+        };
+
+        // Handle cancel
+        const cancelButton = controls.querySelector('button[type="button"]');
+        cancelButton.onclick = () => tempContainer.remove();
+
+        // Focus first field
+        form.querySelector('input, select')?.focus();
+
     } catch (error) {
-        console.error('Error in editItem:', error);
-        alert(error.message || 'An error occurred while editing. Please try again.');
+        console.error('Error in addItem:', error);
+        alert(error.message || 'Failed to initialize form. Please try again.');
     }
 };
 
-// Update function with error handling
+// Update existing item function
 export const updateItem = async (event, type, id, fields) => {
     event.preventDefault();
 
@@ -205,16 +324,45 @@ export const updateItem = async (event, type, id, fields) => {
         const data = {};
         let hasErrors = false;
 
+        // Get parent ID and handle parent relationship
+        const parentIdInput = event.target.querySelector('input[name="parent_id"]');
+        const typeConfig = modelFields[type];
+        
+        // If this type has a parent type defined and no parent ID is provided, that's an error
+        if (typeConfig.parent_type) {
+            if (parentIdInput && parentIdInput.value) {
+                data[typeConfig.parent_type] = parseInt(parentIdInput.value, 10);
+            } else {
+                console.warn(`No parent ID found for ${type} update`);
+                throw new Error(`Parent ${typeConfig.parent_type} is required for ${type}`);
+            }
+        }
+
+        // Validate and collect all field values
         fields.forEach((field) => {
             const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
             if (element) {
                 const value = element.value.trim();
-                if (!value && element.required) {
+                
+                // Find the field configuration to check if it's required
+                const fieldConfig = typeConfig.fields.find(f => f.name === field);
+                if (!value && fieldConfig?.required) {
                     element.classList.add('error');
                     hasErrors = true;
                 } else {
                     element.classList.remove('error');
-                    data[field] = value;
+                    // If this is a choice field with choices, map display value to internal value
+                    if (fieldConfig?.type === 'choice' && fieldConfig.choices) {
+                        const choice = fieldConfig.choices.find(c => c.display === value);
+                        if (choice) {
+                            data[field] = choice.value;
+                        } else {
+                            console.warn(`Could not find choice mapping for ${value}`);
+                            data[field] = value;
+                        }
+                    } else {
+                        data[field] = value;
+                    }
                 }
             }
         });
@@ -223,12 +371,7 @@ export const updateItem = async (event, type, id, fields) => {
             throw new Error('Please fill in all required fields');
         }
 
-        const parentIdInput = event.target.querySelector('input[name="parent_id"]');
-        if (parentIdInput && modelFields[type].parent_type) {
-            data[`${modelFields[type].parent_type}_id`] = parentIdInput.value;
-        }
-
-        // Remove error message if it exists
+        // Clear any existing error
         const existingError = document.getElementById(`id_${type}Error-${id}`);
         if (existingError) {
             existingError.remove();
@@ -240,18 +383,8 @@ export const updateItem = async (event, type, id, fields) => {
         });
 
         resetFields(type, id, fields);
-
-        // Update names in chevron buttons and containers if name changed
-        if (data.name) {
-            const chevronIcon = document.getElementById(`id_chevronIcon-id_${type}-${id}`);
-            if (chevronIcon) {
-                chevronIcon.closest('button').title = `Click to open/close ${type} details`;
-            }
-        }
-
         return response;
     } catch (error) {
-        // Show error message in UI
         const errorDisplay = document.createElement('div');
         errorDisplay.id = `id_${type}Error-${id}`;
         errorDisplay.className = 'w3-text-red';
@@ -265,18 +398,96 @@ export const updateItem = async (event, type, id, fields) => {
     }
 };
 
+// Delete item function
+export const deleteItem = async (type, id) => {
+    if (!confirm('Are you sure you want to delete this item? This will also delete all related items.')) {
+        return;
+    }
+
+    try {
+        await ensureInitialized();
+        await apiFetch(`/${type}s/${id}/`, { method: 'DELETE' });
+        
+        // Remove item and its container from DOM
+        const itemElement = document.getElementById(`id_form-${type}-${id}`).closest('.tree-item');
+        const containerElement = document.getElementById(`id_${type}-${id}`);
+        
+        // Use animation for smooth removal
+        if (itemElement) {
+            itemElement.style.opacity = '0';
+            setTimeout(() => itemElement.remove(), 300);
+        }
+        if (containerElement) {
+            containerElement.style.opacity = '0';
+            setTimeout(() => containerElement.remove(), 300);
+        }
+    } catch (error) {
+        console.error('Delete failed:', error);
+        alert(error.message || 'Failed to delete the item. Please try again.');
+    }
+};
+
+// Edit item function
+export const editItem = async (type, id, fields) => {
+    try {
+        const modelFields = await ensureInitialized();
+        const typeConfig = modelFields[type];
+
+        // Make fields editable and store original values
+        fields.forEach((field) => {
+            const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
+            if (element) {
+                element.dataset.originalValue = element.value.trim();
+                element.removeAttribute('readonly');
+                element.style.display = "inline";
+                element.classList.add('editing');
+
+                // Special handling for choice fields
+                const fieldConfig = typeConfig.fields.find(f => f.name === field);
+                if (fieldConfig?.type === 'choice' && fieldConfig.choices) {
+                    // Store the original display value
+                    element.dataset.originalDisplayValue = element.value;
+                }
+            }
+        });
+
+        // Show edit controls
+        const editControls = document.getElementById(`id_${type}EditControls-${id}`);
+        if (editControls) {
+            editControls.style.display = "inline-flex";
+        }
+
+        // Focus the name field
+        const nameField = document.getElementById(`id_${type}Name-${id}`);
+        if (nameField) {
+            nameField.focus();
+        }
+    } catch (error) {
+        console.error('Error in editItem:', error);
+        alert(error.message || 'An error occurred while editing. Please try again.');
+    }
+};
+
 // Cancel edit function
 export const cancelEdit = (event, type, id, fields) => {
     event.preventDefault();
+    
     fields.forEach((field) => {
         const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
         if (element) {
-            element.value = element.dataset.originalValue;
+            // Restore original value
+            element.value = element.dataset.originalValue || '';
+            // For choice fields, restore display value if it exists
+            if (element.dataset.originalDisplayValue) {
+                element.value = element.dataset.originalDisplayValue;
+            }
             element.classList.remove('error');
+            delete element.dataset.originalValue;
+            delete element.dataset.originalDisplayValue;
         }
     });
     
-    // Remove error message if it exists
+    // Clear any error messages
     const errorDisplay = document.getElementById(`id_${type}Error-${id}`);
     if (errorDisplay) {
         errorDisplay.remove();
@@ -285,217 +496,67 @@ export const cancelEdit = (event, type, id, fields) => {
     resetFields(type, id, fields);
 };
 
-// Delete function
-export const deleteItem = async (type, id) => {
-    if (!confirm('Are you sure you want to delete this item?')) {
-        return;
-    }
-
-    try {
-        await ensureInitialized();
-        await apiFetch(`/${type}s/${id}/`, { method: 'DELETE' });
-        
-        // Remove the item and its container
-        const itemElement = document.getElementById(`id_form-${type}-${id}`).closest('.tree-item');
-        const containerElement = document.getElementById(`id_${type}-${id}`);
-        
-        if (itemElement) itemElement.remove();
-        if (containerElement) containerElement.remove();
-    } catch (error) {
-        console.error('Delete failed:', error);
-        alert(error.message || 'Failed to delete the item. Please try again.');
-    }
-};
-
-// Add new item function
-export const addItem = async (type, fields, parentName='', parentId = null) => {
-    try {
-        const modelFields = await ensureInitialized();
-        const modelInfo = modelFields[type];
-        if (!modelInfo) {
-            throw new Error(`Unknown item type: ${type}`);
-        }
-
-        const fieldInfo = await apiFetch(`/${type}s/`, { method: 'OPTIONS' });
-        
-        // Create temporary form
-        const tempId = `temp-new-${type}`;
-        const tempContainer = document.createElement('div');
-        tempContainer.id = tempId;
-        tempContainer.className = 'tree-item w3-hover-light-grey';
-
-        const formContent = document.createElement('div');
-        formContent.className = 'tree-text';
-
-        const form = document.createElement('form');
-        form.id = `id_${type}Form-${tempId}`;
-        form.className = 'fields-container';
-
-        // Add chevron if not a measurement
-        if (type !== 'measurement') {
-            const chevron = createChevronButton(type, 'new', tempId);
-            if (chevron) formContent.appendChild(chevron);
-        }
-
-        // Add fields
-        fields.forEach(field => {
-            const input = createField(field, type, tempId, fieldInfo.actions.POST[field]);
-            form.appendChild(input);
-        });
-
-        // Add controls
-        const controls = createControls(type, tempId);
-        form.appendChild(controls);
-        formContent.appendChild(form);
-        tempContainer.appendChild(formContent);
-
-        // Find insertion location
-        let insertLocation;
-        if (!modelInfo.parent_type) {
-            // Top level (Client) - insert after last client or headings
-            const lastClient = Array.from(document.querySelectorAll('.tree-item'))
-                .filter(item => item.querySelector(`[id^="id_clientName-"]`))
-                .pop();
-            insertLocation = lastClient || document.querySelector('.tree-headings');
-        } else if (parentId) {
-            // Child item - insert into parent's container
-            const parentContainer = document.getElementById(`id_${modelInfo.parent_type}-${parentName}-${parentId}`);
-            if (!parentContainer) {
-                throw new Error(`Parent container not found for ${modelInfo.parent_type} ${parentId}`);
-            }
-            insertLocation = parentContainer;
-        } else {
-            throw new Error(`Parent ID required for ${type}`);
-        }
-
-        insertLocation.after(tempContainer);
-
-        // Handle form submission
-        form.onsubmit = async (event) => {
-            event.preventDefault();
-            try {
-                const data = collectFormData(fields, type, tempId, fieldInfo.actions.POST);
-                if (parentId && modelInfo.parent_type) {
-                    data[`${modelInfo.parent_type}_id`] = parentId;
-                }
-
-                const response = await apiFetch(`/${type}s/`, {
-                    method: 'POST',
-                    body: JSON.stringify(data)
-                });
-
-                // Insert new item HTML from response
-                insertLocation.insertAdjacentHTML('afterend', response.html);
-                tempContainer.remove();
-            } catch (error) {
-                console.error(`Error creating ${type}:`, error);
-                
-                // Show error message in form
-                const errorDisplay = document.createElement('div');
-                errorDisplay.className = 'w3-text-red';
-                errorDisplay.style.marginTop = '4px';
-                errorDisplay.textContent = error.message;
-
-                const existingError = form.querySelector('.w3-text-red');
-                if (existingError) {
-                    existingError.remove();
-                }
-                form.appendChild(errorDisplay);
-            }
-        };
-
-        // Handle cancel
-        controls.querySelector('button[type="button"]').onclick = () => tempContainer.remove();
-
-        // Focus first field
-        form.querySelector('input, select')?.focus();
-
-    } catch (error) {
-        console.error('Error in addItem:', error);
-        alert(error.message || 'Failed to initialize form. Please try again.');
-    }
-};
-
-// Helper functions for form creation
-const createField = (field, type, tempId, fieldInfo) => {
-    const input = document.createElement(fieldInfo?.choices ? 'select' : 'input');
-    input.id = `id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${tempId}`;
-    input.name = field;
-    input.className = 'tree-item-field editing';
-
-    if (fieldInfo?.choices) {
-        addChoicesToSelect(input, field, fieldInfo.choices);
-    } else {
-        input.type = getInputType(fieldInfo?.type);
-        input.placeholder = field.replace(/_/g, ' ');
-    }
-
-    if (fieldInfo?.required) {
-        input.required = true;
-    }
-
-    return input;
-};
-
-const createControls = (type, tempId) => {
-    const controls = document.createElement('span');
-    controls.id = `id_${type}EditControls-${tempId}`;
-    controls.style.display = 'inline-flex';
-    controls.innerHTML = `
-        <button type="submit" class="w3-button" style="padding: 0 4px;">
-            <i class="bi bi-check w3-large"></i>
-        </button>
-        <button type="button" class="w3-button" style="padding: 0 4px;">
-            <i class="bi bi-x w3-large"></i>
-        </button>
-    `;
-    return controls;
-};
-
-const addChoicesToSelect = (select, field, choices) => {
-    const emptyOption = document.createElement('option');
-    emptyOption.value = '';
-    emptyOption.textContent = `Select ${field.replace(/_/g, ' ')}`;
-    select.appendChild(emptyOption);
-
-    choices.forEach(choice => {
-        const option = document.createElement('option');
-        option.value = choice.value;
-        option.textContent = choice.display_name;
-        select.appendChild(option);
-    });
-};
-
-const collectFormData = (fields, type, tempId, fieldInfo) => {
-    const data = {};
-    fields.forEach(field => {
-        const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${tempId}`);
+// Reset fields after edit/cancel
+const resetFields = (type, id, fields) => {
+    fields.forEach((field) => {
+        const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
         if (element) {
-            const value = element.value.trim();
-            if (fieldInfo[field]?.required && !value) {
-                throw new Error(`${field.replace(/_/g, ' ')} is required`);
+            element.setAttribute('readonly', 'readonly');
+            element.classList.remove('editing', 'error');
+            // Hide all fields except name
+            if (field !== 'name') {
+                element.style.display = "none";
             }
-            data[field] = value || null;
+            // Clean up any stored values
+            delete element.dataset.originalValue;
+            delete element.dataset.originalDisplayValue;
         }
     });
-    return data;
+
+    // Hide edit controls
+    const editControls = document.getElementById(`id_${type}EditControls-${id}`);
+    if (editControls) {
+        editControls.style.display = "none";
+    }
+
+    // Remove any error messages
+    const errorDisplay = document.getElementById(`id_${type}Error-${id}`);
+    if (errorDisplay) {
+        errorDisplay.remove();
+    }
 };
 
-// Helper function to map DRF types to HTML input types
-const getInputType = (drfType) => {
-    const typeMap = {
-        string: 'text',
-        integer: 'number',
-        decimal: 'number',
-        boolean: 'checkbox',
-        date: 'date',
-        datetime: 'datetime-local',
-        email: 'email',
-        url: 'url'
-        };
-        return typeMap[drfType] || 'text';
-    };
+// Toggle tree item expansion
+export const toggleOpenClose = (id) => {
+    const div = document.getElementById(id);
+    const icon = document.getElementById(`id_chevronIcon-${id}`);
+    if (!div || !icon) return;
+
+    // Add transition for smooth animation
+    div.style.transition = 'all 0.3s ease-out';
+    icon.style.transition = 'transform 0.3s ease-out';
+
+    const isExpanding = div.classList.contains('w3-hide');
     
+    if (isExpanding) {
+        div.classList.remove('w3-hide');
+        div.classList.add('w3-show');
+        icon.className = "bi bi-chevron-down";
+        icon.style.transform = 'rotate(90deg)';
+    } else {
+        div.classList.remove('w3-show');
+        div.classList.add('w3-hide');
+        icon.className = "bi bi-chevron-right";
+        icon.style.transform = 'rotate(0deg)';
+    }
+
+    // Remove transition after animation completes
+    setTimeout(() => {
+        div.style.transition = '';
+        icon.style.transition = '';
+    }, 300);
+};
+
 // Initialize MODEL_FIELDS when the module loads
 initializeModelFields().catch(error => {
     console.error('Failed to initialize MODEL_FIELDS:', error);

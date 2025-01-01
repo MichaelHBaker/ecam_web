@@ -108,8 +108,14 @@ class ClientSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'contact_email', 'phone_number', 'projects']
 
 class ModelFieldsSerializer(serializers.Serializer):
+    """Serializer for model field metadata"""
+    def get_fields(self):
+        """Override get_fields to avoid field inference"""
+        return {}
+
     def to_representation(self, instance):
-        result = {
+        """Return the field definitions for all models"""
+        return {
             'client': {
                 'level': 1,
                 'fields': [
@@ -119,7 +125,7 @@ class ModelFieldsSerializer(serializers.Serializer):
                 ],
                 'child_type': 'project'
             },
-             'project': {
+            'project': {
                 'level': 2,
                 'fields': [
                     {'name': 'name', 'type': 'string', 'required': True},
@@ -149,4 +155,3 @@ class ModelFieldsSerializer(serializers.Serializer):
                 'parent_type': 'location'
             }
         }
-        return result

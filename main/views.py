@@ -32,43 +32,61 @@ class TreeItemMixin:
     permission_classes = [IsAuthenticated]
 
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        
         try:
+            serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
-        except serializers.ValidationError as e:
-            return Response(
-                {'detail': self.format_validation_errors(e.detail)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-            
-        try:
             self.perform_create(serializer)
-        except serializers.ValidationError as e:
+            
+            # Get parent if this isn't top level
+            parent = None
+            if self.parent_field:
+                parent = getattr(serializer.instance, self.parent_field)
+
+            # Create serializer instance for model fields
+            fields_serializer = ModelFieldsSerializer(instance=None)
+            model_fields = fields_serializer.to_representation(None)
+            
+            
+            # Get type info for current level
+            type_info = model_fields.get(self.level_type, {})
+            
+            # Get the fields for this type
+            fields = type_info.get('fields', [])
+            if isinstance(fields, dict):
+                fields = [{'name': k, 'type': v.get('type', 'string')} for k, v in fields.items()]
+            elif isinstance(fields, list) and fields and isinstance(fields[0], str):
+                fields = [{'name': f, 'type': 'string'} for f in fields]
+                
+                
+            # Get next level type
+            next_level_type = type_info.get('child_type')
+            children_attr = f"{next_level_type}s" if next_level_type else None
+
+            # Create context
+            context = {
+                'item': serializer.instance,
+                'level_type': self.level_type,
+                'model_fields': model_fields,  # Use complete model_fields
+                'parent': parent,
+                'fields': fields,
+                'next_level_type': next_level_type,
+                'children_attr': children_attr,
+            }
+
+            html = render_to_string('main/tree_item.html', context, request=request)
+            
+            return Response({
+                'data': serializer.data,
+                'html': html
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            import traceback
             return Response(
-                {'detail': self.format_validation_errors(e.detail)},
-                status=status.HTTP_400_BAD_REQUEST
+                {'detail': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
-        # Get parent if this isn't top level
-        parent = None
-        if self.parent_field:
-            parent = getattr(serializer.instance, self.parent_field)
-
-        # Render the tree item template
-        context = {
-            'item': serializer.instance,
-            'level_type': self.level_type,
-            'model_fields': ModelFieldsSerializer(instance=None).data,
-            'parent': parent
-        }
-        html = render_to_string('main/tree_item.html', context)
-        
-        return Response({
-            'data': serializer.data,
-            'html': html
-        }, status=status.HTTP_201_CREATED)
-
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
@@ -104,13 +122,7 @@ class TreeItemMixin:
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def perform_destroy(self, instance):
-        """Handle cascading deletes based on level type"""
-        if hasattr(instance, 'children'):
-            for child in instance.children.all():
-                child.delete()
-        if self.child_attr and hasattr(instance, self.child_attr):
-            for child in getattr(instance, self.child_attr).all():
-                child.delete()
+        """Let the database handle cascading deletes"""
         instance.delete()
 
     def format_validation_errors(self, errors):
@@ -209,7 +221,6 @@ class ModelFieldsViewSet(viewsets.ViewSet):
     def list(self, request):
         serializer = ModelFieldsSerializer()
         data = serializer.to_representation(None)  # Explicitly call to_representation
-        print("API Context Data:", data)  # Debugging
         return Response(data)
 
 # View Functions

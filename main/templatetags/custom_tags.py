@@ -47,14 +47,11 @@ def render_tree_item(item, level_type, model_fields, parent=None):
     """
     try:
         # Debug before access
-        print(f"Debug - level_type: {level_type}")
-        print(f"Debug - model_fields keys: {list(model_fields.keys())}")
         
         if not isinstance(model_fields, dict):
             raise ValueError(f"model_fields is not a dict. Got {type(model_fields)}")
             
         if level_type not in model_fields:
-            print(f"KeyError - '{level_type}' not in {list(model_fields.keys())}")
             # Provide default structure if key missing
             level_info = {
                 'level': 1,
@@ -86,14 +83,11 @@ def render_tree_item(item, level_type, model_fields, parent=None):
         }
         
         # Debug the output context
-        print(f"Debug - output context: {context}")
         
         return context
         
     except Exception as e:
-        print(f"Error in render_tree_item: {str(e)}")
-        print(f"model_fields type: {type(model_fields)}")
-        print(f"model_fields content: {model_fields}")
+        
         # Return a minimal valid context in case of error
         return {
             'item': item,

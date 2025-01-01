@@ -214,7 +214,6 @@ const showFormError = (form, error, type) => {
     form.appendChild(errorDisplay);
 };
 
-// Main CRUD operations
 
 // Add new item function
 export const addItem = async (type, fields, parentId = null) => {
@@ -225,9 +224,6 @@ export const addItem = async (type, fields, parentId = null) => {
             throw new Error(`Unknown item type: ${type}`);
         }
 
-        // Get field metadata including choices
-        const fieldInfo = await apiFetch(`/${type}s/`, { method: 'OPTIONS' });
-        
         // Create temporary form container with unique ID
         const tempId = `temp-${type}-${Date.now()}`;
         const tempContainer = document.createElement('div');
@@ -268,15 +264,32 @@ export const addItem = async (type, fields, parentId = null) => {
         tempContainer.appendChild(form);
 
         // Find parent container and insert form
-        const parentContainer = parentId ? 
-            document.getElementById(`id_${modelInfo.parent_type}-${parentId}`) : 
+        const parentContainer = parentId ?
+            document.getElementById(`id_${modelInfo.parent_type}-${parentId}`) :
             document.querySelector('.tree-headings');
 
         if (!parentContainer) {
             throw new Error('Parent container not found');
         }
 
-        parentContainer.after(tempContainer);
+        // If this is a child item (has parentId), insert inside the parent container
+        if (parentId) {
+            // Make sure parent container is visible when adding child
+            parentContainer.classList.remove('w3-hide');
+            parentContainer.classList.add('w3-show');
+            
+            // Insert at the beginning of parent container
+            parentContainer.insertAdjacentElement('afterbegin', tempContainer);
+            
+            // Update the chevron icon to show expansion
+            const chevronIcon = document.getElementById(`id_chevronIcon-id_${modelInfo.parent_type}-${parentId}`);
+            if (chevronIcon) {
+                chevronIcon.className = "bi bi-chevron-down";
+            }
+        } else {
+            // For top-level items, insert after the headings
+            parentContainer.insertAdjacentElement('afterend', tempContainer);
+        }
 
         // Handle form submission
         form.onsubmit = async (event) => {
@@ -294,10 +307,42 @@ export const addItem = async (type, fields, parentId = null) => {
                     body: JSON.stringify(data)
                 });
 
-                // Replace temp form with new item HTML
-                parentContainer.insertAdjacentHTML('afterend', response.html);
-                tempContainer.remove();
+                // Create a temporary div to hold the new HTML
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = response.html;
+                
+                // Find the tree item div
+                const treeItem = tempDiv.querySelector('.tree-item');
+                
+                // Replace the temporary form
+                if (treeItem) {
+                    if (parentId) {
+                        // For child items, keep them inside the parent container
+                        tempContainer.replaceWith(treeItem);
+                        
+                        // If there's a container div, insert it right after the tree item
+                        const containerDiv = Array.from(tempDiv.children).find(
+                            child => child.classList.contains('w3-container')
+                        );
+                        if (containerDiv) {
+                            treeItem.after(containerDiv);
+                        }
+                    } else {
+                        // For top-level items, replace normally
+                        tempContainer.replaceWith(treeItem);
+                        const containerDiv = Array.from(tempDiv.children).find(
+                            child => child.classList.contains('w3-container')
+                        );
+                        if (containerDiv) {
+                            treeItem.after(containerDiv);
+                        }
+                    }
+                } else {
+                    console.error('No tree item found in response HTML');
+                }
+
             } catch (error) {
+                console.error('Error in addItem:', error);
                 showFormError(form, error, type);
             }
         };
@@ -404,24 +449,40 @@ export const deleteItem = async (type, id) => {
         return;
     }
 
+    // Find elements first and immediately start fade out
+    const itemElement = document.getElementById(`id_form-${type}-${id}`).closest('.tree-item');
+    const containerElement = document.getElementById(`id_${type}-${id}`);
+    
+    // Immediately start fade out and disable interactions
+    if (itemElement) {
+        itemElement.style.transition = 'opacity 0.3s';
+        itemElement.style.opacity = '0.5';
+        itemElement.style.pointerEvents = 'none';
+    }
+    if (containerElement) {
+        containerElement.style.transition = 'opacity 0.3s';
+        containerElement.style.opacity = '0.5';
+        containerElement.style.pointerEvents = 'none';
+    }
+
     try {
+        // Send delete request to server
         await ensureInitialized();
         await apiFetch(`/${type}s/${id}/`, { method: 'DELETE' });
         
-        // Remove item and its container from DOM
-        const itemElement = document.getElementById(`id_form-${type}-${id}`).closest('.tree-item');
-        const containerElement = document.getElementById(`id_${type}-${id}`);
-        
-        // Use animation for smooth removal
+        // Remove elements from DOM after server confirms deletion
+        if (itemElement) itemElement.remove();
+        if (containerElement) containerElement.remove();
+    } catch (error) {
+        // Restore elements if delete fails
         if (itemElement) {
-            itemElement.style.opacity = '0';
-            setTimeout(() => itemElement.remove(), 300);
+            itemElement.style.opacity = '1';
+            itemElement.style.pointerEvents = 'auto';
         }
         if (containerElement) {
-            containerElement.style.opacity = '0';
-            setTimeout(() => containerElement.remove(), 300);
+            containerElement.style.opacity = '1';
+            containerElement.style.pointerEvents = 'auto';
         }
-    } catch (error) {
         console.error('Delete failed:', error);
         alert(error.message || 'Failed to delete the item. Please try again.');
     }

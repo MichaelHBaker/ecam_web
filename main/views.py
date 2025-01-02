@@ -1,3 +1,4 @@
+# views.py
 from django.shortcuts import render, redirect
 from django.http import JsonResponse
 from django.contrib.auth import authenticate, login
@@ -11,9 +12,9 @@ from rest_framework import serializers
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
 from rest_framework.permissions import IsAuthenticated
 
-from .models import Client, Project, Location, Measurement
+from .models import Project, Location, Measurement
 from .serializers import (
-    ClientSerializer, ProjectSerializer, LocationSerializer, 
+    ProjectSerializer, LocationSerializer, 
     MeasurementSerializer, ModelFieldsSerializer
 )
 
@@ -46,7 +47,6 @@ class TreeItemMixin:
             fields_serializer = ModelFieldsSerializer(instance=None)
             model_fields = fields_serializer.to_representation(None)
             
-            
             # Get type info for current level
             type_info = model_fields.get(self.level_type, {})
             
@@ -56,8 +56,7 @@ class TreeItemMixin:
                 fields = [{'name': k, 'type': v.get('type', 'string')} for k, v in fields.items()]
             elif isinstance(fields, list) and fields and isinstance(fields[0], str):
                 fields = [{'name': f, 'type': 'string'} for f in fields]
-                
-                
+            
             # Get next level type
             next_level_type = type_info.get('child_type')
             children_attr = f"{next_level_type}s" if next_level_type else None
@@ -66,7 +65,7 @@ class TreeItemMixin:
             context = {
                 'item': serializer.instance,
                 'level_type': self.level_type,
-                'model_fields': model_fields,  # Use complete model_fields
+                'model_fields': model_fields,
                 'parent': parent,
                 'fields': fields,
                 'next_level_type': next_level_type,
@@ -132,30 +131,10 @@ class TreeItemMixin:
                            for field, msgs in errors.items())
         return str(errors)
 
-class ClientViewSet(TreeItemMixin, viewsets.ModelViewSet):
-    queryset = Client.objects.all()
-    serializer_class = ClientSerializer
-    level_type = 'client'
-    child_attr = 'projects'
-
 class ProjectViewSet(TreeItemMixin, viewsets.ModelViewSet):
     serializer_class = ProjectSerializer
     level_type = 'project'
-    parent_field = 'client'
-    child_attr = 'locations'
-
-    def get_queryset(self):
-        queryset = Project.objects.all()
-        client_id = self.request.query_params.get('client')
-        if client_id:
-            queryset = queryset.filter(client_id=client_id)
-        return queryset
-
-    def perform_create(self, serializer):
-        try:
-            super().perform_create(serializer)
-        except Exception as e:
-            raise serializers.ValidationError(str(e))
+    queryset = Project.objects.all()
 
 class LocationViewSet(TreeItemMixin, viewsets.ModelViewSet):
     serializer_class = LocationSerializer
@@ -239,11 +218,10 @@ def index(request):
 @login_required(login_url='/')
 def dashboard(request):
     # Prefetch related data to optimize database queries
-    clients = Client.objects.prefetch_related(
-        'projects',
-        'projects__locations',
-        'projects__locations__measurements',
-        'projects__locations__children'
+    projects = Project.objects.prefetch_related(
+        'locations',
+        'locations__measurements',
+        'locations__children'
     ).all()
 
     # Use serializer to get model fields
@@ -251,12 +229,13 @@ def dashboard(request):
     model_fields = serializer.to_representation(None)
     
     context = {
-        'clients': clients,
+        'projects': projects,
         'model_fields': model_fields
     }
     
     return render(request, 'main/dashboard.html', context)
 
+# CSV and utility view functions remain unchanged...
 def excel_upload(request):
     if 'csv_file' not in request.FILES:
         return JsonResponse({'error': 'CSV file is required'}, status=400)
@@ -319,9 +298,9 @@ def excel_upload(request):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
 
-# Simple view functions
-def location(request):
-    return render(request, 'main/location.html')
+# Simple view functions remain unchanged...
+def project(request):
+    return render(request, 'main/project.html')
 
 def measurement(request):
     return render(request, 'main/measurement.html')
@@ -329,5 +308,5 @@ def measurement(request):
 def data(request):
     return render(request, 'main/data.html')
 
-def dictionary(request):
-    return render(request, 'main/dictionary.html')
+def model(request):
+    return render(request, 'main/model.html')

@@ -1,5 +1,6 @@
+# serializers.py
 from rest_framework import serializers
-from .models import Client, Project, Location, Measurement
+from .models import Project, Location, Measurement
 from .utils import get_field_metadata
 
 class MeasurementSerializer(serializers.ModelSerializer):
@@ -56,12 +57,11 @@ class LocationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Location
         fields = ['id', 'project', 'name', 'address', 'latitude', 
-                 'longitude', 'children', 'measurements']
+                 'longitude', 'children', 'measurements', 'parent']
 
 class ProjectSerializer(serializers.ModelSerializer):
     locations = LocationSerializer(many=True, read_only=True)
     project_type_display = serializers.CharField(source='get_project_type_display', read_only=True)
-    client = serializers.PrimaryKeyRelatedField(queryset=Client.objects.all())
 
     def validate(self, data):
         """
@@ -73,9 +73,6 @@ class ProjectSerializer(serializers.ModelSerializer):
         if not data.get('project_type'):
             raise serializers.ValidationError({'project_type': 'Project type is required'})
             
-        if not data.get('client'):
-            raise serializers.ValidationError({'client': 'Client is required'})
-            
         if data.get('end_date') and data.get('start_date') and data['end_date'] < data['start_date']:
             raise serializers.ValidationError({
                 'end_date': 'End date must be after start date'
@@ -86,26 +83,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = ['id', 'name', 'project_type', 'project_type_display', 
-                 'start_date', 'end_date', 'locations', 'client']
-
-class ClientSerializer(serializers.ModelSerializer):
-    projects = ProjectSerializer(many=True, read_only=True)
-
-    def validate(self, data):
-        """
-        Custom validation for Client data
-        """
-        if not data.get('name'):
-            raise serializers.ValidationError({'name': 'Name is required'})
-            
-        if not data.get('contact_email'):
-            raise serializers.ValidationError({'contact_email': 'Contact email is required'})
-            
-        return data
-
-    class Meta:
-        model = Client
-        fields = ['id', 'name', 'contact_email', 'phone_number', 'projects']
+                 'start_date', 'end_date', 'locations']
 
 class ModelFieldsSerializer(serializers.Serializer):
     """Serializer for model field metadata"""
@@ -116,27 +94,17 @@ class ModelFieldsSerializer(serializers.Serializer):
     def to_representation(self, instance):
         """Return the field definitions for all models"""
         return {
-            'client': {
-                'level': 1,
-                'fields': [
-                    {'name': 'name', 'type': 'string', 'required': True},
-                    {'name': 'contact_email', 'type': 'email', 'required': True},
-                    {'name': 'phone_number', 'type': 'string', 'required': False}
-                ],
-                'child_type': 'project'
-            },
             'project': {
-                'level': 2,
+                'level': 1,
                 'fields': [
                     {'name': 'name', 'type': 'string', 'required': True},
                     {'name': 'project_type', 'type': 'choice', 'required': True, 
                      'choices': [{'value': c[0], 'display': c[1]} for c in Project.PROJECT_TYPES]},
                 ],
-                'child_type': 'location',
-                'parent_type': 'client'
+                'child_type': 'location'
             },
             'location': {
-                'level': 3,
+                'level': 2,
                 'fields': [
                     {'name': 'name', 'type': 'string', 'required': True},
                     {'name': 'address', 'type': 'string', 'required': True},
@@ -145,7 +113,7 @@ class ModelFieldsSerializer(serializers.Serializer):
                 'parent_type': 'project'
             },
             'measurement': {
-                'level': 4,
+                'level': 3,
                 'fields': [
                     {'name': 'name', 'type': 'string', 'required': True},
                     {'name': 'description', 'type': 'string', 'required': False},

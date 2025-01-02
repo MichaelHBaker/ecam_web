@@ -6,7 +6,7 @@ from django.core.management import call_command
 from django.db import connection
 from ...tests import utils_data
 
-from main.models import Client, Project, Location, Measurement
+from main.models import Project, Location, Measurement
 
 class Command(BaseCommand):
     help = 'Run tests and regenerate test files if dependencies have changed'
@@ -29,7 +29,6 @@ class Command(BaseCommand):
             Measurement.objects.all().delete()
             Location.objects.all().delete()
             Project.objects.all().delete()
-            Client.objects.all().delete()
 
             #Create records for model tables in default db
             utils_data.create_model_table_data()

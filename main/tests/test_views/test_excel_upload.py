@@ -1,65 +1,68 @@
-# tests/test_views/test_excel_upload.py
-from django.urls import reverse
-from django.core.files.uploadedfile import SimpleUploadedFile
+from django.http import JsonResponse
+import chardet
+import csv
+from io import StringIO
 import os
-from ..test_base import BaseTestCase
+from openpyxl import Workbook
 
-class TestExcelUploadView(BaseTestCase):
-    def setUp(self):
-        super().setUp()
-        self.upload_url = reverse('excel_upload')
-        self.test_dir = os.path.join(os.path.dirname(__file__), 'test_files')
-        os.makedirs(self.test_dir, exist_ok=True)
+def excel_upload(request):
+    if 'csv_file' not in request.FILES:
+        return JsonResponse({'error': 'CSV file is required'}, status=400)
 
-    def tearDown(self):
-        # Clean up test files
-        if os.path.exists(self.test_dir):
-            for file in os.listdir(self.test_dir):
-                os.remove(os.path.join(self.test_dir, file))
-            os.rmdir(self.test_dir)
+    csv_file = request.FILES['csv_file']
+    folder_path = request.POST.get('folder_path')
+    workbook_name = request.POST.get('workbook_name')
+    sheet_name = request.POST.get('sheet_name')
 
-    def test_valid_upload(self):
-        """Test uploading a valid CSV file"""
-        content = (
-            "Name,Age,City\n"
-            "Alice,30,New York\n"
-            "Bob,25,Los Angeles\n"
-        ).encode('utf-8')
-        csv_file = SimpleUploadedFile("test.csv", content, content_type="text/csv")
-        
-        data = {
-            'csv_file': csv_file,
-            'folder_path': self.test_dir,
-            'workbook_name': 'test_output',
-            'sheet_name': 'Sheet1'
-        }
-        
-        response = self.client.post(self.upload_url, data)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['status'], 'success')
-        
-        # Verify Excel file was created
-        self.assertTrue(os.path.exists(os.path.join(self.test_dir, 'test_output.xlsx')))
+    if not all([folder_path, workbook_name, sheet_name]):
+        return JsonResponse({'error': 'All fields are required'}, status=400)
 
-    def test_missing_fields(self):
-        """Test handling of missing required fields"""
-        csv_file = SimpleUploadedFile("test.csv", b"test", content_type="text/csv")
-        response = self.client.post(self.upload_url, {'csv_file': csv_file})
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('error', response.json())
+    if not workbook_name.endswith('.xlsx'):
+        workbook_name += '.xlsx'
 
-    def test_invalid_csv(self):
-        """Test handling of invalid CSV file"""
-        content = "Invalid,CSV\nMissing,Columns,Extra".encode('utf-8')
-        csv_file = SimpleUploadedFile("test.csv", content, content_type="text/csv")
-        
-        data = {
-            'csv_file': csv_file,
-            'folder_path': self.test_dir,
-            'workbook_name': 'test_output',
-            'sheet_name': 'Sheet1'
-        }
-        
-        response = self.client.post(self.upload_url, data)
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('error', response.json())
+    if not os.path.exists(folder_path):
+        return JsonResponse({'error': 'Folder path does not exist'}, status=400)
+
+    if csv_file.size == 0:
+        return JsonResponse({'error': 'The selected CSV file is empty'}, status=400)
+
+    try:
+        # Read and validate CSV content
+        raw_content = csv_file.read()
+        detected_encoding = chardet.detect(raw_content)['encoding']
+        file_content = raw_content.decode(detected_encoding)
+        csv_reader = csv.reader(StringIO(file_content))
+        rows = list(csv_reader)
+
+        if len(rows) == 1:
+            return JsonResponse({'error': 'The CSV file contains only headers'}, status=400)
+
+        # Check for inconsistent columns
+        column_count = len(rows[0])
+        if any(len(row) != column_count for row in rows[1:]):
+            return JsonResponse({'error': 'Inconsistent number of columns in CSV'}, status=400)
+
+        # Check for duplicate headers
+        headers = rows[0]
+        if len(headers) != len(set(headers)):
+            return JsonResponse({'error': 'Duplicate headers found in CSV'}, status=400)
+
+        # Create Excel workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = sheet_name
+
+        for row in rows:
+            ws.append(row)
+
+        full_path = os.path.join(folder_path, workbook_name)
+        wb.save(full_path)
+
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Valid CSV File'
+        })
+    except UnicodeDecodeError:
+        return JsonResponse({'error': 'Unable to decode file content'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

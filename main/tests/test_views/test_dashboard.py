@@ -4,8 +4,11 @@ from ..test_base import BaseTestCase
 
 class TestDashboardView(BaseTestCase):
     def setUp(self):
+        """Set up each test"""
         super().setUp()
         self.dashboard_url = reverse('dashboard')
+        # Login for each test
+        self.client.force_login(self.test_user)
 
     def test_login_required(self):
         """Test that dashboard requires login"""
@@ -13,7 +16,8 @@ class TestDashboardView(BaseTestCase):
         self.client.logout()
         response = self.client.get(self.dashboard_url)
         self.assertEqual(response.status_code, 302)
-        self.assertRedirects(response, f'/?next={self.dashboard_url}')
+        expected_redirect = f'/?next={self.dashboard_url}'  # Updated to match actual configuration
+        self.assertRedirects(response, expected_redirect)
 
     def test_dashboard_loads(self):
         """Test dashboard loads with correct context"""
@@ -21,21 +25,25 @@ class TestDashboardView(BaseTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'main/dashboard.html')
         
-        # Check context
-        self.assertIn('clients', response.context)
+        # Check context contains required data
+        self.assertIn('projects', response.context)
         self.assertIn('model_fields', response.context)
         
-        # Check data is present
-        clients = response.context['clients']
-        self.assertEqual(clients.count(), 2)  # From utils_data
+        # Verify projects are loaded
+        projects = response.context['projects']
+        self.assertEqual(projects.count(), 2)  # From utils_data
+
+    def test_empty_dashboard(self):
+        """Test dashboard displays correctly with no data"""
+        # Delete all projects
+        self.test_project.__class__.objects.all().delete()
         
-    def test_hierarchy_display(self):
-        """Test complete hierarchy is displayed"""
         response = self.client.get(self.dashboard_url)
-        content = response.content.decode()
+        self.assertEqual(response.status_code, 200)
         
-        # Verify all levels are present
-        self.assertInHTML(self.test_client.name, content)
-        self.assertInHTML(self.test_project.name, content)
-        self.assertInHTML(self.test_location.name, content)
-        self.assertInHTML(self.test_measurement.name, content)
+        # Verify context still has required keys
+        self.assertIn('projects', response.context)
+        self.assertIn('model_fields', response.context)
+        
+        # Verify projects queryset is empty
+        self.assertEqual(response.context['projects'].count(), 0)

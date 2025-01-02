@@ -1,57 +1,61 @@
 # tests/test_base.py
-from django.test import TestCase
-from rest_framework.test import APITestCase
-from django.contrib.auth.models import User
-from django.urls import reverse
-from ..models import Client, Project, Location, Measurement
+from django.test import TestCase, Client
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import User, Permission
+from django.contrib.contenttypes.models import ContentType
+from rest_framework.test import APIClient
+from ..models import Project, Location, Measurement
 from .utils_data import create_model_table_data
 
 class BaseTestCase(TestCase):
-    """Base test case for non-API tests"""
-    
     @classmethod
     def setUpTestData(cls):
-        """Called once at the beginning of the test run"""
+        """Set up data for all test methods"""
         # Create test user
-        cls.user = User.objects.create_user(
+        User = get_user_model()
+        cls.test_user = User.objects.create_user(
             username='testuser',
-            password='testpass',
-            email='test@example.com'
+            email='testuser@example.com',
+            password='testpass123',
+            first_name='Test',
+            last_name='User'
         )
+
+        # Get content types
+        project_ct = ContentType.objects.get_for_model(Project)
+        location_ct = ContentType.objects.get_for_model(Location)
+        measurement_ct = ContentType.objects.get_for_model(Measurement)
+
+        # Get all model permissions
+        model_permissions = Permission.objects.filter(
+            content_type__in=[project_ct, location_ct, measurement_ct]
+        )
+
+        # Assign permissions to test user
+        cls.test_user.user_permissions.add(*model_permissions)
         
+        # Create initial test data
         create_model_table_data()
+        
+        # Get reference to test project (Energy Trust Production)
+        cls.test_project = Project.objects.get(name="Energy Trust Production")
+        
+        # Get reference to test location (Acme Products)
+        cls.test_location = Location.objects.get(name="Acme Products")
+        
+        # Get reference to test measurement (Process Line Pressure)
+        cls.test_measurement = Measurement.objects.get(name="Process Line Pressure")
 
-        # Get pre-created test data
-        cls.test_client = Client.objects.get(name="Acme Corp")
-        cls.test_project = Project.objects.get(name="Acme Audit")
-        cls.test_location = Location.objects.get(name="Acme Headquarters")
-        cls.test_measurement = Measurement.objects.get(name="Main Power Meter")
-
+class BaseAPITestCase(BaseTestCase):
     def setUp(self):
-        """Called before each test method"""
-        self.client.login(username='testuser', password='testpass')
-
-
-class BaseAPITestCase(APITestCase):
-    """Base test case for API tests"""
-    
-    @classmethod
-    def setUpTestData(cls):
-        """Share the same test data setup as BaseTestCase"""
-        cls.user = User.objects.create_user(
-            username='testuser',
-            password='testpass',
-            email='test@example.com'
-        )
-
-        create_model_table_data()
-
-        # Get pre-created test data
-        cls.test_client = Client.objects.get(name="Acme Corp")
-        cls.test_project = Project.objects.get(name="Acme Audit")
-        cls.test_location = Location.objects.get(name="Acme Headquarters")
-        cls.test_measurement = Measurement.objects.get(name="Main Power Meter")
-
-    def setUp(self):
-        """Called before each test method"""
-        self.client.force_authenticate(user=self.user)
+        """Set up auth for API tests"""
+        super().setUp()
+        
+        # Use APIClient instead of regular Client for DRF features
+        self.client = APIClient()
+        
+        # Force authentication for all requests
+        self.client.force_authenticate(user=self.test_user)
+        
+        # Set default content type to JSON
+        self.client.default_format = 'json'

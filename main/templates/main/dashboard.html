@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load custom_tags %}
+{% load static %}
 
 {% block title %}ECAM Web{% endblock %}
 
@@ -27,100 +28,58 @@
     }
 
     .tree-item {
-        display: flex; /* Align children in a row */
-        align-items: center; /* Vertically center align */
-        padding: 4px 0; /* Add some spacing */
+        display: flex;
+        align-items: center;
+        padding: 4px 0;
     }
 
     .tree-item .tree-text {
-        flex-grow: 1; /* Allow text to grow as needed */
+        flex-grow: 1;
     }
 
     .tree-item .item-actions {
-        display: none; /* Hide by default */
-        margin-left: 20px; /* Position 20px from the text */
+        display: none;
+        margin-left: 20px;
         z-index: 1;
     }
 
-    /* Show the three dots on hover */
     .tree-item:hover .item-actions {
         display: inline-block;
     }
 
-    /* Dropdown appears when hovering on the three dots */
     .item-actions:hover .w3-dropdown-content {
         display: block;
     }
 
-    /* Hover effect for tree items */
     .tree-item:hover {
         background-color: #f1f1f1;
     }
 
     .w3-container-tree {
-        width: fit-content !important; /* Override the width */
+        width: fit-content !important;
     }
 
-    /* Scoped to section buttons in the dashboard */
     .w3-bar-item.w3-button.section-button {
-        width: 200px; /* Set a fixed width for section buttons */
-        text-align: left; /* Align text to the left */
-        padding-left: 16px; /* Optional padding */
-
-        .modal {
-            display: none; 
-            position: fixed; 
-            z-index: 1; 
-            left: 0;
-            top: 0;
-            width: 100%; 
-            height: 100%; 
-            overflow: auto; 
-            background-color: rgb(0,0,0); 
-            background-color: rgba(0,0,0,0.4); 
-        }
-        
-        .modal-content {
-            background-color: #fefefe;
-            margin: 15% auto; 
-            padding: 20px;
-            border: 1px solid #888;
-            width: 80%; 
-        }
-        
-        .close {
-            color: #aaa;
-            float: right;
-            font-size: 28px;
-            font-weight: bold;
-        }
-        
-        .close:hover,
-        .close:focus {
-            color: black;
-            text-decoration: none;
-            cursor: pointer;
-        }
+        width: 200px;
+        text-align: left;
+        padding-left: 16px;
     }
 
-    /* Container for inline fields */
     .fields-container {
-        display: inline-flex; /* Changed from flex */
+        display: inline-flex;
         align-items: center;
-        gap: 8px; /* Spacing between fields */
+        gap: 8px;
     }
     
-    /* Styling for name and other fields */
     .tree-item-name, .tree-item-field {
         border: none;
         background: transparent;
         padding: 4px 8px;
         font-size: 1rem;
         color: inherit;
-        width: auto; /* Added */
+        width: auto;
     }
     
-    /* Editable fields during edit mode */
     .tree-item-name.editing,
     .tree-item-field.editing {
         border: 1px solid #ccc;
@@ -128,56 +87,93 @@
         padding: 4px;
     }
     
-    /* Remove bold style for name */
     .tree-item-name {
         font-weight: normal;
     }
     
-    .tree-item-field.editing ~ #clientDisplayName {
+    .modal {
         display: none;
+        position: fixed;
+        z-index: 1;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0,0,0,0.4);
+    }
+    
+    .modal-content {
+        background-color: #fefefe;
+        margin: 15% auto;
+        padding: 20px;
+        border: 1px solid #888;
+        width: 80%;
+    }
+    
+    .close {
+        color: #aaa;
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+    }
+    
+    .close:hover,
+    .close:focus {
+        color: black;
+        text-decoration: none;
+        cursor: pointer;
     }
 </style>
 {% endblock %}
 
 {% block content %}
 
-<!-- Location Section -->
+<!-- project Section -->
 <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
-    <button onclick="toggleOpenClose('id_location')" class="w3-bar-item w3-button section-button">
-        <i id="id_chevronIcon-id_location" class="bi bi-chevron-right"></i> Location
+    <button onclick="toggleOpenClose('id_project')" class="w3-bar-item w3-button section-button">
+        <i id="id_chevronIcon-id_project" class="bi bi-chevron-right"></i> Projects
     </button>
     <div class="w3-dropdown-hover">
         <button class="w3-button">
             <i class="bi bi-three-dots-vertical"></i>
         </button>
         <div class="w3-dropdown-content w3-bar-block w3-border">
-            <a href="{% url 'location' %}" class="w3-bar-item w3-button">
+            <a href="#" 
+               class="w3-bar-item w3-button" 
+               onclick="if(document.getElementById('id_project').classList.contains('w3-hide')) 
+                          toggleOpenClose('id_project'); 
+                        crud.addItem('project', 
+                          [{% for field in model_fields.project.fields %}
+                            '{{ field.name }}'{% if not forloop.last %}, {% endif %}
+                           {% endfor %}]); 
+                        return false;">
+                <i class="bi bi-plus"></i> Add Project
+            </a>
+            <a href="{% url 'project' %}" class="w3-bar-item w3-button">
                 <i class="bi bi-box-arrow-up-right"></i> Full Page
             </a>
-            <a href="#" onclick="exportlocation()" class="w3-bar-item w3-button">
+            <a href="#" onclick="exportproject()" class="w3-bar-item w3-button">
                 <i class="bi bi-file-earmark-arrow-down"></i> Export
             </a>
-        </div>
-    </div>
+        </div>    </div>
 </div>
-<div id="id_location" class="w3-container w3-container-tree w3-hide">
+<div id="id_project" class="w3-container w3-container-tree w3-hide">
     <span class="tree-headings">
-        Clients
-        <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Projects</span>
-        <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Locations</span>
-        <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Measurements</span>
+        Project
+        <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Location</span>
+        <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Measurement</span>
     </span>
 
-    {% for client in clients %}
-        {% render_tree_item client 'client' model_fields %}
+    {% for project in projects %}
+        {% render_tree_item project 'project' model_fields %}
     {% endfor %}
 </div>
 
-
 <!-- Measurement Section -->
 <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
-    <button onclick="toggleOpenClose('measurement')" class="w3-bar-item w3-button section-button">
-        <i id="chevronIcon-measurement" class="bi bi-chevron-right"></i> Measurement
+    <button onclick="toggleOpenClose('id_measurement')" class="w3-bar-item w3-button section-button">
+        <i id="id_chevronIcon-id_measurement" class="bi bi-chevron-right"></i> Measurements
     </button>
     <div class="w3-dropdown-hover">
         <button class="w3-button">
@@ -193,14 +189,14 @@
         </div>
     </div>
 </div>
-<div id="measurement" class="w3-container w3-hide">
+<div id="id_measurement" class="w3-container w3-hide">
     <p>Content about Measurement.</p>
 </div>
 
 <!-- Data Section -->
 <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
-    <button onclick="toggleOpenClose('data')" class="w3-bar-item w3-button section-button">
-        <i id="chevronIcon-data" class="bi bi-chevron-right"></i> Data
+    <button onclick="toggleOpenClose('id_data')" class="w3-bar-item w3-button section-button">
+        <i id="id_chevronIcon-id_data" class="bi bi-chevron-right"></i> Data
     </button>
     <div class="w3-dropdown-hover">
         <button class="w3-button">
@@ -216,53 +212,63 @@
         </div>
     </div>
 </div>
-<div id="data" class="w3-container w3-hide">
+<div id="id_data" class="w3-container w3-hide">
     <p>Content about Data.</p>
 </div>
 
-<!-- Dictionary Section -->
+<!-- Models Section -->
 <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
-    <button onclick="toggleOpenClose('dictionary')" class="w3-bar-item w3-button section-button">
-        <i id="chevronIcon-dictionary" class="bi bi-chevron-right"></i> Dictionary
+    <button onclick="toggleOpenClose('id_model')" class="w3-bar-item w3-button section-button">
+        <i id="id_chevronIcon-id_model" class="bi bi-chevron-right"></i> Models
     </button>
     <div class="w3-dropdown-hover">
         <button class="w3-button">
             <i class="bi bi-three-dots-vertical"></i>
         </button>
         <div class="w3-dropdown-content w3-bar-block w3-border">
-            <a href="{% url 'dictionary' %}" class="w3-bar-item w3-button">
+            <a href="{% url 'model' %}" class="w3-bar-item w3-button">
                 <i class="bi bi-box-arrow-up-right"></i> Full Page
             </a>
-            <a href="#" onclick="exportdictionary()" class="w3-bar-item w3-button">
+            <a href="#" onclick="exportmodel()" class="w3-bar-item w3-button">
                 <i class="bi bi-file-earmark-arrow-down"></i> Export
             </a>
         </div>
     </div>
 </div>
-<div id="dictionary" class="w3-container w3-hide">
-    <p>Content about Dictionary.</p>
+<div id="id_model" class="w3-container w3-hide">
+    <p>Content about Models.</p>
 </div>
 
 {% endblock %}
 
 {% block extra_js %}
 
-<!-- Regular JavaScript -->
-<script>
-    function toggleOpenClose(id) {
-        var div = document.getElementById(id);
-        var icon = document.getElementById('id_chevronIcon-' + id);
-        if (div.classList.contains('w3-show')) {
-            div.classList.remove('w3-show');
-            div.classList.add('w3-hide');
-            icon.className = "bi bi-chevron-right";
-        } else {
-            div.classList.remove('w3-hide');
-            div.classList.add('w3-show');
-            icon.className = "bi bi-chevron-down";
+    {% csrf_token %}
+
+    <!-- Module JavaScript -->
+    <script type="module">
+        import * as CRUD from "{% static 'main/js/crud.js' %}"; 
+        window.crud = CRUD; // Expose the CRUD module globally
+
+        // Initialize MODEL_FIELDS when the page loads
+        CRUD.initializeModelFields().catch(error => {
+            console.error('Failed to initialize MODEL_FIELDS:', error);
+        });
+    </script>
+
+    <script>
+        function toggleOpenClose(id) {
+            var div = document.getElementById(id);
+            var icon = document.getElementById('id_chevronIcon-' + id);
+            if (div.classList.contains('w3-show')) {
+                div.classList.remove('w3-show');
+                div.classList.add('w3-hide');
+                icon.className = "bi bi-chevron-right";
+            } else {
+                div.classList.remove('w3-hide');
+                div.classList.add('w3-show');
+                icon.className = "bi bi-chevron-down";
+            }
         }
-    }
-</script>
-
+    </script>
 {% endblock %}
-

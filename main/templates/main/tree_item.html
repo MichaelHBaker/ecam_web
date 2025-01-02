@@ -1,16 +1,4 @@
 {% comment %}templates/main/tree_item.html{% endcomment %}
-{% load static %}
-
-<!-- Module JavaScript -->
-<script type="module">
-    import * as CRUD from "{% static 'main/js/crud.js' %}"; 
-    window.crud = CRUD; // Expose the CRUD module globally
-
-    // Initialize MODEL_FIELDS when the page loads
-    CRUD.initializeModelFields().catch(error => {
-        console.error('Failed to initialize MODEL_FIELDS:', error);
-    });
-</script>
 
 {% load custom_tags %}
 <div class="tree-item w3-hover-light-grey">

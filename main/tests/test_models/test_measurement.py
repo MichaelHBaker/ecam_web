@@ -41,17 +41,6 @@ class TestMeasurementModel(BaseTestCase):
         expected = f"{storage_location.get_hierarchy()} > {measurement.name}"
         self.assertEqual(measurement.get_hierarchy(), expected)
 
-    def test_location_requirement(self):
-        """Test measurement must belong to a location"""
-        measurement = Measurement(
-            name="Test Measurement",
-            description="Test without location",
-            measurement_type="pressure",
-            location=None  # Explicitly setting location to None
-        )
-        with self.assertRaises(ValidationError):
-            measurement.full_clean()  # This should raise ValidationError due to null location
-
     def test_duplicate_names_same_location(self):
         """Test measurements in same location can't have duplicate names"""
         existing_measurement = self.test_measurement

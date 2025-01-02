@@ -87,10 +87,6 @@ class Measurement(models.Model):
         """Validate model data"""
         super().clean()
 
-        # Enforce location requirement
-        if not self.location:
-            raise ValidationError({'location': 'Measurement must have a location.'})
-
         # Check for duplicate names in same location
         if self.name:
             existing = Measurement.objects.filter(
@@ -103,7 +99,7 @@ class Measurement(models.Model):
                 raise ValidationError({
                     'name': 'A measurement with this name already exists in this location'
                 })
-        
+       
 
     @property
     def unit(self):

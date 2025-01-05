@@ -4,6 +4,7 @@ from django.http import JsonResponse
 from django.contrib.auth import authenticate, login
 from django.template.loader import render_to_string
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import ValidationError
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -12,10 +13,11 @@ from rest_framework import serializers
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
 from rest_framework.permissions import IsAuthenticated
 
-from .models import Project, Location, Measurement
+from .models import Project, Location, Measurement, MeasurementType
 from .serializers import (
     ProjectSerializer, LocationSerializer, 
-    MeasurementSerializer, ModelFieldsSerializer
+    MeasurementSerializer, ModelFieldsSerializer,
+    MeasurementTypeSerializer
 )
 
 import chardet
@@ -35,9 +37,22 @@ class TreeItemMixin:
     def create(self, request, *args, **kwargs):
         try:
             serializer = self.get_serializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            self.perform_create(serializer)
-            
+            try:
+                serializer.is_valid(raise_exception=True)
+            except serializers.ValidationError as e:
+                return Response(
+                    {'detail': self.format_validation_errors(e.detail)},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            try:
+                self.perform_create(serializer)
+            except ValidationError as e:
+                return Response(
+                    {'detail': str(e)},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+                
             # Get parent if this isn't top level
             parent = None
             if self.parent_field:
@@ -70,6 +85,7 @@ class TreeItemMixin:
                 'fields': fields,
                 'next_level_type': next_level_type,
                 'children_attr': children_attr,
+                'measurement_types': MeasurementType.objects.all() if self.level_type == 'measurement' else None
             }
 
             html = render_to_string('main/tree_item.html', context, request=request)
@@ -79,11 +95,16 @@ class TreeItemMixin:
                 'html': html
             }, status=status.HTTP_201_CREATED)
             
+        except serializers.ValidationError as e:
+            return Response(
+                {'detail': self.format_validation_errors(e.detail)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
             import traceback
             return Response(
                 {'detail': str(e)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                status=status.HTTP_400_BAD_REQUEST  # Changed from 500 to 400
             )
         
     def update(self, request, *args, **kwargs):
@@ -93,13 +114,6 @@ class TreeItemMixin:
         
         try:
             serializer.is_valid(raise_exception=True)
-        except serializers.ValidationError as e:
-            return Response(
-                {'detail': self.format_validation_errors(e.detail)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-            
-        try:
             self.perform_update(serializer)
         except serializers.ValidationError as e:
             return Response(
@@ -160,18 +174,12 @@ class LocationViewSet(TreeItemMixin, viewsets.ModelViewSet):
         serializer = self.get_serializer(locations, many=True)
         return Response(serializer.data)
 
-    def perform_create(self, serializer):
-        try:
-            # Validate parent-project relationship
-            parent = serializer.validated_data.get('parent')
-            project = serializer.validated_data.get('project')
-            if parent and parent.project != project:
-                raise serializers.ValidationError({
-                    'parent': 'Parent location must belong to the same project'
-                })
-            super().perform_create(serializer)
-        except Exception as e:
-            raise serializers.ValidationError(str(e))
+class MeasurementTypeViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet for MeasurementType model - read-only to prevent modifications"""
+    serializer_class = MeasurementTypeSerializer
+    queryset = MeasurementType.objects.all()
+    authentication_classes = [SessionAuthentication, BasicAuthentication]
+    permission_classes = [IsAuthenticated]
 
 class MeasurementViewSet(TreeItemMixin, viewsets.ModelViewSet):
     serializer_class = MeasurementSerializer
@@ -181,7 +189,7 @@ class MeasurementViewSet(TreeItemMixin, viewsets.ModelViewSet):
     child_attr = None
 
     def get_queryset(self):
-        queryset = Measurement.objects.all()
+        queryset = Measurement.objects.select_related('measurement_type').all()
         location_id = self.request.query_params.get('location')
         if location_id:
             queryset = queryset.filter(location_id=location_id)
@@ -189,7 +197,14 @@ class MeasurementViewSet(TreeItemMixin, viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         try:
+            # Ensure measurement type exists
+            if 'measurement_type_id' in self.request.data:
+                measurement_type = MeasurementType.objects.get(
+                    id=self.request.data['measurement_type_id']
+                )
             super().perform_create(serializer)
+        except MeasurementType.DoesNotExist:
+            raise serializers.ValidationError('Invalid measurement type')
         except Exception as e:
             raise serializers.ValidationError(str(e))
 
@@ -199,21 +214,8 @@ class ModelFieldsViewSet(viewsets.ViewSet):
 
     def list(self, request):
         serializer = ModelFieldsSerializer()
-        data = serializer.to_representation(None)  # Explicitly call to_representation
+        data = serializer.to_representation(None)
         return Response(data)
-
-# View Functions
-def index(request):
-    if request.method == 'POST':
-        username = request.POST.get('username')
-        password = request.POST.get('password')
-        user = authenticate(request, username=username, password=password)
-        if user is not None:
-            login(request, user)
-            return redirect('dashboard')
-        else:
-            return render(request, 'main/index.html', {'error': 'Invalid credentials'})
-    return render(request, 'main/index.html')
 
 @login_required(login_url='/')
 def dashboard(request):
@@ -221,8 +223,12 @@ def dashboard(request):
     projects = Project.objects.prefetch_related(
         'locations',
         'locations__measurements',
+        'locations__measurements__measurement_type',
         'locations__children'
     ).all()
+
+    # Get measurement types for the form
+    measurement_types = MeasurementType.objects.all()
 
     # Use serializer to get model fields
     serializer = ModelFieldsSerializer(instance=None)
@@ -230,12 +236,12 @@ def dashboard(request):
     
     context = {
         'projects': projects,
-        'model_fields': model_fields
+        'model_fields': model_fields,
+        'measurement_types': measurement_types
     }
     
     return render(request, 'main/dashboard.html', context)
 
-# CSV and utility view functions remain unchanged...
 def excel_upload(request):
     if 'csv_file' not in request.FILES:
         return JsonResponse({'error': 'CSV file is required'}, status=400)
@@ -248,15 +254,6 @@ def excel_upload(request):
     if not all([folder_path, workbook_name, sheet_name]):
         return JsonResponse({'error': 'All fields are required'}, status=400)
 
-    if not workbook_name.endswith('.xlsx'):
-        workbook_name += '.xlsx'
-
-    if not os.path.exists(folder_path):
-        return JsonResponse({'error': 'Folder path does not exist'}, status=400)
-
-    if csv_file.size == 0:
-        return JsonResponse({'error': 'The selected CSV file is empty'}, status=400)
-
     try:
         # Read and validate CSV content
         raw_content = csv_file.read()
@@ -265,40 +262,80 @@ def excel_upload(request):
         csv_reader = csv.reader(StringIO(file_content))
         rows = list(csv_reader)
 
-        if len(rows) == 1:
-            return JsonResponse({'error': 'The CSV file contains only headers'}, status=400)
-
-        # Check for inconsistent columns
-        column_count = len(rows[0])
-        if any(len(row) != column_count for row in rows[1:]):
-            return JsonResponse({'error': 'Inconsistent number of columns in CSV'}, status=400)
-
-        # Check for duplicate headers
+        # Validate headers and look for measurement_type column
         headers = rows[0]
-        if len(headers) != len(set(headers)):
-            return JsonResponse({'error': 'Duplicate headers found in CSV'}, status=400)
+        try:
+            type_index = headers.index('measurement_type')
+        except ValueError:
+            return JsonResponse({
+                'error': 'CSV must contain a measurement_type column'
+            }, status=400)
 
-        # Create Excel workbook
+        # Get valid measurement types, converting to lowercase for case-insensitive comparison
+        valid_types = {t.lower(): t for t in MeasurementType.objects.values_list('name', flat=True)}
+
+        # Validate all measurement types before processing
+        invalid_types = []
+        for row_num, row in enumerate(rows[1:], start=2):
+            if row and len(row) > type_index:  # Check if row has enough columns
+                measurement_type = row[type_index].strip().lower()
+                if measurement_type and measurement_type not in valid_types:
+                    invalid_types.append((row_num, row[type_index]))
+
+        if invalid_types:
+            error_msg = {
+                'error': 'Invalid measurement types found',
+                'measurement_type': [
+                    f'Invalid measurement type "{t}" in row {r}' 
+                    for r, t in invalid_types
+                ]
+            }
+            return JsonResponse(error_msg, status=400)
+
+        # Create Excel workbook and save
+        workbook_name = workbook_name if workbook_name.endswith('.xlsx') else f"{workbook_name}.xlsx"
         wb = Workbook()
         ws = wb.active
         ws.title = sheet_name
-
+        
         for row in rows:
             ws.append(row)
-
+            
         full_path = os.path.join(folder_path, workbook_name)
         wb.save(full_path)
 
         return JsonResponse({
             'status': 'success',
-            'message': 'Valid CSV File'
+            'message': 'File uploaded successfully',
+            'valid_types': list(valid_types.values())
         })
-    except UnicodeDecodeError:
-        return JsonResponse({'error': 'Unable to decode file content'}, status=400)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
 
-# Simple view functions remain unchanged...
+    except UnicodeDecodeError:
+        return JsonResponse({
+            'error': 'Unable to decode file content'
+        }, status=400)
+    except Exception as e:
+        # Log the error for debugging
+        import traceback
+        print(f"Error in excel_upload: {str(e)}")
+        print(traceback.format_exc())
+        return JsonResponse({
+            'error': 'An error occurred while processing the file',
+            'details': str(e)
+        }, status=500)
+
+def index(request):
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return redirect('dashboard')
+        else:
+            return render(request, 'main/index.html', {'error': 'Invalid credentials'})
+    return render(request, 'main/index.html')
+
 def project(request):
     return render(request, 'main/project.html')
 

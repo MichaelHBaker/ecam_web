@@ -26,14 +26,39 @@
             <!-- Fields Container -->
             <div class="fields-container">
                 {% for field in fields %}
-                    <input id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}-{{ item.id }}" 
-                           type="text"
-                           name="{{ field.name }}"
-                           value="{{ item|get_field_value:field }}"
-                           class="tree-item-field"
-                           style="display: {% if field.name == 'name' %}inline{% else %}none{% endif %};"
-                           title="{% if field.name == 'name' %}{% for f in fields %}{% if f.name != 'name' %}{{ f.name }}: {{ item|get_field_value:f }}{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}{% endif %};"
-                           readonly>
+                    {% if field.name == "measurement_type_id" %}
+                        <!-- Measurement Type Field -->
+                        <select id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}-{{ item.id }}"
+                                name="{{ field.name }}"
+                                class="tree-item-field measurement-type-select"
+                                style="display: none;"
+                                disabled>
+                            {% for type in measurement_types %}
+                                <option value="{{ type.id }}" 
+                                        {% if type.id == item.measurement_type.id %}selected{% endif %}>
+                                    {{ type.display_name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        <!-- Display current measurement type -->
+                        <span id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}Display-{{ item.id }}"
+                              class="measurement-type-display">
+                            {% if item.measurement_type %}
+                                {{ item.measurement_type.display_name }}
+                                <span class="measurement-unit">({{ item.measurement_type.unit }})</span>
+                            {% endif %}
+                        </span>
+                    {% else %}
+                        <!-- Regular Field -->
+                        <input id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}-{{ item.id }}" 
+                               type="text"
+                               name="{{ field.name }}"
+                               value="{{ item|get_field_value:field }}"
+                               class="tree-item-field"
+                               style="display: {% if field.name == 'name' %}inline{% else %}none{% endif %};"
+                               title="{% if field.name == 'name' %}{% for f in fields %}{% if f.name != 'name' %}{{ f.name }}: {{ item|get_field_value:f }}{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}{% endif %};"
+                               readonly>
+                    {% endif %}
                 {% endfor %}
             </div>
 

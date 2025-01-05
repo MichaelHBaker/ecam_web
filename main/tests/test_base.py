@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import User, Permission
 from django.contrib.contenttypes.models import ContentType
 from rest_framework.test import APIClient
-from ..models import Project, Location, Measurement
+from ..models import Project, Location, Measurement, MeasurementType
 from .utils_data import create_model_table_data
 
 class BaseTestCase(TestCase):
@@ -25,10 +25,16 @@ class BaseTestCase(TestCase):
         project_ct = ContentType.objects.get_for_model(Project)
         location_ct = ContentType.objects.get_for_model(Location)
         measurement_ct = ContentType.objects.get_for_model(Measurement)
+        measurement_type_ct = ContentType.objects.get_for_model(MeasurementType)
 
         # Get all model permissions
         model_permissions = Permission.objects.filter(
-            content_type__in=[project_ct, location_ct, measurement_ct]
+            content_type__in=[
+                project_ct, 
+                location_ct, 
+                measurement_ct,
+                measurement_type_ct
+            ]
         )
 
         # Assign permissions to test user
@@ -45,6 +51,11 @@ class BaseTestCase(TestCase):
         
         # Get reference to test measurement (Process Line Pressure)
         cls.test_measurement = Measurement.objects.get(name="Process Line Pressure")
+
+        # Get references to measurement types
+        cls.power_type = MeasurementType.objects.get(name='power')
+        cls.temp_type = MeasurementType.objects.get(name='temperature')
+        cls.pressure_type = MeasurementType.objects.get(name='pressure')
 
 class BaseAPITestCase(BaseTestCase):
     def setUp(self):

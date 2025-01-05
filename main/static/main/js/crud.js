@@ -107,7 +107,8 @@ const getInputType = (drfType) => {
         datetime: 'datetime-local',
         email: 'email',
         url: 'url',
-        choice: 'select'
+        choice: 'select',
+        measurement_type: 'select'  // Added special type for measurement types
     };
     return typeMap[drfType] || 'text';
 };
@@ -127,23 +128,40 @@ const mapChoiceValue = (value, choices, toInternal = false) => {
 
 // Create form field with proper configuration
 const createField = (field, type, tempId, fieldInfo) => {
-    const element = fieldInfo?.type === 'choice' ? 'select' : 'input';
+    const element = (fieldInfo?.type === 'choice' || field === 'measurement_type_id') ? 'select' : 'input';
     const input = document.createElement(element);
     input.id = `id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${tempId}`;
     input.name = field;
     input.className = 'tree-item-field editing';
 
-    if (fieldInfo?.type === 'choice' && fieldInfo.choices) {
+    if (field === 'measurement_type_id') {
+        // Special handling for measurement type selection
+        input.className += ' measurement-type-select';
         // Add empty option
+        const emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.textContent = 'Select measurement type';
+        input.appendChild(emptyOption);
+
+        // Add measurement type choices - these come from the fieldInfo.choices
+        if (fieldInfo?.choices) {
+            fieldInfo.choices.forEach(choice => {
+                const option = document.createElement('option');
+                option.value = choice.value;  // Use ID as value
+                option.textContent = choice.display;  // Use display_name as text
+                input.appendChild(option);
+            });
+        }
+    } else if (fieldInfo?.type === 'choice' && fieldInfo.choices) {
+        // Standard choice field handling
         const emptyOption = document.createElement('option');
         emptyOption.value = '';
         emptyOption.textContent = `Select ${field.replace(/_/g, ' ')}`;
         input.appendChild(emptyOption);
 
-        // Add field choices
         fieldInfo.choices.forEach(choice => {
             const option = document.createElement('option');
-            option.value = choice.display;  // Use display value for visual consistency
+            option.value = choice.value;
             option.textContent = choice.display;
             input.appendChild(option);
         });
@@ -158,6 +176,7 @@ const createField = (field, type, tempId, fieldInfo) => {
 
     return input;
 };
+
 
 // Create edit controls for forms
 const createEditControls = (type, id) => {
@@ -188,8 +207,12 @@ const collectFormData = (type, id, fields, modelInfo) => {
                 throw new Error(`${field.replace(/_/g, ' ')} is required`);
             }
 
-            if (fieldConfig?.type === 'choice' && fieldConfig.choices) {
-                data[field] = mapChoiceValue(value, fieldConfig.choices, true);
+            if (field === 'measurement_type_id') {
+                // Changed: Use measurement_type_id instead of measurement_type
+                data['measurement_type_id'] = value ? parseInt(value, 10) : null;
+            } else if (fieldConfig?.type === 'choice' && fieldConfig.choices) {
+                // Handle other choice fields
+                data[field] = value;
             } else {
                 data[field] = value || null;
             }
@@ -197,6 +220,7 @@ const collectFormData = (type, id, fields, modelInfo) => {
     });
     return data;
 };
+
 
 // Display form errors
 const showFormError = (form, error, type) => {
@@ -360,7 +384,6 @@ export const addItem = async (type, fields, parentId = null) => {
     }
 };
 
-// Update existing item function
 export const updateItem = async (event, type, id, fields) => {
     event.preventDefault();
 
@@ -373,12 +396,10 @@ export const updateItem = async (event, type, id, fields) => {
         const parentIdInput = event.target.querySelector('input[name="parent_id"]');
         const typeConfig = modelFields[type];
         
-        // If this type has a parent type defined and no parent ID is provided, that's an error
         if (typeConfig.parent_type) {
             if (parentIdInput && parentIdInput.value) {
                 data[typeConfig.parent_type] = parseInt(parentIdInput.value, 10);
             } else {
-                console.warn(`No parent ID found for ${type} update`);
                 throw new Error(`Parent ${typeConfig.parent_type} is required for ${type}`);
             }
         }
@@ -388,25 +409,18 @@ export const updateItem = async (event, type, id, fields) => {
             const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
             if (element) {
                 const value = element.value.trim();
-                
-                // Find the field configuration to check if it's required
                 const fieldConfig = typeConfig.fields.find(f => f.name === field);
+
                 if (!value && fieldConfig?.required) {
                     element.classList.add('error');
                     hasErrors = true;
                 } else {
                     element.classList.remove('error');
-                    // If this is a choice field with choices, map display value to internal value
-                    if (fieldConfig?.type === 'choice' && fieldConfig.choices) {
-                        const choice = fieldConfig.choices.find(c => c.display === value);
-                        if (choice) {
-                            data[field] = choice.value;
-                        } else {
-                            console.warn(`Could not find choice mapping for ${value}`);
-                            data[field] = value;
-                        }
+                    if (field === 'measurement_type_id') {
+                        // Changed: Use measurement_type_id instead of measurement_type
+                        data['measurement_type_id'] = value ? parseInt(value, 10) : null;
                     } else {
-                        data[field] = value;
+                        data[field] = value || null;
                     }
                 }
             }
@@ -428,6 +442,18 @@ export const updateItem = async (event, type, id, fields) => {
         });
 
         resetFields(type, id, fields);
+
+        // Update measurement type display if needed
+        if (type === 'measurement') {
+            const displayElement = document.getElementById(`id_${type}measurement_type_idDisplay-${id}`);
+            if (displayElement && response.measurement_type) {
+                displayElement.innerHTML = `
+                    ${response.measurement_type.display_name}
+                    <span class="measurement-unit">(${response.measurement_type.unit})</span>
+                `;
+            }
+        }
+
         return response;
     } catch (error) {
         const errorDisplay = document.createElement('div');

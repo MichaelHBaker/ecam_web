@@ -17,7 +17,6 @@ class LocationAdmin(admin.ModelAdmin):
 
 @admin.register(Measurement)
 class MeasurementAdmin(admin.ModelAdmin):
-    list_display = ('name', 'location', 'measurement_type')
-    list_filter = ('measurement_type', 'location')
+    list_display = ('name', 'location')
     search_fields = ('name', 'description')
     raw_id_fields = ('location',)

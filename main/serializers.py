@@ -1,11 +1,22 @@
 # serializers.py
 from rest_framework import serializers
-from .models import Project, Location, Measurement
+from .models import Project, Location, Measurement, MeasurementType
 from .utils import get_field_metadata
 
+class MeasurementTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MeasurementType
+        fields = ['id', 'name', 'display_name', 'unit', 'description']
+
 class MeasurementSerializer(serializers.ModelSerializer):
-    measurement_type_display = serializers.CharField(source='get_measurement_type_display', read_only=True)
+    measurement_type = MeasurementTypeSerializer(read_only=True)
+    measurement_type_id = serializers.PrimaryKeyRelatedField(
+        source='measurement_type',
+        queryset=MeasurementType.objects.all(),
+        write_only=True
+    )
     location = serializers.PrimaryKeyRelatedField(queryset=Location.objects.all())
+    unit = serializers.CharField(read_only=True)
 
     def validate(self, data):
         """
@@ -24,8 +35,11 @@ class MeasurementSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Measurement
-        fields = ['id', 'name', 'description', 'measurement_type', 
-                 'measurement_type_display', 'unit', 'location']
+        fields = [
+            'id', 'name', 'description', 
+            'measurement_type', 'measurement_type_id',
+            'unit', 'location'
+        ]
 
 class LocationSerializer(serializers.ModelSerializer):
     measurements = MeasurementSerializer(many=True, read_only=True)
@@ -93,6 +107,12 @@ class ModelFieldsSerializer(serializers.Serializer):
 
     def to_representation(self, instance):
         """Return the field definitions for all models"""
+        measurement_types = MeasurementType.objects.all()
+        measurement_type_choices = [
+            {'value': mt.id, 'display': mt.display_name}
+            for mt in measurement_types
+        ]
+
         return {
             'project': {
                 'level': 1,
@@ -117,8 +137,8 @@ class ModelFieldsSerializer(serializers.Serializer):
                 'fields': [
                     {'name': 'name', 'type': 'string', 'required': True},
                     {'name': 'description', 'type': 'string', 'required': False},
-                    {'name': 'measurement_type', 'type': 'choice', 'required': True,
-                     'choices': [{'value': c[0], 'display': c[1]} for c in Measurement.MEASUREMENT_TYPES]}
+                    {'name': 'measurement_type_id', 'type': 'choice', 'required': True,
+                     'choices': measurement_type_choices}
                 ],
                 'parent_type': 'location'
             }

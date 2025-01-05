@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.core.exceptions import ValidationError
 from datetime import date, timedelta
 from ..test_base import BaseTestCase
-from ...models import Project, Location, Measurement
+from ...models import Project, Location, Measurement, MeasurementType
 
 class TestProjectModel(BaseTestCase):
     def test_str_representation(self):
@@ -113,13 +113,14 @@ class TestProjectModel(BaseTestCase):
         measurement = Measurement.objects.create(
             location=location,
             name="Test Measurement",
-            measurement_type="power"
+            measurement_type=self.power_type
         )
         
         # Store IDs for later verification
         location_id = location.id
         measurement_id = measurement.id
         project_id = project.id
+        measurement_type_id = self.power_type.id
         
         # Delete the project
         project.delete()
@@ -136,6 +137,11 @@ class TestProjectModel(BaseTestCase):
         self.assertFalse(
             Measurement.objects.filter(id=measurement_id).exists(),
             "Measurement should be deleted via cascade"
+        )
+        # Verify measurement type is NOT deleted (protected)
+        self.assertTrue(
+            MeasurementType.objects.filter(id=measurement_type_id).exists(),
+            "MeasurementType should not be deleted"
         )
 
     def test_hierarchy_with_locations(self):

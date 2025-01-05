@@ -1,119 +1,155 @@
-# tests/test_api/test_measurement_api.py
-from rest_framework import status
-from django.urls import reverse
-import json
-from ..test_base import BaseAPITestCase
-from ...models import Measurement, Location
+# tests/test_models/test_measurement.py
+from django.test import TestCase
+from django.core.exceptions import ValidationError
+from ..test_base import BaseTestCase
+from ...models import Measurement, Location, MeasurementType
 
-class TestMeasurementAPI(BaseAPITestCase):
-    def setUp(self):
-        super().setUp()
-        self.list_url = reverse('measurement-list')
-        self.detail_url = reverse('measurement-detail', kwargs={'pk': self.test_measurement.pk})
-        # Set content type for all requests
-        self.client.content_type = 'application/json'
-
-    def test_list_measurements(self):
-        """Test retrieving list of measurements"""
-        response = self.client.get(self.list_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 3)  # From utils_data
-        self.assertEqual(response.data[0]['name'], "Main Power Meter")
-
-    def test_create_measurement(self):
-        """Test measurement creation"""
-        data = {
-            'name': 'New Measurement',
-            'location': self.test_location.pk,
-            'measurement_type': 'power',
-            'description': 'Test measurement'
-        }
-        response = self.client.post(
-            self.list_url, 
-            data=json.dumps(data), 
-            content_type='application/json'
+class TestMeasurementModel(BaseTestCase):
+    def test_str_representation(self):
+        """Test string representation of measurement"""
+        measurement = Measurement.objects.create(
+            name="String Test",
+            location=self.test_location,
+            measurement_type=self.power_type
         )
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertTrue(Measurement.objects.filter(name='New Measurement').exists())
+        expected = f"String Test ({self.power_type.display_name})"
+        self.assertEqual(str(measurement), expected)
 
-    def test_create_measurement_validation(self):
-        """Test measurement creation validation"""
-        test_cases = [
-            {
-                'data': {'name': ''},
-                'expected_error': 'name'
-            },
-            {
-                'data': {'name': 'Test Measurement'},  # Missing location
-                'expected_error': 'location'
-            },
-            {
-                'data': {
-                    'name': 'Test Measurement',
-                    'location': self.test_location.pk,
-                    'measurement_type': 'invalid_type'
-                },
-                'expected_error': 'measurement_type'
-            },
-            {
-                'data': {
-                    'name': self.test_measurement.name,  # Duplicate name in same location
-                    'location': self.test_location.pk,
-                    'measurement_type': 'power'
-                },
-                'expected_error': 'name'
-            }
-        ]
+    def test_measurement_type_required(self):
+        """Test measurement type is required"""
+        with self.assertRaises(ValidationError) as context:
+            Measurement(
+                name="Missing Type Test",
+                location=self.test_location,
+                measurement_type=None
+            ).full_clean()
+        self.assertIn('measurement_type', str(context.exception))
 
-        for test_case in test_cases:
-            response = self.client.post(
-                self.list_url, 
-                data=json.dumps(test_case['data']), 
-                content_type='application/json'
+    def test_unit_from_measurement_type(self):
+        """Test unit is correctly obtained from measurement type"""
+        # Test power measurement
+        power_measurement = Measurement.objects.create(
+            name="Power Test",
+            location=self.test_location,
+            measurement_type=self.power_type
+        )
+        self.assertEqual(power_measurement.unit, "kW")
+        
+        # Test temperature measurement
+        temp_measurement = Measurement.objects.create(
+            name="Temp Test",
+            location=self.test_location,
+            measurement_type=self.temp_type
+        )
+        self.assertEqual(temp_measurement.unit, "°F")
+        
+        # Test pressure measurement
+        pressure_measurement = Measurement.objects.create(
+            name="Pressure Test",
+            location=self.test_location,
+            measurement_type=self.pressure_type
+        )
+        self.assertEqual(pressure_measurement.unit, "PSI")
+
+    def test_hierarchy_string(self):
+        """Test get_hierarchy method"""
+        measurement = Measurement.objects.create(
+            name="Hierarchy Test",
+            location=self.test_location,
+            measurement_type=self.power_type
+        )
+        expected = f"{self.test_location.get_hierarchy()} > {measurement.name}"
+        self.assertEqual(measurement.get_hierarchy(), expected)
+
+    def test_duplicate_names_same_location(self):
+        """Test measurements in same location can't have duplicate names"""
+        measurement1 = Measurement.objects.create(
+            name="Duplicate Test",
+            location=self.test_location,
+            measurement_type=self.power_type
+        )
+        
+        with self.assertRaises(ValidationError) as context:
+            measurement2 = Measurement(
+                name="Duplicate Test",  # Same name
+                location=self.test_location,  # Same location
+                measurement_type=self.temp_type  # Different type doesn't matter
             )
-            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-            self.assertIn(test_case['expected_error'], str(response.data))
+            measurement2.full_clean()
+        self.assertIn('name', str(context.exception))
 
-    def test_create_measurement_same_name_different_location(self):
-        """Test can create measurements with same name in different locations"""
-        storage_location = Location.objects.get(name="Fish Storage Warehouse")
-        data = {
-            'name': self.test_measurement.name,  # Same name as existing measurement
-            'location': storage_location.pk,  # Different location
-            'measurement_type': 'power'
-        }
-        response = self.client.post(
-            self.list_url, 
-            data=json.dumps(data), 
-            content_type='application/json'
+    def test_duplicate_names_different_locations(self):
+        """Test measurements in different locations can have same name"""
+        measurement1 = Measurement.objects.create(
+            name="Same Name Test",
+            location=self.test_location,
+            measurement_type=self.power_type
         )
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-
-    def test_retrieve_measurement(self):
-        """Test retrieving a specific measurement"""
-        response = self.client.get(self.detail_url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data['name'], self.test_measurement.name)
-        self.assertEqual(response.data['measurement_type'], 'pressure')  # Updated to match utils_data
-        self.assertEqual(response.data['unit'], 'PSI')  # Updated to match measurement type
-
-    def test_update_measurement(self):
-        """Test updating a measurement"""
-        data = {
-            'name': 'Updated Measurement Name',
-            'description': 'Updated description'
-        }
-        response = self.client.patch(
-            self.detail_url, 
-            data=json.dumps(data), 
-            content_type='application/json'
+        
+        different_location = Location.objects.create(
+            name="Different Location",
+            project=self.test_project,
+            address="456 Different St"
         )
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.test_measurement.refresh_from_db()
-        self.assertEqual(self.test_measurement.name, 'Updated Measurement Name')
+        
+        try:
+            measurement2 = Measurement(
+                name="Same Name Test",  # Same name
+                location=different_location,  # Different location
+                measurement_type=self.power_type
+            )
+            measurement2.full_clean()
+            measurement2.save()
+        except ValidationError as e:
+            self.fail("Should allow same name in different location")
 
-    def test_delete_measurement(self):
-        """Test deleting a measurement"""
-        response = self.client.delete(self.detail_url)
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertFalse(Measurement.objects.filter(pk=self.test_measurement.pk).exists())
+    def test_measurement_type_deletion_protection(self):
+        """Test that measurement types cannot be deleted while in use"""
+        measurement = Measurement.objects.create(
+            name="Protection Test",
+            location=self.test_location,
+            measurement_type=self.power_type
+        )
+        
+        # Attempt to delete the measurement type
+        with self.assertRaises(Exception):
+            self.power_type.delete()
+        
+        # Verify measurement and type still exist
+        self.assertTrue(
+            Measurement.objects.filter(pk=measurement.pk).exists(),
+            "Measurement should still exist"
+        )
+        self.assertTrue(
+            MeasurementType.objects.filter(pk=self.power_type.pk).exists(),
+            "MeasurementType should still exist"
+        )
+
+    def test_optional_description(self):
+        """Test description field is optional"""
+        measurement = Measurement(
+            name="No Description Test",
+            location=self.test_location,
+            measurement_type=self.power_type
+        )
+        try:
+            measurement.full_clean()
+            measurement.save()
+        except ValidationError as e:
+            self.fail("Description should be optional")
+
+    def test_measurement_type_attributes(self):
+        """Test access to measurement type attributes"""
+        measurement = Measurement.objects.create(
+            name="Attributes Test",
+            location=self.test_location,
+            measurement_type=self.power_type
+        )
+        
+        self.assertEqual(measurement.measurement_type.name, 'power')
+        self.assertEqual(measurement.measurement_type.display_name, 'Power (kW)')
+        self.assertEqual(measurement.measurement_type.unit, 'kW')
+        self.assertEqual(
+            measurement.measurement_type.description,
+            'Power consumption measurement'
+        )

@@ -6,12 +6,26 @@ register = template.Library()
 @register.filter
 def get_field_value(obj, field):
     """
-    Get field value, handling choice fields and related fields appropriately
+    Get field value, handling choice fields, related fields, and measurement types appropriately
     """
     # Extract field name if field is a dictionary
     field_name = field['name'] if isinstance(field, dict) else str(field)
     
     try:
+        # Special handling for measurement_type
+        if field_name == 'measurement_type':
+            measurement_type = getattr(obj, 'measurement_type', None)
+            if measurement_type:
+                return measurement_type.display_name
+            return ''
+        
+        # Special handling for measurement_type_id
+        if field_name == 'measurement_type_id':
+            measurement_type = getattr(obj, 'measurement_type', None)
+            if measurement_type:
+                return measurement_type.id
+            return ''
+            
         # Check for choice field display method
         if hasattr(obj, f'get_{field_name}_display'):
             return getattr(obj, f'get_{field_name}_display')()
@@ -47,7 +61,6 @@ def render_tree_item(item, level_type, model_fields, parent=None):
     """
     try:
         # Debug before access
-        
         if not isinstance(model_fields, dict):
             raise ValueError(f"model_fields is not a dict. Got {type(model_fields)}")
             
@@ -71,6 +84,12 @@ def render_tree_item(item, level_type, model_fields, parent=None):
         elif isinstance(fields, list) and fields and isinstance(fields[0], str):
             fields = [{'name': f, 'type': 'string'} for f in fields]
             
+        # Add measurement type information if needed
+        measurement_types = None
+        if level_type == 'measurement':
+            from ..models import MeasurementType  # Local import to avoid circular dependency
+            measurement_types = MeasurementType.objects.all()
+            
         context = {
             'item': item,
             'level_type': level_type,
@@ -79,15 +98,13 @@ def render_tree_item(item, level_type, model_fields, parent=None):
             'children_attr': children_attr,
             'parent': parent,
             'fields': fields,
-            'level': level_info.get('level', 1)
+            'level': level_info.get('level', 1),
+            'measurement_types': measurement_types
         }
-        
-        # Debug the output context
         
         return context
         
     except Exception as e:
-        
         # Return a minimal valid context in case of error
         return {
             'item': item,
@@ -97,5 +114,6 @@ def render_tree_item(item, level_type, model_fields, parent=None):
             'children_attr': None,
             'parent': parent,
             'fields': [{'name': 'name', 'type': 'string'}],
-            'level': 1
+            'level': 1,
+            'measurement_types': None
         }

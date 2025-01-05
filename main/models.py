@@ -1,6 +1,15 @@
 from django.db import models
 from django.core.exceptions import ValidationError
 
+class MeasurementType(models.Model):
+        name = models.CharField(max_length=50, unique=True)  # e.g., 'power'
+        display_name = models.CharField(max_length=100)      # e.g., 'Power (kW)'
+        unit = models.CharField(max_length=10)               # e.g., 'kW'
+        description = models.TextField(blank=True)
+
+        def __str__(self):
+            return self.display_name
+
 class Project(models.Model):
     PROJECT_TYPES = [
         ('Audit', 'Audit'),
@@ -58,15 +67,9 @@ class Location(models.Model):
             })
 
 class Measurement(models.Model):
-    MEASUREMENT_TYPES = [
-        ('power', 'Power (kW)'),
-        ('temperature', 'Temperature (°F)'),
-        ('pressure', 'Pressure (PSI)'),
-    ]
-
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
-    measurement_type = models.CharField(max_length=20, choices=MEASUREMENT_TYPES)
+    measurement_type = models.ForeignKey(MeasurementType, on_delete=models.PROTECT)
     location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name='measurements')
 
     class Meta:
@@ -78,7 +81,7 @@ class Measurement(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.name} ({self.get_measurement_type_display()})"
+        return f"{self.name} ({self.measurement_type.display_name})"
 
     def get_hierarchy(self):
         return f"{self.location.get_hierarchy()} > {self.name}"
@@ -99,13 +102,42 @@ class Measurement(models.Model):
                 raise ValidationError({
                     'name': 'A measurement with this name already exists in this location'
                 })
-       
 
     @property
     def unit(self):
-        units = {
-            'power': 'kW',
-            'temperature': '°F',
-            'pressure': 'PSI'
-        }
-        return units.get(self.measurement_type, '')
+        return self.measurement_type.unit
+    
+        
+class TimeSeriesData(models.Model):
+    timestamp = models.DateTimeField(db_index=True)
+    measurement = models.ForeignKey(Measurement, on_delete=models.CASCADE)
+    value = models.FloatField()
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['measurement', 'timestamp']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['timestamp', 'measurement'],
+                name='unique_measurement_timestamp'
+            )
+        ]
+class DataImport(models.Model):
+    IMPORT_STATUS = [
+        ('uploaded', 'File Uploaded'),
+        ('analyzed', 'Data Analyzed'),
+        ('mapped', 'Measurements Mapped'),
+        ('imported', 'Data Imported'),
+        ('error', 'Error'),
+    ]
+    
+    file = models.FileField(upload_to='imports/')
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    status = models.CharField(max_length=20, choices=IMPORT_STATUS, default='uploaded')
+    error_message = models.TextField(blank=True)
+    stats = models.JSONField(default=dict)
+    processed_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True)
+
+    def __str__(self):
+        return f"Import {self.id} - {self.status} at {self.uploaded_at}"

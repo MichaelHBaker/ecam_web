@@ -1,5 +1,5 @@
 # tests/utils_data.py
-from ..models import Project, Location, Measurement
+from ..models import Project, Location, Measurement, MeasurementType
 import datetime
 import decimal
 import csv
@@ -12,11 +12,36 @@ def create_csv_file(file_path, data, delimiter=',', encoding='utf-8'):
         writer = csv.writer(csvfile, delimiter=delimiter)
         writer.writerows(data)
 
-# All CSV helper functions remain unchanged...
-# [create_valid_csv, create_empty_csv, etc.]
-
 def create_model_table_data():
     """Create test data for models"""
+    # Create or get MeasurementTypes
+    power_type, _ = MeasurementType.objects.get_or_create(
+        name='power',
+        defaults={
+            'display_name': 'Power (kW)',
+            'unit': 'kW',
+            'description': 'Power consumption measurement'
+        }
+    )
+    
+    temp_type, _ = MeasurementType.objects.get_or_create(
+        name='temperature',
+        defaults={
+            'display_name': 'Temperature (°F)',
+            'unit': '°F',
+            'description': 'Temperature measurement'
+        }
+    )
+    
+    pressure_type, _ = MeasurementType.objects.get_or_create(
+        name='pressure',
+        defaults={
+            'display_name': 'Pressure (PSI)',
+            'unit': 'PSI',
+            'description': 'Pressure measurement'
+        }
+    )
+
     # Create Projects
     project1 = Project.objects.create(
         name="Energy Trust Production",
@@ -59,20 +84,20 @@ def create_model_table_data():
     Measurement.objects.create(
         name="Main Power Meter",
         description="Primary building power meter",
-        measurement_type="power",
+        measurement_type=power_type,
         location=com
     )
     
     Measurement.objects.create(
         name="HVAC Temperature",
         description="Main HVAC system temperature",
-        measurement_type="temperature",
+        measurement_type=temp_type,
         location=com
     )
     
     Measurement.objects.create(
         name="Process Line Pressure",
         description="Manufacturing line pressure sensor",
-        measurement_type="pressure",
+        measurement_type=pressure_type,
         location=ind
     )

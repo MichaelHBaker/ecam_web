@@ -3,7 +3,7 @@ from rest_framework import status
 from django.urls import reverse
 from datetime import date
 from ..test_base import BaseAPITestCase
-from ...models import Project
+from ...models import Project, Location, Measurement, MeasurementType
 
 class TestProjectAPI(BaseAPITestCase):
     def setUp(self):
@@ -82,18 +82,26 @@ class TestProjectAPI(BaseAPITestCase):
 
     def test_delete_project_cascade(self):
         """Test deleting a project cascades to locations and measurements"""
+        # Create a project with nested structure
         project = Project.objects.create(
             name="Cascade Test Project",
             project_type="Audit"
         )
-        location = project.locations.create(
+        location = Location.objects.create(
+            project=project,
             name="Test Location",
             address="123 Test St"
         )
-        measurement = location.measurements.create(
+        measurement = Measurement.objects.create(
             name="Test Measurement",
-            measurement_type="power"
+            location=location,
+            measurement_type=self.power_type
         )
+
+        # Store IDs for verification
+        location_id = location.pk
+        measurement_id = measurement.pk
+        measurement_type_id = self.power_type.pk
 
         # Delete project
         url = reverse('project-detail', kwargs={'pk': project.pk})
@@ -102,11 +110,23 @@ class TestProjectAPI(BaseAPITestCase):
 
         # Verify cascade
         self.assertFalse(Project.objects.filter(pk=project.pk).exists())
-        self.assertFalse(location.__class__.objects.filter(pk=location.pk).exists())
-        self.assertFalse(measurement.__class__.objects.filter(pk=measurement.pk).exists())
+        self.assertFalse(Location.objects.filter(pk=location_id).exists())
+        self.assertFalse(Measurement.objects.filter(pk=measurement_id).exists())
+        # Verify measurement type is NOT deleted
+        self.assertTrue(
+            MeasurementType.objects.filter(pk=measurement_type_id).exists(),
+            "MeasurementType should not be deleted on cascade"
+        )
 
     def test_project_list_structure(self):
         """Test project list includes correct nested structure"""
+        # Create measurement in test location
+        measurement = Measurement.objects.create(
+            name="API Test Measurement",
+            location=self.test_location,
+            measurement_type=self.power_type
+        )
+
         response = self.client.get(self.list_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         
@@ -120,3 +140,18 @@ class TestProjectAPI(BaseAPITestCase):
         # Verify nested location has measurements
         location_data = project_data['locations'][0]
         self.assertIn('measurements', location_data)
+        
+        # Verify measurement includes type information
+        measurement_data = next(
+            m for m in location_data['measurements'] 
+            if m['id'] == measurement.id
+        )
+        self.assertIn('measurement_type', measurement_data)
+        self.assertEqual(
+            measurement_data['measurement_type']['name'], 
+            self.power_type.name
+        )
+        self.assertEqual(
+            measurement_data['measurement_type']['unit'],
+            self.power_type.unit
+        )

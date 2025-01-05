@@ -1,68 +1,200 @@
-from django.http import JsonResponse
-import chardet
+from django.test import TestCase, Client
+from django.urls import reverse
+from django.core.files.uploadedfile import SimpleUploadedFile
+from ..test_base import BaseTestCase
+from ...models import DataImport, MeasurementType
+import json
+import os
 import csv
 from io import StringIO
-import os
-from openpyxl import Workbook
 
-def excel_upload(request):
-    if 'csv_file' not in request.FILES:
-        return JsonResponse({'error': 'CSV file is required'}, status=400)
+class TestExcelUpload(BaseTestCase):
+    def setUp(self):
+        super().setUp()
+        self.upload_url = reverse('excel_upload')
+        self.client = Client()
 
-    csv_file = request.FILES['csv_file']
-    folder_path = request.POST.get('folder_path')
-    workbook_name = request.POST.get('workbook_name')
-    sheet_name = request.POST.get('sheet_name')
+    def create_test_csv(self, data):
+        """Helper method to create a test CSV file"""
+        output = StringIO()
+        writer = csv.writer(output)
+        for row in data:
+            writer.writerow(row)
+        return SimpleUploadedFile(
+            "test.csv",
+            output.getvalue().encode('utf-8'),
+            content_type='text/csv'
+        )
 
-    if not all([folder_path, workbook_name, sheet_name]):
-        return JsonResponse({'error': 'All fields are required'}, status=400)
-
-    if not workbook_name.endswith('.xlsx'):
-        workbook_name += '.xlsx'
-
-    if not os.path.exists(folder_path):
-        return JsonResponse({'error': 'Folder path does not exist'}, status=400)
-
-    if csv_file.size == 0:
-        return JsonResponse({'error': 'The selected CSV file is empty'}, status=400)
-
-    try:
-        # Read and validate CSV content
-        raw_content = csv_file.read()
-        detected_encoding = chardet.detect(raw_content)['encoding']
-        file_content = raw_content.decode(detected_encoding)
-        csv_reader = csv.reader(StringIO(file_content))
-        rows = list(csv_reader)
-
-        if len(rows) == 1:
-            return JsonResponse({'error': 'The CSV file contains only headers'}, status=400)
-
-        # Check for inconsistent columns
-        column_count = len(rows[0])
-        if any(len(row) != column_count for row in rows[1:]):
-            return JsonResponse({'error': 'Inconsistent number of columns in CSV'}, status=400)
-
-        # Check for duplicate headers
-        headers = rows[0]
-        if len(headers) != len(set(headers)):
-            return JsonResponse({'error': 'Duplicate headers found in CSV'}, status=400)
-
-        # Create Excel workbook
-        wb = Workbook()
-        ws = wb.active
-        ws.title = sheet_name
-
-        for row in rows:
-            ws.append(row)
-
-        full_path = os.path.join(folder_path, workbook_name)
-        wb.save(full_path)
-
-        return JsonResponse({
-            'status': 'success',
-            'message': 'Valid CSV File'
+    def test_valid_upload_with_measurement_types(self):
+        """Test uploading a valid CSV with measurement type mappings"""
+        # Create CSV with measurement type columns
+        data = [
+            ['timestamp', 'location', 'measurement_type', 'value'],
+            ['2024-01-01 00:00:00', 'Test Location', 'power', '100.5'],
+            ['2024-01-01 00:00:00', 'Test Location', 'temperature', '72.0']
+        ]
+        csv_file = self.create_test_csv(data)
+        
+        response = self.client.post(self.upload_url, {
+            'csv_file': csv_file,
+            'folder_path': '/tmp',
+            'workbook_name': 'test_workbook',
+            'sheet_name': 'Sheet1'
         })
-    except UnicodeDecodeError:
-        return JsonResponse({'error': 'Unable to decode file content'}, status=400)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'success')
+
+    def test_invalid_measurement_type(self):
+        """Test uploading CSV with invalid measurement type"""
+        data = [
+            ['timestamp', 'location', 'measurement_type', 'value'],
+            ['2024-01-01 00:00:00', 'Test Location', 'invalid_type', '100.5']
+        ]
+        csv_file = self.create_test_csv(data)
+        
+        response = self.client.post(self.upload_url, {
+            'csv_file': csv_file,
+            'folder_path': '/tmp',
+            'workbook_name': 'test_workbook',
+            'sheet_name': 'Sheet1'
+        })
+        
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.json())
+        self.assertIn('measurement_type', response.json()['error'])
+
+    def test_measurement_type_case_insensitive(self):
+        """Test that measurement type matching is case insensitive"""
+        data = [
+            ['timestamp', 'location', 'measurement_type', 'value'],
+            ['2024-01-01 00:00:00', 'Test Location', 'POWER', '100.5'],
+            ['2024-01-01 00:00:00', 'Test Location', 'Temperature', '72.0']
+        ]
+        csv_file = self.create_test_csv(data)
+        
+        response = self.client.post(self.upload_url, {
+            'csv_file': csv_file,
+            'folder_path': '/tmp',
+            'workbook_name': 'test_workbook',
+            'sheet_name': 'Sheet1'
+        })
+        
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'success')
+
+    def test_missing_measurement_type_column(self):
+        """Test uploading CSV without measurement type column"""
+        data = [
+            ['timestamp', 'location', 'value'],  # Missing measurement_type
+            ['2024-01-01 00:00:00', 'Test Location', '100.5']
+        ]
+        csv_file = self.create_test_csv(data)
+        
+        response = self.client.post(self.upload_url, {
+            'csv_file': csv_file,
+            'folder_path': '/tmp',
+            'workbook_name': 'test_workbook',
+            'sheet_name': 'Sheet1'
+        })
+        
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('error', response.json())
+        self.assertIn('measurement_type', response.json()['error'])
+
+    def test_import_status_tracking(self):
+        """Test that import status is tracked with measurement types"""
+        data = [
+            ['timestamp', 'location', 'measurement_type', 'value'],
+            ['2024-01-01 00:00:00', 'Test Location', 'power', '100.5']
+        ]
+        csv_file = self.create_test_csv(data)
+        
+        response = self.client.post(self.upload_url, {
+            'csv_file': csv_file,
+            'folder_path': '/tmp',
+            'workbook_name': 'test_workbook',
+            'sheet_name': 'Sheet1'
+        })
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Check import record
+        latest_import = DataImport.objects.latest('uploaded_at')
+        self.assertEqual(latest_import.status, 'analyzed')
+        self.assertIn('measurement_types', latest_import.stats)
+        self.assertIn('power', latest_import.stats['measurement_types'])
+
+    def test_multiple_measurement_types(self):
+        """Test handling multiple measurement types in same upload"""
+        data = [
+            ['timestamp', 'location', 'measurement_type', 'value'],
+            ['2024-01-01 00:00:00', 'Loc1', 'power', '100.5'],
+            ['2024-01-01 00:00:00', 'Loc1', 'temperature', '72.0'],
+            ['2024-01-01 00:00:00', 'Loc2', 'power', '95.2'],
+            ['2024-01-01 00:00:00', 'Loc2', 'temperature', '74.5']
+        ]
+        csv_file = self.create_test_csv(data)
+        
+        response = self.client.post(self.upload_url, {
+            'csv_file': csv_file,
+            'folder_path': '/tmp',
+            'workbook_name': 'test_workbook',
+            'sheet_name': 'Sheet1'
+        })
+        
+        self.assertEqual(response.status_code, 200)
+        
+        # Verify stats in import record
+        latest_import = DataImport.objects.latest('uploaded_at')
+        stats = latest_import.stats
+        self.assertEqual(len(stats['measurement_types']), 2)
+        self.assertEqual(stats['measurement_types']['power'], 2)
+        self.assertEqual(stats['measurement_types']['temperature'], 2)
+
+    def test_measurement_type_validation_rules(self):
+        """Test validation rules for measurement type values"""
+        test_cases = [
+            {
+                'value': '500',
+                'type': 'power',
+                'expected_valid': True
+            },
+            {
+                'value': '-10',
+                'type': 'power',
+                'expected_valid': False  # Power shouldn't be negative
+            },
+            {
+                'value': '72',
+                'type': 'temperature',
+                'expected_valid': True
+            },
+            {
+                'value': 'invalid',
+                'type': 'power',
+                'expected_valid': False
+            }
+        ]
+        
+        for test_case in test_cases:
+            data = [
+                ['timestamp', 'location', 'measurement_type', 'value'],
+                ['2024-01-01 00:00:00', 'Test Location', 
+                 test_case['type'], test_case['value']]
+            ]
+            csv_file = self.create_test_csv(data)
+            
+            response = self.client.post(self.upload_url, {
+                'csv_file': csv_file,
+                'folder_path': '/tmp',
+                'workbook_name': 'test_workbook',
+                'sheet_name': 'Sheet1'
+            })
+            
+            if test_case['expected_valid']:
+                self.assertEqual(response.status_code, 200)
+            else:
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('error', response.json())

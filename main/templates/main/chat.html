@@ -1,0 +1,30 @@
+<!-- myapp/templates/myapp/chat.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat with Claude</title>
+    <script>
+        async function sendMessage() {
+            const prompt = document.getElementById('prompt').value;
+            const response = await fetch('/main/api/chat/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({ prompt: prompt }),
+            });
+
+            const data = await response.json();
+            document.getElementById('response').innerText = data.error || data.text;  // Adjust based on the response structure
+        }
+    </script>
+</head>
+<body>
+    <h1>Chat with Claude</h1>
+    <input type="text" id="prompt" placeholder="Type your message here..." />
+    <button onclick="sendMessage()">Send</button>
+    <p id="response"></p>
+</body>
+</html>

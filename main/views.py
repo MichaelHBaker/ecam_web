@@ -1,10 +1,12 @@
 # views.py
 from django.shortcuts import render, redirect
+from django.db import models
 from django.http import JsonResponse
 from django.contrib.auth import authenticate, login
 from django.template.loader import render_to_string
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.views import View
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -26,6 +28,12 @@ from io import StringIO
 import os
 from openpyxl import Workbook
 
+
+class ChatPageView(View):
+    def get(self, request):
+        return render(request, 'main/chat.html')
+
+
 class TreeItemMixin:
     """Mixin for tree item viewsets that handles template rendering and parent/child relationships"""
     level_type = None  # Must be set by child class
@@ -33,6 +41,93 @@ class TreeItemMixin:
     has_children = True  # False for bottom level (Measurement)
     authentication_classes = [SessionAuthentication, BasicAuthentication]
     permission_classes = [IsAuthenticated]
+
+    def get_field_metadata(self, model_class):
+        """Get enhanced field metadata including foreign key information"""
+        fields = []
+        for field in model_class._meta.fields:
+            if field.name in ('id', 'created_at', 'updated_at'):
+                continue
+                
+            field_info = {
+                'name': field.name,
+                'type': field.get_internal_type(),
+                'required': not field.blank,
+                'verbose_name': field.verbose_name,
+                'is_foreign_key': isinstance(field, models.ForeignKey),
+                'display_field': 'name'  # Add default display field
+            }
+            
+            # Handle foreign keys
+            if field_info['is_foreign_key']:
+                related_model = field.related_model
+                print(f"Processing foreign key field {field.name} for model {related_model.__name__}")
+                related_objects = related_model.objects.all()
+                print(f"Found {related_objects.count()} related objects")
+                    
+                # Build choice info based on available attributes
+                choices = []
+                for obj in related_objects:
+                    choice = {'id': obj.id}
+                    
+                    # Use display_name if available, otherwise name
+                    if hasattr(obj, 'display_name'):
+                        choice['display_name'] = obj.display_name
+                    elif hasattr(obj, 'name'):
+                        choice['display_name'] = getattr(obj, 'name')
+                    else:
+                        choice['display_name'] = str(obj)
+                        
+                    # Include unit if available
+                    if hasattr(obj, 'unit'):
+                        choice['unit'] = obj.unit
+                        
+                    choices.append(choice)
+                    
+                field_info.update({
+                    'related_model': related_model._meta.model_name,
+                    'choices': choices,
+                    'display_field': 'display_name' if hasattr(related_model, 'display_name') else 'name'
+                })
+                print(f"Field info for {field.name}: {field_info}")
+            
+            # Handle choices for non-FK fields (like project_type)
+            elif hasattr(field, 'choices') and field.choices:
+                field_info.update({
+                    'type': 'choice',
+                    'choices': [
+                        {'id': choice[0], 'display_name': choice[1]}
+                        for choice in field.choices
+                    ]
+                })
+                
+            fields.append(field_info)
+            
+        return fields
+    
+    def get_context_for_item(self, instance, parent=None):
+        """Prepare context for rendering a tree item"""
+        # Get fields for current level
+        fields = self.get_field_metadata(self.get_serializer().Meta.model)
+        
+        # Get type info from model fields serializer
+        fields_serializer = ModelFieldsSerializer()
+        model_fields = fields_serializer.to_representation(None)
+        type_info = model_fields.get(self.level_type, {})
+        
+        # Get next level type and children attribute
+        next_level_type = type_info.get('child_type')
+        children_attr = f"{next_level_type}s" if next_level_type else None
+
+        return {
+            'item': instance,
+            'level_type': self.level_type,
+            'model_fields': model_fields,
+            'parent': parent,
+            'fields': fields,
+            'next_level_type': next_level_type,
+            'children_attr': children_attr
+        }
 
     def create(self, request, *args, **kwargs):
         try:
@@ -58,36 +153,10 @@ class TreeItemMixin:
             if self.parent_field:
                 parent = getattr(serializer.instance, self.parent_field)
 
-            # Create serializer instance for model fields
-            fields_serializer = ModelFieldsSerializer(instance=None)
-            model_fields = fields_serializer.to_representation(None)
+            # Get context for rendering
+            context = self.get_context_for_item(serializer.instance, parent)
             
-            # Get type info for current level
-            type_info = model_fields.get(self.level_type, {})
-            
-            # Get the fields for this type
-            fields = type_info.get('fields', [])
-            if isinstance(fields, dict):
-                fields = [{'name': k, 'type': v.get('type', 'string')} for k, v in fields.items()]
-            elif isinstance(fields, list) and fields and isinstance(fields[0], str):
-                fields = [{'name': f, 'type': 'string'} for f in fields]
-            
-            # Get next level type
-            next_level_type = type_info.get('child_type')
-            children_attr = f"{next_level_type}s" if next_level_type else None
-
-            # Create context
-            context = {
-                'item': serializer.instance,
-                'level_type': self.level_type,
-                'model_fields': model_fields,
-                'parent': parent,
-                'fields': fields,
-                'next_level_type': next_level_type,
-                'children_attr': children_attr,
-                'measurement_types': MeasurementType.objects.all() if self.level_type == 'measurement' else None
-            }
-
+            # Render template
             html = render_to_string('main/tree_item.html', context, request=request)
             
             return Response({
@@ -95,18 +164,12 @@ class TreeItemMixin:
                 'html': html
             }, status=status.HTTP_201_CREATED)
             
-        except serializers.ValidationError as e:
-            return Response(
-                {'detail': self.format_validation_errors(e.detail)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
         except Exception as e:
-            import traceback
             return Response(
                 {'detail': str(e)},
-                status=status.HTTP_400_BAD_REQUEST  # Changed from 500 to 400
+                status=status.HTTP_400_BAD_REQUEST
             )
-        
+    
     def update(self, request, *args, **kwargs):
         partial = kwargs.pop('partial', False)
         instance = self.get_object()
@@ -156,6 +219,39 @@ class LocationViewSet(TreeItemMixin, viewsets.ModelViewSet):
     parent_field = 'project'
     child_attr = 'measurements'
 
+    def create(self, request, *args, **kwargs):
+        print("Location create request data:", request.data)
+        serializer = self.get_serializer(data=request.data)
+        try:
+            if not serializer.is_valid():
+                print("Validation errors:", serializer.errors)
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
+            self.perform_create(serializer)
+            
+            # Get context and log it
+            context = self.get_context_for_item(serializer.instance, 
+                                            getattr(serializer.instance, self.parent_field, None))
+            print("Context for new item:", context)
+            
+            html = render_to_string('main/tree_item.html', context, request=request)
+            
+            # Also check how the instance string representation looks
+            print("New location str:", str(serializer.instance))
+            print("New location name:", serializer.instance.name)
+            
+            return Response({
+                'data': serializer.data,
+                'html': html
+            }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            print("Location create error:", str(e))
+            print("Error type:", type(e))
+            if hasattr(e, 'detail'):
+                print("Error detail:", e.detail)
+            raise
+
     def get_queryset(self):
         queryset = Location.objects.all()
         project_id = self.request.query_params.get('project')
@@ -187,6 +283,12 @@ class MeasurementViewSet(TreeItemMixin, viewsets.ModelViewSet):
     parent_field = 'location'
     has_children = False
     child_attr = None
+
+    def create(self, request, *args, **kwargs):
+            print("MeasurementViewSet create starting")
+            fields = self.get_field_metadata(self.get_serializer().Meta.model)
+            print("Measurement fields:", fields)
+            return super().create(request, *args, **kwargs)
 
     def get_queryset(self):
         queryset = Measurement.objects.select_related('measurement_type').all()

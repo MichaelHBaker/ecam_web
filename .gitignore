@@ -134,3 +134,5 @@ dmypy.json
 test_files/
 
 frontend/
+
+config.json

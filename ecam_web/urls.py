@@ -9,6 +9,7 @@ from django.urls import path, include
 from rest_framework import routers
 from main import views
 
+
 # Create a router and register our viewsets
 router = routers.DefaultRouter()
 router.register(r'projects', views.ProjectViewSet, basename='project')
@@ -25,5 +26,6 @@ urlpatterns = [
     path('measurement/', views.measurement, name='measurement'),
     path('data/', views.data, name='data'),
     path('model/', views.model, name='model'),
-    path('api/', include(router.urls)),  
+    path('api/', include(router.urls)),
+    path('main/', include('main.urls')),  
 ]

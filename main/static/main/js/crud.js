@@ -128,43 +128,46 @@ const mapChoiceValue = (value, choices, toInternal = false) => {
 
 // Create form field with proper configuration
 const createField = (field, type, tempId, fieldInfo) => {
-    const element = (fieldInfo?.type === 'choice' || field === 'measurement_type_id') ? 'select' : 'input';
+    const element = (fieldInfo?.is_foreign_key || fieldInfo?.type === 'choice') ? 'select' : 'input';
     const input = document.createElement(element);
     input.id = `id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${tempId}`;
     input.name = field;
     input.className = 'tree-item-field editing';
 
-    if (field === 'measurement_type_id') {
-        // Special handling for measurement type selection
-        input.className += ' measurement-type-select';
+    if (fieldInfo?.is_foreign_key) {
+        // Handle foreign key fields (including measurement_type)
+        input.className += ' fk-select';
         // Add empty option
-        const emptyOption = document.createElement('option');
-        emptyOption.value = '';
-        emptyOption.textContent = 'Select measurement type';
-        input.appendChild(emptyOption);
-
-        // Add measurement type choices - these come from the fieldInfo.choices
-        if (fieldInfo?.choices) {
-            fieldInfo.choices.forEach(choice => {
-                const option = document.createElement('option');
-                option.value = choice.value;  // Use ID as value
-                option.textContent = choice.display;  // Use display_name as text
-                input.appendChild(option);
-            });
-        }
-    } else if (fieldInfo?.type === 'choice' && fieldInfo.choices) {
-        // Standard choice field handling
         const emptyOption = document.createElement('option');
         emptyOption.value = '';
         emptyOption.textContent = `Select ${field.replace(/_/g, ' ')}`;
         input.appendChild(emptyOption);
 
-        fieldInfo.choices.forEach(choice => {
-            const option = document.createElement('option');
-            option.value = choice.value;
-            option.textContent = choice.display;
-            input.appendChild(option);
-        });
+        // Add choices
+        if (fieldInfo.choices) {
+            fieldInfo.choices.forEach(choice => {
+                const option = document.createElement('option');
+                option.value = choice.id;
+                option.textContent = choice.display_name;
+                input.appendChild(option);
+            });
+        }
+    } else if (fieldInfo?.type === 'choice') {
+        // Handle regular choice fields
+        input.className += ' choice-select';
+        const emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.textContent = `Select ${field.replace(/_/g, ' ')}`;
+        input.appendChild(emptyOption);
+
+        if (fieldInfo.choices) {
+            fieldInfo.choices.forEach(choice => {
+                const option = document.createElement('option');
+                option.value = choice.id;
+                option.textContent = choice.display_name;
+                input.appendChild(option);
+            });
+        }
     } else {
         input.type = getInputType(fieldInfo?.type);
         input.placeholder = field.replace(/_/g, ' ');
@@ -176,6 +179,7 @@ const createField = (field, type, tempId, fieldInfo) => {
 
     return input;
 };
+
 
 
 // Create edit controls for forms
@@ -207,12 +211,12 @@ const collectFormData = (type, id, fields, modelInfo) => {
                 throw new Error(`${field.replace(/_/g, ' ')} is required`);
             }
 
-            if (field === 'measurement_type_id') {
-                // Changed: Use measurement_type_id instead of measurement_type
-                data['measurement_type_id'] = value ? parseInt(value, 10) : null;
-            } else if (fieldConfig?.type === 'choice' && fieldConfig.choices) {
-                // Handle other choice fields
-                data[field] = value;
+            if (fieldConfig?.is_foreign_key) {
+                // Handle all foreign keys consistently
+                data[field] = value ? parseInt(value, 10) : null;
+            } else if (fieldConfig?.type === 'choice') {
+                // Handle choice fields
+                data[field] = value || null;
             } else {
                 data[field] = value || null;
             }

@@ -109,7 +109,7 @@ class ModelFieldsSerializer(serializers.Serializer):
         """Return the field definitions for all models"""
         measurement_types = MeasurementType.objects.all()
         measurement_type_choices = [
-            {'value': mt.id, 'display': mt.display_name}
+            {'id': mt.id, 'display_name': mt.display_name}
             for mt in measurement_types
         ]
 
@@ -126,20 +126,22 @@ class ModelFieldsSerializer(serializers.Serializer):
             'location': {
                 'level': 2,
                 'fields': [
-                    {'name': 'name', 'type': 'string', 'required': True},
+                    {'name': 'name', 'type': 'string', 'required': True, 'display_field': True},
                     {'name': 'address', 'type': 'string', 'required': True},
                 ],
                 'child_type': 'measurement',
-                'parent_type': 'project'
+                'parent_type': 'project',
+                'display_field': 'name'
             },
             'measurement': {
                 'level': 3,
                 'fields': [
-                    {'name': 'name', 'type': 'string', 'required': True},
+                    {'name': 'name', 'type': 'string', 'required': True, 'display_field': True},
                     {'name': 'description', 'type': 'string', 'required': False},
                     {'name': 'measurement_type_id', 'type': 'choice', 'required': True,
                      'choices': measurement_type_choices}
                 ],
-                'parent_type': 'location'
+                'parent_type': 'location',
+                'display_field': 'name'
             }
         }

@@ -54,6 +54,14 @@ def get_item(dictionary, key):
     """
     return dictionary.get(key, {})
 
+
+@register.filter
+def get_display_value(obj, field_name):
+    """Get the display value for an object using the specified field"""
+    if field_name and hasattr(obj, field_name):
+        return getattr(obj, field_name)
+    return str(obj)
+
 @register.inclusion_tag('main/tree_item.html')
 def render_tree_item(item, level_type, model_fields, parent=None):
     """

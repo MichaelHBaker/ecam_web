@@ -160,18 +160,18 @@ const updateFieldValue = async (response, type, id, fieldConfig) => {
     }
 };
 
-
-// Create form field with proper configuration
 const createField = (field, type, tempId, fieldInfo) => {
-    const element = (fieldInfo?.is_foreign_key || fieldInfo?.type === 'choice') ? 'select' : 'input';
-    const input = document.createElement(element);
+    const isSelect = fieldInfo?.is_foreign_key || fieldInfo?.type === 'choice';
+    const input = document.createElement(isSelect ? 'select' : 'input');
+    
+    // Set basic attributes
     input.id = `id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${tempId}`;
     input.name = field;
     input.className = 'tree-item-field editing';
 
     if (fieldInfo?.is_foreign_key) {
-        // Handle foreign key fields (including measurement_type)
         input.className += ' fk-select';
+        
         // Add empty option
         const emptyOption = document.createElement('option');
         emptyOption.value = '';
@@ -183,28 +183,33 @@ const createField = (field, type, tempId, fieldInfo) => {
             fieldInfo.choices.forEach(choice => {
                 const option = document.createElement('option');
                 option.value = choice.id;
-                option.textContent = choice.display_name;
+                option.textContent = choice.display_name || choice.name || choice.id;
+                if (choice.unit) {
+                    option.textContent += ` (${choice.unit})`;
+                }
                 input.appendChild(option);
             });
         }
     } else if (fieldInfo?.type === 'choice') {
-        // Handle regular choice fields
         input.className += ' choice-select';
+        
+        // Add empty option
         const emptyOption = document.createElement('option');
         emptyOption.value = '';
         emptyOption.textContent = `Select ${field.replace(/_/g, ' ')}`;
         input.appendChild(emptyOption);
 
+        // Add choices
         if (fieldInfo.choices) {
             fieldInfo.choices.forEach(choice => {
                 const option = document.createElement('option');
                 option.value = choice.id;
-                option.textContent = choice.display_name;
+                option.textContent = choice.display_name || choice.name || choice.id;
                 input.appendChild(option);
             });
         }
     } else {
-        input.type = getInputType(fieldInfo?.type);
+        input.type = getInputType(fieldInfo);
         input.placeholder = field.replace(/_/g, ' ');
     }
 
@@ -214,8 +219,6 @@ const createField = (field, type, tempId, fieldInfo) => {
 
     return input;
 };
-
-
 
 // Create edit controls for forms
 const createEditControls = (type, id) => {
@@ -593,6 +596,8 @@ export const editItem = async (type, id, fields) => {
         if (nameField) {
             nameField.focus();
         }
+        console.log('Fields for type:', type, 'Fields:', fields, 'TypeConfig:', typeConfig);
+    
     } catch (error) {
         console.error('Error in editItem:', error);
         alert(error.message || 'An error occurred while editing. Please try again.');

@@ -119,7 +119,7 @@ class ModelFieldsSerializer(serializers.Serializer):
                 'fields': [
                     {'name': 'name', 'type': 'string', 'required': True},
                     {'name': 'project_type', 'type': 'choice', 'required': True, 
-                     'choices': [{'value': c[0], 'display': c[1]} for c in Project.PROJECT_TYPES]},
+                     'choices': [{'id': c[0], 'display_name': c[1]} for c in Project.PROJECT_TYPES]},
                 ],
                 'child_type': 'location'
             },

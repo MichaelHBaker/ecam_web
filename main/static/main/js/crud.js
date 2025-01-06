@@ -96,35 +96,70 @@ const ensureInitialized = async () => {
 
 // Helper functions for input handling and field creation
 
-// Enhanced input type mapping
-const getInputType = (drfType) => {
+// Generalizing the input type mapping
+const getInputType = (fieldConfig) => {
+    // Base type mappings
     const typeMap = {
-        string: 'text',
-        integer: 'number',
-        decimal: 'number',
-        boolean: 'checkbox',
-        date: 'date',
-        datetime: 'datetime-local',
-        email: 'email',
-        url: 'url',
-        choice: 'select',
-        measurement_type: 'select'  // Added special type for measurement types
+        'CharField': 'text',
+        'TextField': 'text',
+        'IntegerField': 'number',
+        'DecimalField': 'number',
+        'BooleanField': 'checkbox',
+        'DateField': 'date',
+        'DateTimeField': 'datetime-local',
+        'EmailField': 'email',
+        'URLField': 'url'
     };
-    return typeMap[drfType] || 'text';
+
+    // Handle special cases
+    if (fieldConfig.is_foreign_key || fieldConfig.type === 'choice') {
+        return 'select';
+    }
+
+    return typeMap[fieldConfig.type] || 'text';
 };
 
-// Choice field value mapping helper
-const mapChoiceValue = (value, choices, toInternal = false) => {
-    if (!choices) return value;
-    
-    if (toInternal) {
-        const choice = choices.find(c => c.display === value);
-        return choice ? choice.value : value;
+// Helper function to handle field value updates
+const updateFieldValue = async (response, type, id, fieldConfig) => {
+    const fieldElement = document.getElementById(`id_${type}${fieldConfig.name.charAt(0).toUpperCase() + fieldConfig.name.slice(1)}-${id}`);
+    if (!fieldElement) return;
+
+    if (fieldConfig.is_foreign_key) {
+        // Handle foreign key fields
+        const relatedData = response[fieldConfig.name];
+        if (relatedData) {
+            const displayValue = relatedData[fieldConfig.display_field || 'name'];
+            const unit = relatedData.unit ? ` (${relatedData.unit})` : '';
+            
+            // Update display if there's a separate display element
+            const displayElement = document.getElementById(`id_${type}${fieldConfig.name}Display-${id}`);
+            if (displayElement) {
+                displayElement.innerHTML = `${displayValue}${unit}`;
+            }
+            
+            // Update the select element's value
+            fieldElement.value = relatedData.id;
+        }
+    } else if (fieldConfig.type === 'choice') {
+        // Handle choice fields
+        const choiceValue = response[fieldConfig.name];
+        fieldElement.value = choiceValue;
+        
+        // Update display value if needed
+        const displayElement = document.getElementById(`id_${type}${fieldConfig.name}Display-${id}`);
+        if (displayElement) {
+            const selectedOption = Array.from(fieldElement.options)
+                .find(option => option.value === choiceValue);
+            if (selectedOption) {
+                displayElement.textContent = selectedOption.textContent;
+            }
+        }
     } else {
-        const choice = choices.find(c => c.value === value);
-        return choice ? choice.display : value;
+        // Handle regular fields
+        fieldElement.value = response[fieldConfig.name] || '';
     }
 };
+
 
 // Create form field with proper configuration
 const createField = (field, type, tempId, fieldInfo) => {
@@ -388,45 +423,47 @@ export const addItem = async (type, fields, parentId = null) => {
     }
 };
 
+// Updated updateItem function
 export const updateItem = async (event, type, id, fields) => {
     event.preventDefault();
 
     try {
         const modelFields = await ensureInitialized();
+        const typeConfig = modelFields[type];
         const data = {};
         let hasErrors = false;
 
-        // Get parent ID and handle parent relationship
+        // Handle parent relationship
         const parentIdInput = event.target.querySelector('input[name="parent_id"]');
-        const typeConfig = modelFields[type];
-        
-        if (typeConfig.parent_type) {
-            if (parentIdInput && parentIdInput.value) {
-                data[typeConfig.parent_type] = parseInt(parentIdInput.value, 10);
-            } else {
-                throw new Error(`Parent ${typeConfig.parent_type} is required for ${type}`);
-            }
+        if (typeConfig.parent_type && parentIdInput?.value) {
+            data[typeConfig.parent_type] = parseInt(parentIdInput.value, 10);
         }
 
-        // Validate and collect all field values
-        fields.forEach((field) => {
-            const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
-            if (element) {
-                const value = element.value.trim();
-                const fieldConfig = typeConfig.fields.find(f => f.name === field);
+        // Validate and collect field values
+        fields.forEach((fieldName) => {
+            const fieldConfig = typeConfig.fields.find(f => f.name === fieldName);
+            if (!fieldConfig) return;
 
-                if (!value && fieldConfig?.required) {
-                    element.classList.add('error');
-                    hasErrors = true;
-                } else {
-                    element.classList.remove('error');
-                    if (field === 'measurement_type_id') {
-                        // Changed: Use measurement_type_id instead of measurement_type
-                        data['measurement_type_id'] = value ? parseInt(value, 10) : null;
-                    } else {
-                        data[field] = value || null;
-                    }
-                }
+            const element = document.getElementById(`id_${type}${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)}-${id}`);
+            if (!element) return;
+
+            const value = element.value.trim();
+
+            // Validation
+            if (!value && fieldConfig.required) {
+                element.classList.add('error');
+                hasErrors = true;
+                return;
+            }
+            element.classList.remove('error');
+
+            // Handle different field types
+            if (fieldConfig.is_foreign_key) {
+                data[`${fieldName}_id`] = value ? parseInt(value, 10) : null;
+            } else if (fieldConfig.type === 'choice') {
+                data[fieldName] = value || null;
+            } else {
+                data[fieldName] = value || null;
             }
         });
 
@@ -434,32 +471,32 @@ export const updateItem = async (event, type, id, fields) => {
             throw new Error('Please fill in all required fields');
         }
 
-        // Clear any existing error
+        // Clear existing errors
         const existingError = document.getElementById(`id_${type}Error-${id}`);
         if (existingError) {
             existingError.remove();
         }
 
+        // Make API call
         const response = await apiFetch(`/${type}s/${id}/`, {
             method: 'PATCH',
             body: JSON.stringify(data),
         });
 
-        resetFields(type, id, fields);
-
-        // Update measurement type display if needed
-        if (type === 'measurement') {
-            const displayElement = document.getElementById(`id_${type}measurement_type_idDisplay-${id}`);
-            if (displayElement && response.measurement_type) {
-                displayElement.innerHTML = `
-                    ${response.measurement_type.display_name}
-                    <span class="measurement-unit">(${response.measurement_type.unit})</span>
-                `;
+        // Update fields with response data
+        fields.forEach(fieldName => {
+            const fieldConfig = typeConfig.fields.find(f => f.name === fieldName);
+            if (fieldConfig) {
+                updateFieldValue(response, type, id, fieldConfig);
             }
-        }
+        });
+
+        // Reset field states
+        resetFields(type, id, fields);
 
         return response;
     } catch (error) {
+        // Error handling
         const errorDisplay = document.createElement('div');
         errorDisplay.id = `id_${type}Error-${id}`;
         errorDisplay.className = 'w3-text-red';
@@ -529,15 +566,18 @@ export const editItem = async (type, id, fields) => {
             const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
             if (element) {
                 element.dataset.originalValue = element.value.trim();
-                element.removeAttribute('readonly');
-                element.style.display = "inline";
-                element.classList.add('editing');
-
-                // Special handling for choice fields
-                const fieldConfig = typeConfig.fields.find(f => f.name === field);
-                if (fieldConfig?.type === 'choice' && fieldConfig.choices) {
-                    // Store the original display value
-                    element.dataset.originalDisplayValue = element.value;
+                
+                if (element.tagName.toLowerCase() === 'select') {
+                    // Handle select elements (both choice and foreign key)
+                    element.removeAttribute('disabled');
+                    element.style.display = "inline";
+                    element.classList.add('editing');
+                    element.dataset.originalDisplayValue = element.options[element.selectedIndex]?.text || '';
+                } else {
+                    // Handle regular input elements
+                    element.removeAttribute('readonly');
+                    element.style.display = "inline";
+                    element.classList.add('editing');
                 }
             }
         });
@@ -616,39 +656,3 @@ const resetFields = (type, id, fields) => {
         errorDisplay.remove();
     }
 };
-
-// Toggle tree item expansion
-export const toggleOpenClose = (id) => {
-    const div = document.getElementById(id);
-    const icon = document.getElementById(`id_chevronIcon-${id}`);
-    if (!div || !icon) return;
-
-    // Add transition for smooth animation
-    div.style.transition = 'all 0.3s ease-out';
-    icon.style.transition = 'transform 0.3s ease-out';
-
-    const isExpanding = div.classList.contains('w3-hide');
-    
-    if (isExpanding) {
-        div.classList.remove('w3-hide');
-        div.classList.add('w3-show');
-        icon.className = "bi bi-chevron-down";
-        icon.style.transform = 'rotate(90deg)';
-    } else {
-        div.classList.remove('w3-show');
-        div.classList.add('w3-hide');
-        icon.className = "bi bi-chevron-right";
-        icon.style.transform = 'rotate(0deg)';
-    }
-
-    // Remove transition after animation completes
-    setTimeout(() => {
-        div.style.transition = '';
-        icon.style.transition = '';
-    }, 300);
-};
-
-// Initialize MODEL_FIELDS when the module loads
-initializeModelFields().catch(error => {
-    console.error('Failed to initialize MODEL_FIELDS:', error);
-});

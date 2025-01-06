@@ -16,14 +16,16 @@ def get_field_value(obj, field):
         if field_name == 'measurement_type':
             measurement_type = getattr(obj, 'measurement_type', None)
             if measurement_type:
-                return measurement_type.display_name
+                display_name = getattr(measurement_type, 'display_name', None)
+                return display_name if display_name else measurement_type.name
             return ''
         
         # Special handling for measurement_type_id
         if field_name == 'measurement_type_id':
             measurement_type = getattr(obj, 'measurement_type', None)
             if measurement_type:
-                return measurement_type.id
+                display_name = getattr(measurement_type, 'display_name', None)
+                return display_name if display_name else measurement_type.name
             return ''
             
         # Check for choice field display method

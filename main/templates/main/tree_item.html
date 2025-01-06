@@ -26,60 +26,57 @@
             <!-- Fields Container -->
             <div class="fields-container">
                 {% for field in fields %}
-                    {% if field.is_foreign_key %}
-                        <!-- Foreign Key Field -->
-                        <select id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}-{{ item.id }}"
-                                name="{{ field.name }}"
-                                class="tree-item-field fk-select"
-                                style="display: none;"
-                                disabled>
-                            {% for choice in field.choices %}
-                                <option value="{{ choice.id }}" 
-                                        {% if choice.id == item|get_attr:field.name|get_attr:'id' %}selected{% endif %}>
-                                    {{ choice|get_attr:field.display_field }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                        <!-- Display current foreign key value -->
-                        <span id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}Display-{{ item.id }}"
-                              class="fk-display">
-                            {% with related_obj=item|get_attr:field.name %}
-                                {% if related_obj %}
-                                    {{ item|get_attr:field.display_field }}
-                                    {% if related_obj.unit %}
-                                        <span class="fk-unit">({{ related_obj.unit }})</span>
-                                    {% endif %}
-                                {% endif %}
-                            {% endwith %}
-                        </span>
-                    {% elif field.type == 'choice' %}
-                        <!-- Choice Field -->
-                        <select id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}-{{ item.id }}"
-                                name="{{ field.name }}"
-                                class="tree-item-field choice-select"
-                                style="display: none;"
-                                disabled>
-                            {% for choice in field.choices %}
-                                <option value="{{ choice.id }}" 
-                                        {% if choice.id == item|get_attr:field.name %}selected{% endif %}>
-                                    {{ choice.display_name }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                        <span id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}Display-{{ item.id }}"
-                              class="choice-display">
-                            {{ item|get_attr:field.name|default:'' }}
-                        </span>
-                    {% else %}
-                        <!-- Regular Field -->
+                    {% if field.name == 'name' %}
+                        <!-- Always show name field -->
                         <input id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}-{{ item.id }}" 
                                type="text"
                                name="{{ field.name }}"
                                value="{{ item|get_attr:field.name|default:'' }}"
                                class="tree-item-field"
-                               style="display: {% if field.name == 'name' %}inline{% else %}none{% endif %};"
+                               style="display: inline;"
                                title="{{ field.verbose_name }}"
                                readonly>
+                    {% else %}
+                        {% if field.is_foreign_key %}
+                            <!-- Foreign Key Field -->
+                            <select id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}-{{ item.id }}"
+                                    name="{{ field.name }}"
+                                    class="tree-item-field fk-select"
+                                    style="display: none;">
+                                <option value="">Select {{ field.name|title }}</option>
+                                {% for choice in field.choices %}
+                                    <option value="{{ choice.id }}" 
+                                            {% if choice.id == item|get_attr:field.name|get_attr:'id' %}selected{% endif %}>
+                                        {{ choice.display_name }}{% if choice.unit %} ({{ choice.unit }}){% endif %}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        {% elif field.type == 'choice' %}
+                            <!-- Choice Field -->
+                            <select id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}-{{ item.id }}"
+                                    name="{{ field.name }}"
+                                    class="tree-item-field choice-select"
+                                    style="display: none;"
+                                    disabled>
+                                <option value="">Select {{ field.name|title }}</option>
+                                {% for choice in field.choices %}
+                                    <option value="{{ choice.id }}" 
+                                            {% if choice.id == item|get_attr:field.name %}selected{% endif %}>
+                                        {{ choice.display_name }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        {% else %}
+                            <!-- Hidden Regular Field -->
+                            <input id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}-{{ item.id }}" 
+                                   type="text"
+                                   name="{{ field.name }}"
+                                   value="{{ item|get_attr:field.name|default:'' }}"
+                                   class="tree-item-field"
+                                   style="display: none;"
+                                   title="{{ field.verbose_name }}"
+                                   readonly>
+                        {% endif %}
                     {% endif %}
                 {% endfor %}
             </div>

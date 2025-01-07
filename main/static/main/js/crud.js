@@ -379,8 +379,6 @@ export const addItem = async (type, fields, parentId = null) => {
                     body: JSON.stringify(data)
                 });
                 
-                console.log('Add Item Response:', response);
-                console.log('New item HTML:', response.html);
 
                 // Create a temporary div to hold the new HTML
                 const tempDiv = document.createElement('div');
@@ -553,7 +551,6 @@ export const deleteItem = async (type, id) => {
 
 export const editItem = async (type, id, fields) => {
     try {
-        console.log('Edit Item Fields:', {type, id, fields, element: document.getElementById(`field_${type}_name_${id}`)});
         
         const modelFields = await ensureInitialized();
         const typeConfig = modelFields[type];

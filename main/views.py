@@ -61,9 +61,7 @@ class TreeItemMixin:
             # Handle foreign keys
             if field_info['is_foreign_key']:
                 related_model = field.related_model
-                print(f"Processing foreign key field {field.name} for model {related_model.__name__}")
                 related_objects = related_model.objects.all()
-                print(f"Found {related_objects.count()} related objects")
                     
                 # Build choice info based on available attributes
                 choices = []
@@ -89,7 +87,6 @@ class TreeItemMixin:
                     'choices': choices,
                     'display_field': 'display_name' if hasattr(related_model, 'display_name') else 'name'
                 })
-                print(f"Field info for {field.name}: {field_info}")
             
             # Handle choices for non-FK fields (like project_type)
             elif hasattr(field, 'choices') and field.choices:
@@ -233,11 +230,9 @@ class LocationViewSet(TreeItemMixin, viewsets.ModelViewSet):
     child_attr = 'measurements'
 
     def create(self, request, *args, **kwargs):
-        print("Location create request data:", request.data)
         serializer = self.get_serializer(data=request.data)
         try:
             if not serializer.is_valid():
-                print("Validation errors:", serializer.errors)
                 return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
                 
             self.perform_create(serializer)
@@ -245,13 +240,9 @@ class LocationViewSet(TreeItemMixin, viewsets.ModelViewSet):
             # Get context and log it
             context = self.get_context_for_item(serializer.instance, 
                                             getattr(serializer.instance, self.parent_field, None))
-            print("Context for new item:", context)
             
             html = render_to_string('main/tree_item.html', context, request=request)
             
-            # Also check how the instance string representation looks
-            print("New location str:", str(serializer.instance))
-            print("New location name:", serializer.instance.name)
             
             return Response({
                 'data': serializer.data,
@@ -298,9 +289,7 @@ class MeasurementViewSet(TreeItemMixin, viewsets.ModelViewSet):
     child_attr = None
 
     def create(self, request, *args, **kwargs):
-            print("MeasurementViewSet create starting")
             fields = self.get_field_metadata(self.get_serializer().Meta.model)
-            print("Measurement fields:", fields)
             return super().create(request, *args, **kwargs)
 
     def get_queryset(self):

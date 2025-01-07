@@ -96,6 +96,12 @@ const ensureInitialized = async () => {
 
 // Helper functions for input handling and field creation
 
+// Helper function for consistent field ID generation
+export const getFieldId = (type, field, id) => {
+    const fieldName = typeof field === 'string' ? field : field.name;
+    return `field_${type}_${fieldName}_${id}`;
+};
+
 // Generalizing the input type mapping
 const getInputType = (fieldConfig) => {
     // Base type mappings
@@ -372,6 +378,9 @@ export const addItem = async (type, fields, parentId = null) => {
                     method: 'POST',
                     body: JSON.stringify(data)
                 });
+                
+                console.log('Add Item Response:', response);
+                console.log('New item HTML:', response.html);
 
                 // Create a temporary div to hold the new HTML
                 const tempDiv = document.createElement('div');
@@ -426,47 +435,42 @@ export const addItem = async (type, fields, parentId = null) => {
     }
 };
 
-// Updated updateItem function
+// Update existing functions to use the new ID pattern
 export const updateItem = async (event, type, id, fields) => {
     event.preventDefault();
-
     try {
         const modelFields = await ensureInitialized();
         const typeConfig = modelFields[type];
         const data = {};
         let hasErrors = false;
 
-        // Handle parent relationship
         const parentIdInput = event.target.querySelector('input[name="parent_id"]');
-        if (typeConfig.parent_type && parentIdInput?.value) {
-            data[typeConfig.parent_type] = parseInt(parentIdInput.value, 10);
+        
+        if (typeConfig.parent_type) {
+            if (parentIdInput && parentIdInput.value) {
+                data[typeConfig.parent_type] = parseInt(parentIdInput.value, 10);
+            } else {
+                throw new Error(`Parent ${typeConfig.parent_type} is required for ${type}`);
+            }
         }
 
-        // Validate and collect field values
-        fields.forEach((fieldName) => {
-            const fieldConfig = typeConfig.fields.find(f => f.name === fieldName);
-            if (!fieldConfig) return;
+        fields.forEach((field) => {
+            const element = document.getElementById(getFieldId(type, field, id));
+            if (element) {
+                const value = element.value.trim();
+                const fieldConfig = typeConfig.fields.find(f => f.name === field);
 
-            const element = document.getElementById(`id_${type}${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)}-${id}`);
-            if (!element) return;
-
-            const value = element.value.trim();
-
-            // Validation
-            if (!value && fieldConfig.required) {
-                element.classList.add('error');
-                hasErrors = true;
-                return;
-            }
-            element.classList.remove('error');
-
-            // Handle different field types
-            if (fieldConfig.is_foreign_key) {
-                data[`${fieldName}_id`] = value ? parseInt(value, 10) : null;
-            } else if (fieldConfig.type === 'choice') {
-                data[fieldName] = value || null;
-            } else {
-                data[fieldName] = value || null;
+                if (!value && fieldConfig?.required) {
+                    element.classList.add('error');
+                    hasErrors = true;
+                } else {
+                    element.classList.remove('error');
+                    if (field === 'measurement_type_id') {
+                        data['measurement_type_id'] = value ? parseInt(value, 10) : null;
+                    } else {
+                        data[field] = value || null;
+                    }
+                }
             }
         });
 
@@ -474,32 +478,20 @@ export const updateItem = async (event, type, id, fields) => {
             throw new Error('Please fill in all required fields');
         }
 
-        // Clear existing errors
         const existingError = document.getElementById(`id_${type}Error-${id}`);
         if (existingError) {
             existingError.remove();
         }
 
-        // Make API call
         const response = await apiFetch(`/${type}s/${id}/`, {
             method: 'PATCH',
             body: JSON.stringify(data),
         });
 
-        // Update fields with response data
-        fields.forEach(fieldName => {
-            const fieldConfig = typeConfig.fields.find(f => f.name === fieldName);
-            if (fieldConfig) {
-                updateFieldValue(response, type, id, fieldConfig);
-            }
-        });
-
-        // Reset field states
         resetFields(type, id, fields);
 
         return response;
     } catch (error) {
-        // Error handling
         const errorDisplay = document.createElement('div');
         errorDisplay.id = `id_${type}Error-${id}`;
         errorDisplay.className = 'w3-text-red';
@@ -512,6 +504,7 @@ export const updateItem = async (event, type, id, fields) => {
         throw error;
     }
 };
+
 
 // Delete item function
 export const deleteItem = async (type, id) => {
@@ -558,51 +551,49 @@ export const deleteItem = async (type, id) => {
     }
 };
 
-// Edit item function
 export const editItem = async (type, id, fields) => {
     try {
+        console.log('Edit Item Fields:', {type, id, fields, element: document.getElementById(`field_${type}_name_${id}`)});
+        
         const modelFields = await ensureInitialized();
         const typeConfig = modelFields[type];
 
-        // Make fields editable and store original values
         fields.forEach((field) => {
-            const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
+            const element = document.getElementById(getFieldId(type, field, id));
             if (element) {
-                element.dataset.originalValue = element.value.trim();
+                element.dataset.originalValue = element.value;
                 
                 if (element.tagName.toLowerCase() === 'select') {
-                    // Handle select elements (both choice and foreign key)
                     element.removeAttribute('disabled');
-                    element.style.display = "inline";
+                    element.style.display = "inline-block";
                     element.classList.add('editing');
-                    element.dataset.originalDisplayValue = element.options[element.selectedIndex]?.text || '';
+                    
+                    const selectedOption = element.options[element.selectedIndex];
+                    element.dataset.originalDisplayValue = selectedOption ? selectedOption.text : '';
                 } else {
-                    // Handle regular input elements
                     element.removeAttribute('readonly');
-                    element.style.display = "inline";
+                    element.style.display = "inline-block";
                     element.classList.add('editing');
                 }
             }
         });
 
-        // Show edit controls
         const editControls = document.getElementById(`id_${type}EditControls-${id}`);
         if (editControls) {
             editControls.style.display = "inline-flex";
         }
 
         // Focus the name field
-        const nameField = document.getElementById(`id_${type}Name-${id}`);
+        const nameField = document.getElementById(getFieldId(type, 'name', id));
         if (nameField) {
             nameField.focus();
         }
-        console.log('Fields for type:', type, 'Fields:', fields, 'TypeConfig:', typeConfig);
-    
     } catch (error) {
         console.error('Error in editItem:', error);
         alert(error.message || 'An error occurred while editing. Please try again.');
     }
 };
+
 
 // Cancel edit function
 export const cancelEdit = (event, type, id, fields) => {
@@ -632,32 +623,36 @@ export const cancelEdit = (event, type, id, fields) => {
     resetFields(type, id, fields);
 };
 
-// Reset fields after edit/cancel
 const resetFields = (type, id, fields) => {
     fields.forEach((field) => {
-        const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
+        const element = document.getElementById(getFieldId(type, field, id));
         if (element) {
-            element.setAttribute('readonly', 'readonly');
+            if (element.tagName.toLowerCase() === 'select') {
+                element.setAttribute('disabled', 'disabled');
+            } else {
+                element.setAttribute('readonly', 'readonly');
+            }
             element.classList.remove('editing', 'error');
-            // Hide all fields except name
+            
             if (field !== 'name') {
                 element.style.display = "none";
+            } else {
+                element.style.display = "inline-block";
             }
-            // Clean up any stored values
+            
             delete element.dataset.originalValue;
             delete element.dataset.originalDisplayValue;
         }
     });
 
-    // Hide edit controls
     const editControls = document.getElementById(`id_${type}EditControls-${id}`);
     if (editControls) {
         editControls.style.display = "none";
     }
 
-    // Remove any error messages
     const errorDisplay = document.getElementById(`id_${type}Error-${id}`);
     if (errorDisplay) {
         errorDisplay.remove();
     }
 };
+

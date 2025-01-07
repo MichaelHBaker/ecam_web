@@ -28,7 +28,7 @@
                 {% for field in fields %}
                     {% if field.name == 'name' %}
                         <!-- Always show name field -->
-                        <input id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}-{{ item.id }}" 
+                        <input id="field_{{ level_type }}_{{ field.name }}_{{ item.id }}" 
                                type="text"
                                name="{{ field.name }}"
                                value="{{ item|get_attr:field.name|default:'' }}"
@@ -39,7 +39,7 @@
                     {% else %}
                         {% if field.is_foreign_key %}
                             <!-- Foreign Key Field -->
-                            <select id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}-{{ item.id }}"
+                            <select id="field_{{ level_type }}_{{ field.name }}_{{ item.id }}"
                                     name="{{ field.name }}"
                                     class="tree-item-field fk-select"
                                     style="display: none;">
@@ -53,7 +53,7 @@
                             </select>
                         {% elif field.type == 'choice' %}
                             <!-- Choice Field -->
-                            <select id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}-{{ item.id }}"
+                            <select id="field_{{ level_type }}_{{ field.name }}_{{ item.id }}"
                                     name="{{ field.name }}"
                                     class="tree-item-field choice-select"
                                     style="display: none;"
@@ -68,7 +68,7 @@
                             </select>
                         {% else %}
                             <!-- Hidden Regular Field -->
-                            <input id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}-{{ item.id }}" 
+                            <input id="field_{{ level_type }}_{{ field.name }}_{{ item.id }}" 
                                    type="text"
                                    name="{{ field.name }}"
                                    value="{{ item|get_attr:field.name|default:'' }}"

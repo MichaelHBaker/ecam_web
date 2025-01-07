@@ -107,13 +107,26 @@ class TreeItemMixin:
     
     def get_context_for_item(self, instance, parent=None):
         """Prepare context for rendering a tree item"""
-        # Get fields for current level
-        fields = self.get_field_metadata(self.get_serializer().Meta.model)
-        
-        # Get type info from model fields serializer
+        # Get type info from model fields serializer first
         fields_serializer = ModelFieldsSerializer()
         model_fields = fields_serializer.to_representation(None)
         type_info = model_fields.get(self.level_type, {})
+        
+        # Use fields from ModelFieldsSerializer instead of all model fields
+        configured_fields = type_info.get('fields', [])
+        
+        # Only get metadata for configured fields
+        fields = []
+        all_field_metadata = self.get_field_metadata(self.get_serializer().Meta.model)
+        
+        for configured_field in configured_fields:
+            field_name = configured_field['name']
+            # Find matching field metadata
+            field_metadata = next((f for f in all_field_metadata if f['name'] == field_name), None)
+            if field_metadata:
+                # Merge configured field settings with metadata
+                merged_field = {**field_metadata, **configured_field}
+                fields.append(merged_field)
         
         # Get next level type and children attribute
         next_level_type = type_info.get('child_type')

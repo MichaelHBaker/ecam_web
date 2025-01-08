@@ -1,10 +1,11 @@
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 class MeasurementType(models.Model):
-        name = models.CharField(max_length=50, unique=True)  # e.g., 'power'
-        display_name = models.CharField(max_length=100)      # e.g., 'Power (kW)'
-        unit = models.CharField(max_length=10)               # e.g., 'kW'
+        name = models.CharField(max_length=50, unique=True)  
+        display_name = models.CharField(max_length=100)      
+        unit = models.CharField(max_length=10)               
         description = models.TextField(blank=True)
 
         def __str__(self):
@@ -28,7 +29,6 @@ class Project(models.Model):
         return self.name
 
     def clean(self):
-        """Validate model data"""
         super().clean()
         if self.start_date and self.end_date and self.end_date < self.start_date:
             raise ValidationError({
@@ -47,9 +47,6 @@ class Location(models.Model):
         return f"{self.name} - Project: {self.project.name}"
 
     def get_hierarchy(self):
-        """
-        Generate a string that shows the complete path from project to this location.
-        """
         hierarchy = f"{self.project.get_hierarchy()}"
         ancestors = [self.name]
         p = self.parent
@@ -59,7 +56,6 @@ class Location(models.Model):
         return f"{hierarchy} > {' > '.join(reversed(ancestors))}"
 
     def clean(self):
-        """Validate model data"""
         super().clean()
         if self.parent and self.parent.project != self.project:
             raise ValidationError({
@@ -87,16 +83,13 @@ class Measurement(models.Model):
         return f"{self.location.get_hierarchy()} > {self.name}"
 
     def clean(self):
-        """Validate model data"""
         super().clean()
-
-        # Check for duplicate names in same location
         if self.name:
             existing = Measurement.objects.filter(
                 location=self.location,
                 name=self.name
             )
-            if self.pk:  # If updating existing measurement
+            if self.pk:
                 existing = existing.exclude(pk=self.pk)
             if existing.exists():
                 raise ValidationError({
@@ -106,38 +99,171 @@ class Measurement(models.Model):
     @property
     def unit(self):
         return self.measurement_type.unit
-    
-        
-class TimeSeriesData(models.Model):
-    timestamp = models.DateTimeField(db_index=True)
-    measurement = models.ForeignKey(Measurement, on_delete=models.CASCADE)
-    value = models.FloatField()
 
-    class Meta:
-        indexes = [
-            models.Index(fields=['measurement', 'timestamp']),
-        ]
-        constraints = [
-            models.UniqueConstraint(
-                fields=['timestamp', 'measurement'],
-                name='unique_measurement_timestamp'
-            )
-        ]
-class DataImport(models.Model):
-    IMPORT_STATUS = [
-        ('uploaded', 'File Uploaded'),
-        ('analyzed', 'Data Analyzed'),
-        ('mapped', 'Measurements Mapped'),
-        ('imported', 'Data Imported'),
-        ('error', 'Error'),
+class DataSource(models.Model):
+    """Base model for all data sources"""
+    SOURCE_TYPES = [
+        ('file', 'File Upload'),
+        ('api', 'API Connection'),
+        ('db', 'Database Connection'),
     ]
-    
-    file = models.FileField(upload_to='imports/')
-    uploaded_at = models.DateTimeField(auto_now_add=True)
-    status = models.CharField(max_length=20, choices=IMPORT_STATUS, default='uploaded')
-    error_message = models.TextField(blank=True)
-    stats = models.JSONField(default=dict)
-    processed_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True)
+
+    MIDDLEWARE_TYPES = [
+        ('niagara', 'Niagara AX/N4'),
+        ('ecostruxure', 'EcoStruxure Building'),
+        ('metasys', 'Johnson Controls Metasys'),
+        ('desigo', 'Siemens Desigo CC'),
+        ('custom', 'Custom API'),
+    ]
+
+    name = models.CharField(max_length=100)
+    source_type = models.CharField(max_length=20, choices=SOURCE_TYPES)
+    description = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    configuration = models.JSONField(default=dict)  # Stores source-specific configuration
+    is_active = models.BooleanField(default=True)
 
     def __str__(self):
-        return f"Import {self.id} - {self.status} at {self.uploaded_at}"
+        return f"{self.name} ({self.get_source_type_display()})"
+
+class APIDataSource(DataSource):
+    """Configuration for API-based data sources including building automation middleware"""
+    url_base = models.URLField(help_text="Base URL for the API")
+    middleware_type = models.CharField(
+        max_length=20, 
+        choices=DataSource.MIDDLEWARE_TYPES,
+        help_text="Type of middleware system"
+    )
+    
+    # Authentication
+    auth_type = models.CharField(max_length=20, choices=[
+        ('basic', 'Basic Auth'),
+        ('bearer', 'Bearer Token'),
+        ('oauth2', 'OAuth 2.0'),
+        ('cert', 'Client Certificate'),
+    ])
+    
+    def clean(self):
+        super().clean()
+        if self.source_type != 'api':
+            raise ValidationError("APIDataSource must have source_type='api'")
+        
+class DataSourceMapping(models.Model):
+    """Maps a measurement to its exact source location"""
+    measurement = models.ForeignKey('Measurement', on_delete=models.CASCADE, related_name='source_mappings')
+    data_source = models.ForeignKey(DataSource, on_delete=models.CASCADE)
+    
+    # JSON field storing ALL identifiers needed to uniquely identify the point
+    source_identifiers = models.JSONField(
+        help_text="All identifiers needed to uniquely locate this point in the source system"
+    )
+    
+    # Configuration for data handling
+    mapping_config = models.JSONField(
+        default=dict,
+        help_text="Data handling configuration (scaling, units, polling)"
+    )
+    
+    # Sync tracking
+    last_sync = models.DateTimeField(null=True)
+    last_error = models.TextField(blank=True)
+    
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['measurement', 'data_source'],
+                name='unique_measurement_source'
+            )
+        ]
+
+    def __str__(self):
+        ids = [f"{k}={v}" for k, v in self.source_identifiers.items()]
+        return f"{self.measurement} <- {self.data_source}: {', '.join(ids)}"
+
+    def clean(self):
+        """Validate that all required identifiers are present"""
+        super().clean()
+        if isinstance(self.data_source, APIDataSource):
+            required_ids = {
+                'niagara': ['station_name', 'point_path'],
+                'ecostruxure': ['server_id', 'device_id', 'point_id'],
+                'metasys': ['site_name', 'device_id', 'object_id', 'instance'],
+                'desigo': ['system_id', 'point_id'],
+                'custom': ['point_id']
+            }
+            
+            middleware_type = self.data_source.middleware_type
+            required = required_ids.get(middleware_type, [])
+            
+            missing = [id_name for id_name in required 
+                      if id_name not in self.source_identifiers]
+            
+            if missing:
+                raise ValidationError({
+                    'source_identifiers': f'Missing required identifiers for {middleware_type}: {", ".join(missing)}'
+                })
+
+class TimeSeriesData(models.Model):
+   """
+   Time series data storage using Django's datetime with UTC
+   """
+   timestamp = models.DateTimeField(
+       db_index=True,
+       help_text="UTC timestamp"
+   )
+   measurement = models.ForeignKey(
+       Measurement, 
+       on_delete=models.CASCADE,
+       related_name='timeseries'
+   )
+   value = models.FloatField()
+
+   class Meta:
+       indexes = [
+           models.Index(fields=['measurement', 'timestamp']),
+       ]
+       constraints = [
+           models.UniqueConstraint(
+               fields=['timestamp', 'measurement'],
+               name='unique_measurement_timestamp'
+           )
+       ]
+       ordering = ['-timestamp']
+
+   def __str__(self):
+       return f"{self.measurement}: {self.value} at {self.timestamp}"
+
+   @property 
+   def local_time(self):
+       """Get timestamp in local timezone"""
+       return timezone.localtime(self.timestamp)
+   
+class DataImport(models.Model):
+    """Tracks individual import attempts"""
+    IMPORT_STATUS = [
+        ('pending', 'Pending'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
+    
+    data_source = models.ForeignKey(DataSource, on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, choices=IMPORT_STATUS, default='pending')
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True)
+    
+    # For file imports: reference to the specific file
+    import_file = models.FileField(upload_to='imports/', null=True, blank=True)
+    
+    # Metadata about the import
+    row_count = models.IntegerField(default=0)
+    error_count = models.IntegerField(default=0)
+    error_log = models.JSONField(default=list)
+    
+    # Record who initiated/approved the import
+    created_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, related_name='created_imports')
+    approved_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, related_name='approved_imports')
+    
+    def __str__(self):
+        return f"Import {self.id} from {self.data_source} ({self.status})"

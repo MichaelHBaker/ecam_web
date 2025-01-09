@@ -27,5 +27,4 @@ urlpatterns = [
     path('data/', views.data, name='data'),
     path('model/', views.model, name='model'),
     path('api/', include(router.urls)),
-    path('main/', include('main.urls')),  
 ]

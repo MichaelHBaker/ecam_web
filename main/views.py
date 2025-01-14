@@ -15,11 +15,14 @@ from rest_framework import serializers
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
 from rest_framework.permissions import IsAuthenticated
 
-from .models import Project, Location, Measurement, MeasurementType
+from .models import (
+    Project, Location, Measurement, MeasurementCategory,
+    MeasurementType, MeasurementUnit
+)
 from .serializers import (
-    ProjectSerializer, LocationSerializer, 
-    MeasurementSerializer, ModelFieldsSerializer,
-    MeasurementTypeSerializer
+    ProjectSerializer, LocationSerializer, MeasurementSerializer,
+    MeasurementCategorySerializer, MeasurementTypeSerializer,
+    MeasurementUnitSerializer, ModelFieldsSerializer
 )
 
 import chardet
@@ -28,11 +31,9 @@ from io import StringIO
 import os
 from openpyxl import Workbook
 
-
 class ChatPageView(View):
     def get(self, request):
         return render(request, 'main/chat.html')
-
 
 class TreeItemMixin:
     """Mixin for tree item viewsets that handles template rendering and parent/child relationships"""
@@ -55,30 +56,23 @@ class TreeItemMixin:
                 'required': not field.blank,
                 'verbose_name': field.verbose_name,
                 'is_foreign_key': isinstance(field, models.ForeignKey),
-                'display_field': 'name'  # Add default display field
+                'display_field': 'name'
             }
             
-            # Handle foreign keys
             if field_info['is_foreign_key']:
                 related_model = field.related_model
                 related_objects = related_model.objects.all()
-                    
-                # Build choice info based on available attributes
+                
                 choices = []
                 for obj in related_objects:
                     choice = {'id': obj.id}
                     
-                    # Use display_name if available, otherwise name
                     if hasattr(obj, 'display_name'):
                         choice['display_name'] = obj.display_name
                     elif hasattr(obj, 'name'):
                         choice['display_name'] = getattr(obj, 'name')
                     else:
                         choice['display_name'] = str(obj)
-                        
-                    # Include unit if available
-                    if hasattr(obj, 'unit'):
-                        choice['unit'] = obj.unit
                         
                     choices.append(choice)
                     
@@ -88,7 +82,6 @@ class TreeItemMixin:
                     'display_field': 'display_name' if hasattr(related_model, 'display_name') else 'name'
                 })
             
-            # Handle choices for non-FK fields (like project_type)
             elif hasattr(field, 'choices') and field.choices:
                 field_info.update({
                     'type': 'choice',
@@ -104,28 +97,22 @@ class TreeItemMixin:
     
     def get_context_for_item(self, instance, parent=None):
         """Prepare context for rendering a tree item"""
-        # Get type info from model fields serializer first
         fields_serializer = ModelFieldsSerializer()
         model_fields = fields_serializer.to_representation(None)
         type_info = model_fields.get(self.level_type, {})
         
-        # Use fields from ModelFieldsSerializer instead of all model fields
         configured_fields = type_info.get('fields', [])
         
-        # Only get metadata for configured fields
         fields = []
         all_field_metadata = self.get_field_metadata(self.get_serializer().Meta.model)
         
         for configured_field in configured_fields:
             field_name = configured_field['name']
-            # Find matching field metadata
             field_metadata = next((f for f in all_field_metadata if f['name'] == field_name), None)
             if field_metadata:
-                # Merge configured field settings with metadata
                 merged_field = {**field_metadata, **configured_field}
                 fields.append(merged_field)
         
-        # Get next level type and children attribute
         next_level_type = type_info.get('child_type')
         children_attr = f"{next_level_type}s" if next_level_type else None
 
@@ -158,15 +145,11 @@ class TreeItemMixin:
                     status=status.HTTP_400_BAD_REQUEST
                 )
                 
-            # Get parent if this isn't top level
             parent = None
             if self.parent_field:
                 parent = getattr(serializer.instance, self.parent_field)
 
-            # Get context for rendering
             context = self.get_context_for_item(serializer.instance, parent)
-            
-            # Render template
             html = render_to_string('main/tree_item.html', context, request=request)
             
             return Response({
@@ -208,11 +191,9 @@ class TreeItemMixin:
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def perform_destroy(self, instance):
-        """Let the database handle cascading deletes"""
         instance.delete()
 
     def format_validation_errors(self, errors):
-        """Format validation errors into a readable string"""
         if isinstance(errors, dict):
             return '\n'.join(f"{field}: {', '.join(msgs if isinstance(msgs, (list, tuple)) else [str(msgs)])}" 
                            for field, msgs in errors.items())
@@ -228,33 +209,6 @@ class LocationViewSet(TreeItemMixin, viewsets.ModelViewSet):
     level_type = 'location'
     parent_field = 'project'
     child_attr = 'measurements'
-
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        try:
-            if not serializer.is_valid():
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-                
-            self.perform_create(serializer)
-            
-            # Get context and log it
-            context = self.get_context_for_item(serializer.instance, 
-                                            getattr(serializer.instance, self.parent_field, None))
-            
-            html = render_to_string('main/tree_item.html', context, request=request)
-            
-            
-            return Response({
-                'data': serializer.data,
-                'html': html
-            }, status=status.HTTP_201_CREATED)
-
-        except Exception as e:
-            print("Location create error:", str(e))
-            print("Error type:", type(e))
-            if hasattr(e, 'detail'):
-                print("Error detail:", e.detail)
-            raise
 
     def get_queryset(self):
         queryset = Location.objects.all()
@@ -274,12 +228,25 @@ class LocationViewSet(TreeItemMixin, viewsets.ModelViewSet):
         serializer = self.get_serializer(locations, many=True)
         return Response(serializer.data)
 
+class MeasurementCategoryViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = MeasurementCategorySerializer
+    queryset = MeasurementCategory.objects.all()
+    authentication_classes = [SessionAuthentication, BasicAuthentication]
+    permission_classes = [IsAuthenticated]
+
 class MeasurementTypeViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet for MeasurementType model - read-only to prevent modifications"""
     serializer_class = MeasurementTypeSerializer
     queryset = MeasurementType.objects.all()
     authentication_classes = [SessionAuthentication, BasicAuthentication]
     permission_classes = [IsAuthenticated]
+
+    @action(detail=True, methods=['get'])
+    def units(self, request, pk=None):
+        """Get units for a specific measurement type"""
+        measurement_type = self.get_object()
+        units = measurement_type.units.all()
+        serializer = MeasurementUnitSerializer(units, many=True)
+        return Response(serializer.data)
 
 class MeasurementViewSet(TreeItemMixin, viewsets.ModelViewSet):
     serializer_class = MeasurementSerializer
@@ -288,29 +255,12 @@ class MeasurementViewSet(TreeItemMixin, viewsets.ModelViewSet):
     has_children = False
     child_attr = None
 
-    def create(self, request, *args, **kwargs):
-            fields = self.get_field_metadata(self.get_serializer().Meta.model)
-            return super().create(request, *args, **kwargs)
-
     def get_queryset(self):
-        queryset = Measurement.objects.select_related('measurement_type').all()
+        queryset = Measurement.objects.select_related('unit__type__category').all()
         location_id = self.request.query_params.get('location')
         if location_id:
             queryset = queryset.filter(location_id=location_id)
         return queryset
-
-    def perform_create(self, serializer):
-        try:
-            # Ensure measurement type exists
-            if 'measurement_type_id' in self.request.data:
-                measurement_type = MeasurementType.objects.get(
-                    id=self.request.data['measurement_type_id']
-                )
-            super().perform_create(serializer)
-        except MeasurementType.DoesNotExist:
-            raise serializers.ValidationError('Invalid measurement type')
-        except Exception as e:
-            raise serializers.ValidationError(str(e))
 
 class ModelFieldsViewSet(viewsets.ViewSet):
     authentication_classes = [SessionAuthentication]
@@ -323,25 +273,27 @@ class ModelFieldsViewSet(viewsets.ViewSet):
 
 @login_required(login_url='/')
 def dashboard(request):
-    # Prefetch related data to optimize database queries
     projects = Project.objects.prefetch_related(
         'locations',
         'locations__measurements',
-        'locations__measurements__measurement_type',
+        'locations__measurements__unit',
+        'locations__measurements__unit__type',
+        'locations__measurements__unit__type__category',
         'locations__children'
     ).all()
 
-    # Get measurement types for the form
-    measurement_types = MeasurementType.objects.all()
+    categories = MeasurementCategory.objects.prefetch_related(
+        'types',
+        'types__units'
+    ).all()
 
-    # Use serializer to get model fields
     serializer = ModelFieldsSerializer(instance=None)
     model_fields = serializer.to_representation(None)
     
     context = {
         'projects': projects,
         'model_fields': model_fields,
-        'measurement_types': measurement_types
+        'categories': categories
     }
     
     return render(request, 'main/dashboard.html', context)
@@ -359,44 +311,39 @@ def excel_upload(request):
         return JsonResponse({'error': 'All fields are required'}, status=400)
 
     try:
-        # Read and validate CSV content
         raw_content = csv_file.read()
         detected_encoding = chardet.detect(raw_content)['encoding']
         file_content = raw_content.decode(detected_encoding)
         csv_reader = csv.reader(StringIO(file_content))
         rows = list(csv_reader)
 
-        # Validate headers and look for measurement_type column
         headers = rows[0]
         try:
-            type_index = headers.index('measurement_type')
+            category_index = headers.index('category')
         except ValueError:
             return JsonResponse({
-                'error': 'CSV must contain a measurement_type column'
+                'error': 'CSV must contain a category column'
             }, status=400)
 
-        # Get valid measurement types, converting to lowercase for case-insensitive comparison
-        valid_types = {t.lower(): t for t in MeasurementType.objects.values_list('name', flat=True)}
+        valid_categories = {c.lower(): c for c in MeasurementCategory.objects.values_list('name', flat=True)}
 
-        # Validate all measurement types before processing
-        invalid_types = []
+        invalid_categories = []
         for row_num, row in enumerate(rows[1:], start=2):
-            if row and len(row) > type_index:  # Check if row has enough columns
-                measurement_type = row[type_index].strip().lower()
-                if measurement_type and measurement_type not in valid_types:
-                    invalid_types.append((row_num, row[type_index]))
+            if row and len(row) > category_index:
+                category = row[category_index].strip().lower()
+                if category and category not in valid_categories:
+                    invalid_categories.append((row_num, row[category_index]))
 
-        if invalid_types:
+        if invalid_categories:
             error_msg = {
-                'error': 'Invalid measurement types found',
-                'measurement_type': [
-                    f'Invalid measurement type "{t}" in row {r}' 
-                    for r, t in invalid_types
+                'error': 'Invalid categories found',
+                'categories': [
+                    f'Invalid category "{t}" in row {r}' 
+                    for r, t in invalid_categories
                 ]
             }
             return JsonResponse(error_msg, status=400)
 
-        # Create Excel workbook and save
         workbook_name = workbook_name if workbook_name.endswith('.xlsx') else f"{workbook_name}.xlsx"
         wb = Workbook()
         ws = wb.active
@@ -411,15 +358,10 @@ def excel_upload(request):
         return JsonResponse({
             'status': 'success',
             'message': 'File uploaded successfully',
-            'valid_types': list(valid_types.values())
+            'valid_categories': list(valid_categories.values())
         })
 
-    except UnicodeDecodeError:
-        return JsonResponse({
-            'error': 'Unable to decode file content'
-        }, status=400)
     except Exception as e:
-        # Log the error for debugging
         import traceback
         print(f"Error in excel_upload: {str(e)}")
         print(traceback.format_exc())

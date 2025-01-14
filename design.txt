@@ -1,7 +1,11 @@
-models to measurements is many to many
-primary time series storage, separate tables for each measurement, even if they come from multichannel devices that have common timestamp
-how to support data exploration, use jupyter or other tools, how to handle multivariate investigations, do we need a data section or just a separet page or popup
-include nicknames for measurements in the measurements section, no dictionary section
+delete all records in database
+migrate
 
-bitoAI
-    can we configure it so that it can easily be removed on production dist
+source  select  view    import  cancel
+
+name description type unit include view 
+---- ----------- ---- ---- ------- ----
+---- ----------- ---- ---- ------- ----
+---- ----------- ---- ---- ------- ----
+---- ----------- ---- ---- ------- ----
+

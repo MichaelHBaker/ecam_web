@@ -1,32 +1,65 @@
 # serializers.py
 from rest_framework import serializers
-from .models import Project, Location, Measurement, MeasurementType
+from django.utils import timezone
+from .models import (
+    Project, Location, Measurement, MeasurementCategory,
+    MeasurementType, MeasurementUnit, DataSource, APIDataSource,
+    DataSourceMapping, TimeSeriesData, DataImport
+)
 from .utils import get_field_metadata
 
+class MeasurementUnitSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MeasurementUnit
+        fields = ['id', 'type', 'multiplier']
+
 class MeasurementTypeSerializer(serializers.ModelSerializer):
+    units = MeasurementUnitSerializer(many=True, read_only=True)
+    
     class Meta:
         model = MeasurementType
-        fields = ['id', 'name', 'display_name', 'unit', 'description']
+        fields = ['id', 'name', 'symbol', 'category', 'description', 
+                 'is_base_unit', 'supports_multipliers', 'units']
+
+class MeasurementCategorySerializer(serializers.ModelSerializer):
+    types = MeasurementTypeSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = MeasurementCategory
+        fields = ['id', 'name', 'display_name', 'description', 'types']
 
 class MeasurementSerializer(serializers.ModelSerializer):
-    measurement_type = MeasurementTypeSerializer(read_only=True)
-    measurement_type_id = serializers.PrimaryKeyRelatedField(
-        source='measurement_type',
-        queryset=MeasurementType.objects.all(),
+    category = serializers.SerializerMethodField(read_only=True)
+    type = serializers.SerializerMethodField(read_only=True)
+    unit = MeasurementUnitSerializer(read_only=True)
+    unit_id = serializers.PrimaryKeyRelatedField(
+        source='unit',
+        queryset=MeasurementUnit.objects.all(),
         write_only=True
     )
     location = serializers.PrimaryKeyRelatedField(queryset=Location.objects.all())
-    unit = serializers.CharField(read_only=True)
+
+    def get_category(self, obj):
+        return {
+            'id': obj.category.id,
+            'name': obj.category.name,
+            'display_name': obj.category.display_name
+        }
+
+    def get_type(self, obj):
+        return {
+            'id': obj.type.id,
+            'name': obj.type.name,
+            'symbol': obj.type.symbol
+        }
 
     def validate(self, data):
-        """
-        Custom validation to ensure all required fields are present and valid
-        """
+        """Custom validation to ensure all required fields are present and valid"""
         if not data.get('name'):
             raise serializers.ValidationError({'name': 'Name is required'})
         
-        if not data.get('measurement_type'):
-            raise serializers.ValidationError({'measurement_type': 'Measurement type is required'})
+        if not data.get('unit'):
+            raise serializers.ValidationError({'unit': 'Unit is required'})
             
         if not data.get('location'):
             raise serializers.ValidationError({'location': 'Location is required'})
@@ -37,8 +70,8 @@ class MeasurementSerializer(serializers.ModelSerializer):
         model = Measurement
         fields = [
             'id', 'name', 'description', 
-            'measurement_type', 'measurement_type_id',
-            'unit', 'location'
+            'category', 'type', 'unit', 'unit_id',
+            'location'
         ]
 
 class LocationSerializer(serializers.ModelSerializer):
@@ -47,9 +80,7 @@ class LocationSerializer(serializers.ModelSerializer):
     project = serializers.PrimaryKeyRelatedField(queryset=Project.objects.all())
 
     def validate(self, data):
-        """
-        Custom validation for Location data
-        """
+        """Custom validation for Location data"""
         if not data.get('name'):
             raise serializers.ValidationError({'name': 'Name is required'})
             
@@ -78,9 +109,7 @@ class ProjectSerializer(serializers.ModelSerializer):
     project_type_display = serializers.CharField(source='get_project_type_display', read_only=True)
 
     def validate(self, data):
-        """
-        Custom validation for Project data
-        """
+        """Custom validation for Project data"""
         if not data.get('name'):
             raise serializers.ValidationError({'name': 'Name is required'})
             
@@ -99,6 +128,46 @@ class ProjectSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'project_type', 'project_type_display', 
                  'start_date', 'end_date', 'locations']
 
+class DataSourceMappingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DataSourceMapping
+        fields = ['id', 'measurement', 'data_source', 'source_identifiers', 
+                 'mapping_config', 'last_sync', 'last_error']
+        read_only_fields = ['last_sync', 'last_error']
+
+class DataSourceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DataSource
+        fields = ['id', 'name', 'source_type', 'description', 'configuration', 
+                 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['created_at', 'updated_at']
+
+class APIDataSourceSerializer(DataSourceSerializer):
+    class Meta(DataSourceSerializer.Meta):
+        model = APIDataSource
+        fields = DataSourceSerializer.Meta.fields + [
+            'url_base', 'middleware_type', 'auth_type'
+        ]
+
+class TimeSeriesDataSerializer(serializers.ModelSerializer):
+    local_time = serializers.SerializerMethodField()
+
+    def get_local_time(self, obj):
+        return timezone.localtime(obj.timestamp)
+
+    class Meta:
+        model = TimeSeriesData
+        fields = ['id', 'timestamp', 'local_time', 'measurement', 'value']
+
+class DataImportSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DataImport
+        fields = ['id', 'data_source', 'status', 'started_at', 'completed_at',
+                 'import_file', 'row_count', 'error_count', 'error_log',
+                 'created_by', 'approved_by']
+        read_only_fields = ['started_at', 'completed_at', 'row_count', 
+                           'error_count', 'error_log']
+
 class ModelFieldsSerializer(serializers.Serializer):
     """Serializer for model field metadata"""
     def get_fields(self):
@@ -107,11 +176,24 @@ class ModelFieldsSerializer(serializers.Serializer):
 
     def to_representation(self, instance):
         """Return the field definitions for all models"""
-        measurement_types = MeasurementType.objects.all()
-        measurement_type_choices = [
-            {'id': mt.id, 'display_name': mt.display_name}
-            for mt in measurement_types
-        ]
+        categories = MeasurementCategory.objects.all()
+        types = MeasurementType.objects.all()
+        units = MeasurementUnit.objects.all()
+
+        measurement_choices = {
+            'categories': [
+                {'id': cat.id, 'display_name': cat.display_name}
+                for cat in categories
+            ],
+            'types': [
+                {'id': type.id, 'display_name': f"{type.name} ({type.symbol})"}
+                for type in types
+            ],
+            'units': [
+                {'id': unit.id, 'display_name': str(unit)}
+                for unit in units
+            ]
+        }
 
         return {
             'project': {
@@ -138,8 +220,8 @@ class ModelFieldsSerializer(serializers.Serializer):
                 'fields': [
                     {'name': 'name', 'type': 'string', 'required': True, 'display_field': True},
                     {'name': 'description', 'type': 'string', 'required': False},
-                    {'name': 'measurement_type_id', 'type': 'choice', 'required': True,
-                     'choices': measurement_type_choices}
+                    {'name': 'unit_id', 'type': 'choice', 'required': True,
+                     'choices': measurement_choices}
                 ],
                 'parent_type': 'location',
                 'display_field': 'name'

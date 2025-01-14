@@ -51,16 +51,6 @@ class TestMeasurementModel(BaseTestCase):
         )
         self.assertEqual(pressure_measurement.unit, "PSI")
 
-    def test_hierarchy_string(self):
-        """Test get_hierarchy method"""
-        measurement = Measurement.objects.create(
-            name="Hierarchy Test",
-            location=self.test_location,
-            measurement_type=self.power_type
-        )
-        expected = f"{self.test_location.get_hierarchy()} > {measurement.name}"
-        self.assertEqual(measurement.get_hierarchy(), expected)
-
     def test_duplicate_names_same_location(self):
         """Test measurements in same location can't have duplicate names"""
         measurement1 = Measurement.objects.create(

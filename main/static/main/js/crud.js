@@ -67,6 +67,30 @@ export const apiFetch = async (endpoint, options = {}, basePath = '/api') => {
     }
 };
 
+const processMeasurementChoices = (data) => {
+    if (data?.measurement?.fields) {
+        const unitField = data.measurement.fields.find(f => f.name === 'unit_id');
+        if (unitField) {
+            // Organize measurement choices hierarchically
+            const categories = unitField.choices?.categories || [];
+            const units = unitField.choices?.units || [];
+            
+            // Add unit information to each category
+            categories.forEach(category => {
+                category.units = units.filter(unit => unit.category_id === category.id);
+            });
+
+            // Update the choices structure
+            unitField.choices = {
+                categories,
+                units,
+                structured: categories // Categories with nested units
+            };
+        }
+    }
+    return data;
+};
+
 // Initialize MODEL_FIELDS from API
 export const initializeModelFields = async () => {
     if (modelFieldsPromise) {
@@ -75,8 +99,9 @@ export const initializeModelFields = async () => {
 
     modelFieldsPromise = apiFetch('/model-fields/')
         .then(data => {
-            MODEL_FIELDS = data;
-            return data;
+            // Process measurement choices before storing
+            MODEL_FIELDS = processMeasurementChoices(data);
+            return MODEL_FIELDS;
         })
         .catch(error => {
             console.error('Error initializing MODEL_FIELDS:', error);
@@ -92,6 +117,16 @@ const ensureInitialized = async () => {
         await initializeModelFields();
     }
     return MODEL_FIELDS;
+};
+
+// Helper function to get measurement choices
+export const getMeasurementChoices = async () => {
+    const modelFields = await ensureInitialized();
+    const measurementConfig = modelFields?.measurement;
+    if (!measurementConfig) return null;
+
+    const unitField = measurementConfig.fields.find(f => f.name === 'unit_id');
+    return unitField?.choices || null;
 };
 
 // Helper functions for input handling and field creation
@@ -175,7 +210,43 @@ const createField = (field, type, tempId, fieldInfo) => {
     input.name = field;
     input.className = 'tree-item-field editing';
 
-    if (fieldInfo?.is_foreign_key) {
+    // Handle measurement unit selection
+    if (field === 'unit_id') {
+        input.className += ' unit-select';
+        
+        // Add empty option
+        const emptyOption = document.createElement('option');
+        emptyOption.value = '';
+        emptyOption.textContent = 'Select unit';
+        input.appendChild(emptyOption);
+
+        // Add measurement choices grouped by category and type
+        if (fieldInfo.choices) {
+            const categories = fieldInfo.choices.categories || [];
+            const units = fieldInfo.choices.units || [];
+
+            categories.forEach(category => {
+                const categoryUnits = units.filter(u => u.category_id === category.id);
+                if (categoryUnits.length > 0) {
+                    const group = document.createElement('optgroup');
+                    group.label = category.display_name;
+                    
+                    categoryUnits.forEach(unit => {
+                        const option = document.createElement('option');
+                        option.value = unit.id;
+                        option.textContent = unit.display_name;
+                        option.dataset.categoryId = unit.category_id;
+                        option.dataset.typeId = unit.type_id;
+                        group.appendChild(option);
+                    });
+                    
+                    input.appendChild(group);
+                }
+            });
+        }
+    }
+    // Handle other foreign key fields
+    else if (fieldInfo?.is_foreign_key) {
         input.className += ' fk-select';
         
         // Add empty option
@@ -190,13 +261,12 @@ const createField = (field, type, tempId, fieldInfo) => {
                 const option = document.createElement('option');
                 option.value = choice.id;
                 option.textContent = choice.display_name || choice.name || choice.id;
-                if (choice.unit) {
-                    option.textContent += ` (${choice.unit})`;
-                }
                 input.appendChild(option);
             });
         }
-    } else if (fieldInfo?.type === 'choice') {
+    }
+    // Handle regular choice fields
+    else if (fieldInfo?.type === 'choice') {
         input.className += ' choice-select';
         
         // Add empty option
@@ -214,7 +284,9 @@ const createField = (field, type, tempId, fieldInfo) => {
                 input.appendChild(option);
             });
         }
-    } else {
+    }
+    // Handle regular input fields
+    else {
         input.type = getInputType(fieldInfo);
         input.placeholder = field.replace(/_/g, ' ');
     }
@@ -255,20 +327,37 @@ const collectFormData = (type, id, fields, modelInfo) => {
                 throw new Error(`${field.replace(/_/g, ' ')} is required`);
             }
 
-            if (fieldConfig?.is_foreign_key) {
-                // Handle all foreign keys consistently
+            // Handle unit selection
+            if (field === 'unit_id') {
+                if (value) {
+                    data.unit_id = parseInt(value, 10);
+                    
+                    // Also get the selected option for category and type info
+                    const selectedOption = element.options[element.selectedIndex];
+                    if (selectedOption) {
+                        data.category_id = parseInt(selectedOption.dataset.categoryId, 10);
+                        data.type_id = parseInt(selectedOption.dataset.typeId, 10);
+                    }
+                } else {
+                    data.unit_id = null;
+                }
+            }
+            // Handle other foreign keys
+            else if (fieldConfig?.is_foreign_key) {
                 data[field] = value ? parseInt(value, 10) : null;
-            } else if (fieldConfig?.type === 'choice') {
-                // Handle choice fields
+            }
+            // Handle choice fields
+            else if (fieldConfig?.type === 'choice') {
                 data[field] = value || null;
-            } else {
+            }
+            // Handle regular fields
+            else {
                 data[field] = value || null;
             }
         }
     });
     return data;
 };
-
 
 // Display form errors
 const showFormError = (form, error, type) => {
@@ -463,10 +552,33 @@ export const updateItem = async (event, type, id, fields) => {
                     hasErrors = true;
                 } else {
                     element.classList.remove('error');
-                    if (field === 'measurement_type_id') {
-                        data['measurement_type_id'] = value ? parseInt(value, 10) : null;
-                    } else {
-                        data[field] = value || null;
+                    
+                    // Handle unit_id updates
+                    if (field === 'unit_id') {
+                        if (value) {
+                            data.unit_id = parseInt(value, 10);
+                            
+                            // Get category and type info from selected option
+                            const selectedOption = element.options[element.selectedIndex];
+                            if (selectedOption) {
+                                data.category_id = parseInt(selectedOption.dataset.categoryId, 10);
+                                data.type_id = parseInt(selectedOption.dataset.typeId, 10);
+                            }
+                        } else {
+                            data.unit_id = null;
+                        }
+                    }
+                    // Handle other foreign keys
+                    else if (fieldConfig?.is_foreign_key) {
+                        data[field] = value ? parseInt(value, 10) : null;
+                    }
+                    // Handle choices
+                    else if (fieldConfig?.type === 'choice') {
+                        data[field] = value;
+                    }
+                    // Handle regular fields
+                    else {
+                        data[field] = value;
                     }
                 }
             }
@@ -486,6 +598,23 @@ export const updateItem = async (event, type, id, fields) => {
             body: JSON.stringify(data),
         });
 
+        // Update display values for measurement-specific fields
+        if (type === 'measurement') {
+            const unitElement = document.getElementById(getFieldId(type, 'unit', id));
+            const categoryElement = document.getElementById(getFieldId(type, 'category', id));
+            const typeElement = document.getElementById(getFieldId(type, 'type', id));
+
+            if (unitElement && response.unit) {
+                unitElement.textContent = response.unit;
+            }
+            if (categoryElement && response.category) {
+                categoryElement.textContent = response.category.display_name;
+            }
+            if (typeElement && response.type) {
+                typeElement.textContent = `${response.type.name} (${response.type.symbol})`;
+            }
+        }
+
         resetFields(type, id, fields);
 
         return response;
@@ -502,7 +631,6 @@ export const updateItem = async (event, type, id, fields) => {
         throw error;
     }
 };
-
 
 // Delete item function
 export const deleteItem = async (type, id) => {
@@ -551,9 +679,11 @@ export const deleteItem = async (type, id) => {
 
 export const editItem = async (type, id, fields) => {
     try {
-        
         const modelFields = await ensureInitialized();
         const typeConfig = modelFields[type];
+
+        // Cleanup any existing handlers first
+        cleanupMeasurementHandlers(type, id);
 
         fields.forEach((field) => {
             const element = document.getElementById(getFieldId(type, field, id));
@@ -565,8 +695,18 @@ export const editItem = async (type, id, fields) => {
                     element.style.display = "inline-block";
                     element.classList.add('editing');
                     
-                    const selectedOption = element.options[element.selectedIndex];
-                    element.dataset.originalDisplayValue = selectedOption ? selectedOption.text : '';
+                    // Store additional data for measurement fields
+                    if (field === 'unit_id') {
+                        const selectedOption = element.options[element.selectedIndex];
+                        if (selectedOption) {
+                            element.dataset.originalCategoryId = selectedOption.dataset.categoryId;
+                            element.dataset.originalTypeId = selectedOption.dataset.typeId;
+                            element.dataset.originalDisplayValue = selectedOption.text;
+                        }
+                    } else {
+                        const selectedOption = element.options[element.selectedIndex];
+                        element.dataset.originalDisplayValue = selectedOption ? selectedOption.text : '';
+                    }
                 } else {
                     element.removeAttribute('readonly');
                     element.style.display = "inline-block";
@@ -574,6 +714,11 @@ export const editItem = async (type, id, fields) => {
                 }
             }
         });
+
+        // Setup measurement handlers if this is a measurement
+        if (type === 'measurement') {
+            setupMeasurementHandlers(type, id);
+        }
 
         const editControls = document.getElementById(`id_${type}EditControls-${id}`);
         if (editControls) {
@@ -585,6 +730,7 @@ export const editItem = async (type, id, fields) => {
         if (nameField) {
             nameField.focus();
         }
+
     } catch (error) {
         console.error('Error in editItem:', error);
         alert(error.message || 'An error occurred while editing. Please try again.');
@@ -597,17 +743,50 @@ export const cancelEdit = (event, type, id, fields) => {
     event.preventDefault();
     
     fields.forEach((field) => {
-        const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
+        const element = document.getElementById(getFieldId(type, field, id));
         if (element) {
             // Restore original value
-            element.value = element.dataset.originalValue || '';
-            // For choice fields, restore display value if it exists
-            if (element.dataset.originalDisplayValue) {
-                element.value = element.dataset.originalDisplayValue;
+            if (field === 'unit_id') {
+                // Restore unit selection
+                element.value = element.dataset.originalValue || '';
+                
+                // Restore category and type displays
+                const categoryDisplay = document.getElementById(getFieldId(type, 'category', id));
+                const typeDisplay = document.getElementById(getFieldId(type, 'type', id));
+                
+                if (categoryDisplay && element.dataset.originalCategoryId) {
+                    const selectedOption = element.options[element.selectedIndex];
+                    if (selectedOption) {
+                        categoryDisplay.textContent = selectedOption.dataset.categoryName || '';
+                    }
+                }
+                
+                if (typeDisplay && element.dataset.originalTypeId) {
+                    const selectedOption = element.options[element.selectedIndex];
+                    if (selectedOption) {
+                        typeDisplay.textContent = selectedOption.dataset.typeName || '';
+                    }
+                }
+            } else {
+                // Handle regular fields and other selects
+                element.value = element.dataset.originalValue || '';
+                if (element.tagName.toLowerCase() === 'select' && element.dataset.originalDisplayValue) {
+                    const option = Array.from(element.options)
+                        .find(opt => opt.text === element.dataset.originalDisplayValue);
+                    if (option) {
+                        element.value = option.value;
+                    }
+                }
             }
+
+            // Clear error states
             element.classList.remove('error');
+            
+            // Clean up stored data
             delete element.dataset.originalValue;
             delete element.dataset.originalDisplayValue;
+            delete element.dataset.originalCategoryId;
+            delete element.dataset.originalTypeId;
         }
     });
     
@@ -616,40 +795,166 @@ export const cancelEdit = (event, type, id, fields) => {
     if (errorDisplay) {
         errorDisplay.remove();
     }
+
+    // Remove any event listeners from unit selection
+    const unitField = document.getElementById(getFieldId(type, 'unit_id', id));
+    if (unitField) {
+        unitField.replaceWith(unitField.cloneNode(true));
+    }
     
     resetFields(type, id, fields);
 };
 
+
 const resetFields = (type, id, fields) => {
+    // Clean up measurement handlers first
+    cleanupMeasurementHandlers(type, id);
+
     fields.forEach((field) => {
         const element = document.getElementById(getFieldId(type, field, id));
         if (element) {
+            // Reset to original value
             if (element.tagName.toLowerCase() === 'select') {
                 element.setAttribute('disabled', 'disabled');
+                
+                // Special handling for unit selection
+                if (field === 'unit_id') {
+                    // Restore unit selection and related displays
+                    element.value = element.dataset.originalValue || '';
+                    handleUnitChange(element, type, id);
+                } else {
+                    // Handle other select fields
+                    if (element.dataset.originalDisplayValue) {
+                        const option = Array.from(element.options)
+                            .find(opt => opt.text === element.dataset.originalDisplayValue);
+                        if (option) {
+                            element.value = option.value;
+                        }
+                    }
+                }
             } else {
                 element.setAttribute('readonly', 'readonly');
+                element.value = element.dataset.originalValue || '';
             }
+
+            // Reset display and classes
             element.classList.remove('editing', 'error');
-            
             if (field !== 'name') {
                 element.style.display = "none";
             } else {
                 element.style.display = "inline-block";
             }
             
+            // Clean up stored data
             delete element.dataset.originalValue;
             delete element.dataset.originalDisplayValue;
+            delete element.dataset.originalCategoryId;
+            delete element.dataset.originalTypeId;
         }
     });
 
+    // Reset edit controls
     const editControls = document.getElementById(`id_${type}EditControls-${id}`);
     if (editControls) {
         editControls.style.display = "none";
     }
 
+    // Clear any error messages
     const errorDisplay = document.getElementById(`id_${type}Error-${id}`);
     if (errorDisplay) {
         errorDisplay.remove();
     }
 };
 
+// Utility functions for handling measurement units
+
+const handleUnitChange = (unitElement, type, id) => {
+    if (!unitElement) return;
+
+    const selectedOption = unitElement.options[unitElement.selectedIndex];
+    if (!selectedOption) return;
+
+    const categoryDisplay = document.getElementById(getFieldId(type, 'category', id));
+    const typeDisplay = document.getElementById(getFieldId(type, 'type', id));
+    const displayDiv = document.getElementById(getFieldId(type, 'unit_display', id));
+
+    if (selectedOption.value) {
+        // Update displays
+        if (categoryDisplay) {
+            categoryDisplay.textContent = selectedOption.dataset.categoryName || '';
+            categoryDisplay.style.display = 'inline-block';
+        }
+        
+        if (typeDisplay) {
+            typeDisplay.textContent = selectedOption.dataset.typeName || '';
+            typeDisplay.style.display = 'inline-block';
+        }
+
+        if (displayDiv) {
+            displayDiv.textContent = selectedOption.text;
+            displayDiv.style.display = 'inline-block';
+        }
+
+        // Store the selected values
+        unitElement.dataset.selectedCategoryId = selectedOption.dataset.categoryId;
+        unitElement.dataset.selectedTypeId = selectedOption.dataset.typeId;
+        unitElement.dataset.selectedDisplay = selectedOption.text;
+    } else {
+        // Clear displays if no unit selected
+        if (categoryDisplay) {
+            categoryDisplay.textContent = '';
+            categoryDisplay.style.display = 'none';
+        }
+        
+        if (typeDisplay) {
+            typeDisplay.textContent = '';
+            typeDisplay.style.display = 'none';
+        }
+
+        if (displayDiv) {
+            displayDiv.textContent = '';
+            displayDiv.style.display = 'none';
+        }
+
+        // Clear stored values
+        delete unitElement.dataset.selectedCategoryId;
+        delete unitElement.dataset.selectedTypeId;
+        delete unitElement.dataset.selectedDisplay;
+    }
+};
+
+const attachUnitChangeHandler = (element, type, id) => {
+    if (!element) return;
+
+    const changeHandler = () => handleUnitChange(element, type, id);
+    element.addEventListener('change', changeHandler);
+
+    // Store the handler reference for potential cleanup
+    element.dataset.changeHandler = changeHandler;
+
+    // Initial update
+    handleUnitChange(element, type, id);
+
+    return changeHandler;
+};
+
+const removeUnitChangeHandler = (element) => {
+    if (!element || !element.dataset.changeHandler) return;
+
+    element.removeEventListener('change', element.dataset.changeHandler);
+    delete element.dataset.changeHandler;
+};
+
+export const setupMeasurementHandlers = (type, id) => {
+    const unitElement = document.getElementById(getFieldId(type, 'unit_id', id));
+    if (unitElement) {
+        attachUnitChangeHandler(unitElement, type, id);
+    }
+};
+
+export const cleanupMeasurementHandlers = (type, id) => {
+    const unitElement = document.getElementById(getFieldId(type, 'unit_id', id));
+    if (unitElement) {
+        removeUnitChangeHandler(unitElement);
+    }
+};

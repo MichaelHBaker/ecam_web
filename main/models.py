@@ -2,15 +2,159 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
+class MeasurementCategory(models.Model):
+    """Categories like Energy, Power, Flow, etc."""
+    name = models.CharField(max_length=50, unique=True)
+    display_name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+
+    def __str__(self):
+        return self.display_name
+
+    class Meta:
+        verbose_name_plural = "Measurement Categories"
+
 class MeasurementType(models.Model):
-        name = models.CharField(max_length=50, unique=True)  
-        display_name = models.CharField(max_length=100)      
-        unit = models.CharField(max_length=10)               
-        description = models.TextField(blank=True)
+    """Base units like Watt, BTU, Therm"""
+    MULTIPLIER_CHOICES = [
+        ('p', 'pico'),    # 10^-12
+        ('n', 'nano'),    # 10^-9
+        ('µ', 'micro'),   # 10^-6
+        ('m', 'milli'),   # 10^-3
+        ('', 'base'),     # 10^0
+        ('k', 'kilo'),    # 10^3
+        ('M', 'mega'),    # 10^6
+        ('G', 'giga'),    # 10^9
+        ('T', 'tera'),    # 10^12
+    ]
 
-        def __str__(self):
-            return self.display_name
+    category = models.ForeignKey(
+        MeasurementCategory,
+        on_delete=models.PROTECT,
+        related_name='types'
+    )
+    name = models.CharField(max_length=50)
+    symbol = models.CharField(max_length=10)
+    description = models.TextField(blank=True)
+    conversion_factor = models.FloatField(
+        default=1.0,
+        help_text="Conversion factor to category's base unit"
+    )
+    is_base_unit = models.BooleanField(
+        default=False,
+        help_text="Whether this is the base unit for its category"
+    )
+    supports_multipliers = models.BooleanField(
+        default=True,
+        help_text="Whether this type supports SI multipliers"
+    )
 
+    def __str__(self):
+        return f"{self.name} ({self.symbol})"
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['category', 'name'],
+                name='unique_type_per_category'
+            )
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.is_base_unit:
+            existing_base = MeasurementType.objects.filter(
+                category=self.category,
+                is_base_unit=True
+            )
+            if self.pk:
+                existing_base = existing_base.exclude(pk=self.pk)
+            if existing_base.exists():
+                raise ValidationError({
+                    'is_base_unit': f'{self.category} already has a base unit'
+                })
+
+class MeasurementUnit(models.Model):
+    """Specific units including multipliers"""
+    type = models.ForeignKey(
+        MeasurementType,
+        on_delete=models.PROTECT,
+        related_name='units'
+    )
+    multiplier = models.CharField(
+        max_length=2,
+        choices=MeasurementType.MULTIPLIER_CHOICES,
+        default='',
+        blank=True
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['type', 'multiplier'],
+                name='unique_type_multiplier'
+            )
+        ]
+
+    def __str__(self):
+        if self.multiplier and self.type.supports_multipliers:
+            return f"{self.multiplier}{self.type.symbol}"
+        return self.type.symbol
+
+    def clean(self):
+        super().clean()
+        if self.multiplier and not self.type.supports_multipliers:
+            raise ValidationError({
+                'multiplier': f'{self.type} does not support multipliers'
+            })
+
+class Measurement(models.Model):
+    """Individual measurements"""
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    unit = models.ForeignKey(
+        MeasurementUnit,
+        on_delete=models.PROTECT
+    )
+    location = models.ForeignKey(
+        'Location',
+        on_delete=models.CASCADE,
+        related_name='measurements'
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['name', 'location'],
+                name='unique_measurement_name_per_location'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.unit})"
+
+    def clean(self):
+        super().clean()
+        if self.name:
+            existing = Measurement.objects.filter(
+                location=self.location,
+                name=self.name
+            )
+            if self.pk:
+                existing = existing.exclude(pk=self.pk)
+            if existing.exists():
+                raise ValidationError({
+                    'name': 'A measurement with this name already exists in this location'
+                })
+
+    @property
+    def type(self):
+        return self.unit.type
+
+    @property
+    def category(self):
+        return self.type.category
+    
 class Project(models.Model):
     PROJECT_TYPES = [
         ('Audit', 'Audit'),
@@ -24,9 +168,6 @@ class Project(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.get_project_type_display()})"
-
-    def get_hierarchy(self):
-        return self.name
 
     def clean(self):
         super().clean()
@@ -46,59 +187,12 @@ class Location(models.Model):
     def __str__(self):
         return f"{self.name} - Project: {self.project.name}"
 
-    def get_hierarchy(self):
-        hierarchy = f"{self.project.get_hierarchy()}"
-        ancestors = [self.name]
-        p = self.parent
-        while p is not None:
-            ancestors.append(p.name)
-            p = p.parent
-        return f"{hierarchy} > {' > '.join(reversed(ancestors))}"
-
     def clean(self):
         super().clean()
         if self.parent and self.parent.project != self.project:
             raise ValidationError({
                 'parent': 'Parent location must belong to the same project'
             })
-
-class Measurement(models.Model):
-    name = models.CharField(max_length=100)
-    description = models.TextField(blank=True)
-    measurement_type = models.ForeignKey(MeasurementType, on_delete=models.PROTECT)
-    location = models.ForeignKey(Location, on_delete=models.CASCADE, related_name='measurements')
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=['name', 'location'],
-                name='unique_measurement_name_per_location'
-            )
-        ]
-
-    def __str__(self):
-        return f"{self.name} ({self.measurement_type.display_name})"
-
-    def get_hierarchy(self):
-        return f"{self.location.get_hierarchy()} > {self.name}"
-
-    def clean(self):
-        super().clean()
-        if self.name:
-            existing = Measurement.objects.filter(
-                location=self.location,
-                name=self.name
-            )
-            if self.pk:
-                existing = existing.exclude(pk=self.pk)
-            if existing.exists():
-                raise ValidationError({
-                    'name': 'A measurement with this name already exists in this location'
-                })
-
-    @property
-    def unit(self):
-        return self.measurement_type.unit
 
 class DataSource(models.Model):
     """Base model for all data sources"""

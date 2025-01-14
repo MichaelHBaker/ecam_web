@@ -6,28 +6,32 @@ register = template.Library()
 @register.filter
 def get_field_value(obj, field):
     """
-    Get field value, handling choice fields, related fields, and measurement types appropriately
+    Get field value, handling choice fields, related fields, and measurement units appropriately
     """
     # Extract field name if field is a dictionary
     field_name = field['name'] if isinstance(field, dict) else str(field)
     
     try:
-        # Special handling for measurement_type
-        if field_name == 'measurement_type':
-            measurement_type = getattr(obj, 'measurement_type', None)
-            if measurement_type:
-                display_name = getattr(measurement_type, 'display_name', None)
-                return display_name if display_name else measurement_type.name
-            return ''
-        
-        # Special handling for measurement_type_id
-        if field_name == 'measurement_type_id':
-            measurement_type = getattr(obj, 'measurement_type', None)
-            if measurement_type:
-                display_name = getattr(measurement_type, 'display_name', None)
-                return display_name if display_name else measurement_type.name
+        # Special handling for unit relationships
+        if field_name == 'unit':
+            unit = getattr(obj, 'unit', None)
+            if unit:
+                return str(unit)
             return ''
             
+        if field_name == 'unit_id':
+            unit = getattr(obj, 'unit', None)
+            if unit:
+                return str(unit)
+            return ''
+            
+        # Handle category and type relationships
+        if field_name == 'category':
+            return obj.category.display_name if obj.category else ''
+            
+        if field_name == 'type':
+            return f"{obj.type.name} ({obj.type.symbol})" if obj.type else ''
+        
         # Check for choice field display method
         if hasattr(obj, f'get_{field_name}_display'):
             return getattr(obj, f'get_{field_name}_display')()
@@ -55,7 +59,6 @@ def get_item(dictionary, key):
     Get item from dictionary, returns empty dict if key not found
     """
     return dictionary.get(key, {})
-
 
 @register.filter
 def get_display_value(obj, field_name):
@@ -94,11 +97,32 @@ def render_tree_item(item, level_type, model_fields, parent=None):
         elif isinstance(fields, list) and fields and isinstance(fields[0], str):
             fields = [{'name': f, 'type': 'string'} for f in fields]
             
-        # Add measurement type information if needed
-        measurement_types = None
+        # Add measurement options if needed
+        measurement_choices = None
         if level_type == 'measurement':
-            from ..models import MeasurementType  # Local import to avoid circular dependency
-            measurement_types = MeasurementType.objects.all()
+            from ..models import MeasurementCategory  # Local import to avoid circular dependency
+            categories = MeasurementCategory.objects.prefetch_related(
+                'types',
+                'types__units'
+            ).all()
+            
+            measurement_choices = {
+                'categories': [
+                    {'id': cat.id, 'display_name': cat.display_name}
+                    for cat in categories
+                ],
+                'units': [
+                    {
+                        'id': unit.id,
+                        'display_name': str(unit),
+                        'type_id': unit.type_id,
+                        'category_id': unit.type.category_id
+                    }
+                    for cat in categories
+                    for type in cat.types.all()
+                    for unit in type.units.all()
+                ]
+            }
             
         context = {
             'item': item,
@@ -109,7 +133,7 @@ def render_tree_item(item, level_type, model_fields, parent=None):
             'parent': parent,
             'fields': fields,
             'level': level_info.get('level', 1),
-            'measurement_types': measurement_types
+            'measurement_choices': measurement_choices
         }
         
         return context
@@ -125,5 +149,5 @@ def render_tree_item(item, level_type, model_fields, parent=None):
             'parent': parent,
             'fields': [{'name': 'name', 'type': 'string'}],
             'level': 1,
-            'measurement_types': None
+            'measurement_choices': None
         }

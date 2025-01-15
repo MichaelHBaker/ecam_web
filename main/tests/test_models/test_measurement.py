@@ -2,7 +2,7 @@
 from django.test import TestCase
 from django.core.exceptions import ValidationError
 from ..test_base import BaseTestCase
-from ...models import Measurement, Location, MeasurementType
+from ...models import Measurement, Location, MeasurementUnit
 
 class TestMeasurementModel(BaseTestCase):
     def test_str_representation(self):
@@ -10,60 +10,71 @@ class TestMeasurementModel(BaseTestCase):
         measurement = Measurement.objects.create(
             name="String Test",
             location=self.test_location,
-            measurement_type=self.power_type
+            unit=self.test_unit
         )
-        expected = f"String Test ({self.power_type.display_name})"
+        expected = f"String Test ({self.test_unit})"
         self.assertEqual(str(measurement), expected)
 
-    def test_measurement_type_required(self):
-        """Test measurement type is required"""
+    def test_unit_required(self):
+        """Test unit is required"""
         with self.assertRaises(ValidationError) as context:
             Measurement(
-                name="Missing Type Test",
+                name="Missing Unit Test",
                 location=self.test_location,
-                measurement_type=None
+                unit=None
             ).full_clean()
-        self.assertIn('measurement_type', str(context.exception))
+        self.assertIn('unit', str(context.exception))
 
-    def test_unit_from_measurement_type(self):
-        """Test unit is correctly obtained from measurement type"""
-        # Test power measurement
-        power_measurement = Measurement.objects.create(
-            name="Power Test",
+    def test_category_type_relationships(self):
+        """Test relationships to category and type through unit"""
+        measurement = Measurement.objects.create(
+            name="Relationship Test",
             location=self.test_location,
-            measurement_type=self.power_type
+            unit=self.test_unit
         )
-        self.assertEqual(power_measurement.unit, "kW")
+        self.assertEqual(measurement.type, self.test_unit.type)
+        self.assertEqual(measurement.category, self.test_unit.type.category)
+
+    def test_unit_validation(self):
+        """Test unit validation with different multipliers"""
+        # Get units with different multipliers
+        base_unit = MeasurementUnit.objects.get(
+            type=self.pressure_type,
+            multiplier=''
+        )
+        kilo_unit = MeasurementUnit.objects.get(
+            type=self.pressure_type,
+            multiplier='k'
+        )
         
-        # Test temperature measurement
-        temp_measurement = Measurement.objects.create(
-            name="Temp Test",
+        # Both should work
+        measurement1 = Measurement.objects.create(
+            name="Base Unit Test",
             location=self.test_location,
-            measurement_type=self.temp_type
+            unit=base_unit
         )
-        self.assertEqual(temp_measurement.unit, "°F")
+        measurement2 = Measurement.objects.create(
+            name="Kilo Unit Test",
+            location=self.test_location,
+            unit=kilo_unit
+        )
         
-        # Test pressure measurement
-        pressure_measurement = Measurement.objects.create(
-            name="Pressure Test",
-            location=self.test_location,
-            measurement_type=self.pressure_type
-        )
-        self.assertEqual(pressure_measurement.unit, "PSI")
+        self.assertEqual(measurement1.unit, base_unit)
+        self.assertEqual(measurement2.unit, kilo_unit)
 
     def test_duplicate_names_same_location(self):
         """Test measurements in same location can't have duplicate names"""
         measurement1 = Measurement.objects.create(
             name="Duplicate Test",
             location=self.test_location,
-            measurement_type=self.power_type
+            unit=self.test_unit
         )
         
         with self.assertRaises(ValidationError) as context:
             measurement2 = Measurement(
                 name="Duplicate Test",  # Same name
                 location=self.test_location,  # Same location
-                measurement_type=self.temp_type  # Different type doesn't matter
+                unit=self.test_unit
             )
             measurement2.full_clean()
         self.assertIn('name', str(context.exception))
@@ -73,7 +84,7 @@ class TestMeasurementModel(BaseTestCase):
         measurement1 = Measurement.objects.create(
             name="Same Name Test",
             location=self.test_location,
-            measurement_type=self.power_type
+            unit=self.test_unit
         )
         
         different_location = Location.objects.create(
@@ -86,33 +97,33 @@ class TestMeasurementModel(BaseTestCase):
             measurement2 = Measurement(
                 name="Same Name Test",  # Same name
                 location=different_location,  # Different location
-                measurement_type=self.power_type
+                unit=self.test_unit
             )
             measurement2.full_clean()
             measurement2.save()
         except ValidationError as e:
             self.fail("Should allow same name in different location")
 
-    def test_measurement_type_deletion_protection(self):
-        """Test that measurement types cannot be deleted while in use"""
+    def test_unit_deletion_protection(self):
+        """Test that units cannot be deleted while in use"""
         measurement = Measurement.objects.create(
             name="Protection Test",
             location=self.test_location,
-            measurement_type=self.power_type
+            unit=self.test_unit
         )
         
-        # Attempt to delete the measurement type
+        # Attempt to delete the unit
         with self.assertRaises(Exception):
-            self.power_type.delete()
+            self.test_unit.delete()
         
-        # Verify measurement and type still exist
+        # Verify measurement and unit still exist
         self.assertTrue(
             Measurement.objects.filter(pk=measurement.pk).exists(),
             "Measurement should still exist"
         )
         self.assertTrue(
-            MeasurementType.objects.filter(pk=self.power_type.pk).exists(),
-            "MeasurementType should still exist"
+            MeasurementUnit.objects.filter(pk=self.test_unit.pk).exists(),
+            "MeasurementUnit should still exist"
         )
 
     def test_optional_description(self):
@@ -120,26 +131,10 @@ class TestMeasurementModel(BaseTestCase):
         measurement = Measurement(
             name="No Description Test",
             location=self.test_location,
-            measurement_type=self.power_type
+            unit=self.test_unit
         )
         try:
             measurement.full_clean()
             measurement.save()
         except ValidationError as e:
             self.fail("Description should be optional")
-
-    def test_measurement_type_attributes(self):
-        """Test access to measurement type attributes"""
-        measurement = Measurement.objects.create(
-            name="Attributes Test",
-            location=self.test_location,
-            measurement_type=self.power_type
-        )
-        
-        self.assertEqual(measurement.measurement_type.name, 'power')
-        self.assertEqual(measurement.measurement_type.display_name, 'Power (kW)')
-        self.assertEqual(measurement.measurement_type.unit, 'kW')
-        self.assertEqual(
-            measurement.measurement_type.description,
-            'Power consumption measurement'
-        )

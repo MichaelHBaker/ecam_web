@@ -13,6 +13,7 @@
     .tree-headings {
         padding-left: 35px;
     }
+    
     .tree-heading-before {
         padding-left: 6px;
     }
@@ -55,23 +56,67 @@
         background-color: #f1f1f1;
     }
 
-    /* Styles for measurement type display */
-    .measurement-type-select {
+    /* Enhanced measurement styles */
+    .measurement-fields {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        flex-wrap: wrap;
+    }
+
+    .unit-select {
+        min-width: 120px;
         padding: 4px 8px;
         border: 1px solid #ddd;
         border-radius: 4px;
         background-color: white;
     }
 
-    .measurement-type-display {
-        color: #666;
-        font-size: 0.9em;
+    /* Multiplier select styles */
+    .multiplier-select {
+        width: 100px;
+        padding: 4px 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background-color: white;
+        margin-left: 4px;
+    }
+
+    /* Timezone select styles */
+    .timezone-select {
+        width: 160px;
+        padding: 4px 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        background-color: white;
         margin-left: 8px;
     }
 
-    .measurement-unit {
+    .measurement-category-display {
+        color: #666;
+        font-size: 0.9em;
+        margin-left: 8px;
+        padding: 2px 6px;
+        background-color: #f8f8f8;
+        border-radius: 3px;
+    }
+
+    .measurement-type-display {
         color: #888;
+        font-size: 0.9em;
+        margin-left: 4px;
+        padding: 2px 6px;
+        background-color: #f0f0f0;
+        border-radius: 3px;
+    }
+
+    /* SI indicator style */
+    .si-indicator {
         font-size: 0.8em;
+        color: #666;
+        padding: 2px 4px;
+        background-color: #f0f0f0;
+        border-radius: 3px;
         margin-left: 4px;
     }
 
@@ -109,6 +154,28 @@
     
     .tree-item-name {
         font-weight: normal;
+    }
+
+    /* Error state styles */
+    .tree-item-field.error {
+        border-color: #ff4444;
+        background-color: #fff8f8;
+    }
+
+    .error-message {
+        color: #ff4444;
+        font-size: 0.9em;
+        margin-top: 4px;
+    }
+
+    /* Unit selection styles */
+    optgroup {
+        font-weight: bold;
+        color: #666;
+    }
+
+    option {
+        padding: 4px 8px;
     }
 </style>
 {% endblock %}
@@ -230,10 +297,18 @@
 <!-- Module JavaScript -->
 <script type="module">
     import * as CRUD from "{% static 'main/js/crud.js' %}"; 
-    window.crud = CRUD; // Expose the CRUD module globally
+    window.crud = CRUD;
 
-    // Initialize MODEL_FIELDS when the page loads
-    CRUD.initializeModelFields().catch(error => {
+    // Initialize MODEL_FIELDS and measurement handlers
+    CRUD.initializeModelFields().then(() => {
+        document.querySelectorAll('.measurement-fields').forEach(field => {
+            const type = field.closest('form').dataset.type;
+            const id = field.closest('form').dataset.id;
+            if (type && id) {
+                CRUD.setupMeasurementHandlers(type, id);
+            }
+        });
+    }).catch(error => {
         console.error('Failed to initialize MODEL_FIELDS:', error);
     });
 </script>

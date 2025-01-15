@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.core.exceptions import ValidationError
 from datetime import date, timedelta
 from ..test_base import BaseTestCase
-from ...models import Project, Location, Measurement, MeasurementType
+from ...models import Project, Location, Measurement, MeasurementUnit
 
 class TestProjectModel(BaseTestCase):
     def test_str_representation(self):
@@ -12,29 +12,14 @@ class TestProjectModel(BaseTestCase):
         expected = f"{project.name} ({project.get_project_type_display()})"
         self.assertEqual(str(project), expected)
 
-    def test_project_as_root(self):
-        """Test project functions correctly as root entity"""
-        project = Project.objects.create(
-            name="Root Project",
-            project_type="Audit",
-            start_date=date.today()
-        )
-        # Verify it can be created without dependencies
-        self.assertIsNotNone(project.pk)
-        # Verify hierarchy
-        self.assertEqual(project.get_hierarchy(), project.name)
-        # Verify it can have locations
-        self.assertEqual(list(project.locations.all()), [])
-
-    def test_project_independence(self):
-        """Test project can exist and validate without dependencies"""
+    def test_project_validation(self):
+        """Test project basic validation"""
         project = Project(
             name="Independent Project",
             project_type="M&V",
             start_date=date.today()
         )
-        # Shouldn't raise ValidationError
-        project.full_clean()
+        project.full_clean()  # Shouldn't raise ValidationError
         project.save()
         self.assertIsNotNone(project.pk)
 
@@ -58,6 +43,7 @@ class TestProjectModel(BaseTestCase):
             )
             try:
                 project.full_clean()
+                project.save()
             except ValidationError as e:
                 self.fail(f"Project type {project_type} should be valid but raised: {e}")
 
@@ -92,12 +78,13 @@ class TestProjectModel(BaseTestCase):
             )
             try:
                 project.full_clean()
+                project.save()
             except ValidationError as e:
                 self.fail(f"Date range {start} to {end} should be valid but raised: {e}")
 
     def test_delete_cascade(self):
-        """Test deleting project cascades to locations and measurements"""
-        # Create a test project with a location and measurement
+        """Test deleting project cascades to locations and measurements but preserves units"""
+        # Create a test project with location and measurement
         project = Project.objects.create(
             name="Cascade Test Project",
             project_type="Audit",
@@ -113,50 +100,29 @@ class TestProjectModel(BaseTestCase):
         measurement = Measurement.objects.create(
             location=location,
             name="Test Measurement",
-            measurement_type=self.power_type
+            unit=self.test_unit
         )
         
-        # Store IDs for later verification
+        # Store IDs for verification
         location_id = location.id
         measurement_id = measurement.id
         project_id = project.id
-        measurement_type_id = self.power_type.id
+        unit_id = self.test_unit.id
+        type_id = self.test_unit.type.id
+        category_id = self.test_unit.type.category.id
         
         # Delete the project
         project.delete()
         
-        # Verify everything is deleted
-        self.assertFalse(
-            Project.objects.filter(id=project_id).exists(),
-            "Project should be deleted"
-        )
-        self.assertFalse(
-            Location.objects.filter(id=location_id).exists(),
-            "Location should be deleted via cascade"
-        )
-        self.assertFalse(
-            Measurement.objects.filter(id=measurement_id).exists(),
-            "Measurement should be deleted via cascade"
-        )
-        # Verify measurement type is NOT deleted (protected)
-        self.assertTrue(
-            MeasurementType.objects.filter(id=measurement_type_id).exists(),
-            "MeasurementType should not be deleted"
-        )
-
-    def test_hierarchy_with_locations(self):
-        """Test hierarchy string includes locations correctly"""
-        # Get existing project
-        project = Project.objects.get(name="BPA Custom")
-        storage_location = Location.objects.get(name="Fish Storage Warehouse")
-        office_location = Location.objects.get(name="Office Park II")
+        # Verify project items are deleted
+        self.assertFalse(Project.objects.filter(id=project_id).exists())
+        self.assertFalse(Location.objects.filter(id=location_id).exists())
+        self.assertFalse(Measurement.objects.filter(id=measurement_id).exists())
         
-        # Verify locations' hierarchies include project
-        storage_expected = f"{project.name} > {storage_location.name}"
-        self.assertEqual(storage_location.get_hierarchy(), storage_expected)
-        
-        office_expected = f"{project.name} > {office_location.name}"
-        self.assertEqual(office_location.get_hierarchy(), office_expected)
+        # Verify measurement hierarchy items are preserved
+        self.assertTrue(MeasurementUnit.objects.filter(id=unit_id).exists())
+        self.assertTrue(self.test_unit.type.__class__.objects.filter(id=type_id).exists())
+        self.assertTrue(self.test_unit.type.category.__class__.objects.filter(id=category_id).exists())
 
     def test_duplicate_name_allowed(self):
         """Test that projects can have duplicate names"""
@@ -168,13 +134,12 @@ class TestProjectModel(BaseTestCase):
         )
         
         # Try to create another project with the same name
-        project2 = Project(
-            name=name,
-            project_type="M&V",
-            start_date=date.today()
-        )
-        
         try:
+            project2 = Project(
+                name=name,
+                project_type="M&V",
+                start_date=date.today()
+            )
             project2.full_clean()
             project2.save()
         except ValidationError as e:

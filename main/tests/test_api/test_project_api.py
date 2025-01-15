@@ -3,13 +3,17 @@ from rest_framework import status
 from django.urls import reverse
 from datetime import date
 from ..test_base import BaseAPITestCase
-from ...models import Project, Location, Measurement, MeasurementType
+from ...models import Project, Location, Measurement, MeasurementUnit, MeasurementCategory, MeasurementType 
 
 class TestProjectAPI(BaseAPITestCase):
     def setUp(self):
         super().setUp()
         self.list_url = reverse('project-list')
         self.detail_url = reverse('project-detail', kwargs={'pk': self.test_project.pk})
+        self.test_unit = MeasurementUnit.objects.get(
+            type=self.pressure_type,
+            multiplier=''  # base unit
+        )
 
     def test_list_projects(self):
         """Test retrieving list of projects"""
@@ -57,11 +61,20 @@ class TestProjectAPI(BaseAPITestCase):
             self.assertIn(test_case['expected_error'], str(response.data))
 
     def test_retrieve_project(self):
-        """Test retrieving a specific project"""
+        """Test retrieving a specific project with measurements"""
         response = self.client.get(self.detail_url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['name'], self.test_project.name)
         self.assertIn('locations', response.data)
+        
+        # Verify nested measurement data includes unit info
+        location_data = response.data['locations'][0]
+        self.assertIn('measurements', location_data)
+        if location_data['measurements']:
+            measurement = location_data['measurements'][0]
+            self.assertIn('unit', measurement)
+            self.assertIn('category', measurement)
+            self.assertIn('type', measurement)
 
     def test_update_project(self):
         """Test updating a project"""
@@ -95,13 +108,15 @@ class TestProjectAPI(BaseAPITestCase):
         measurement = Measurement.objects.create(
             name="Test Measurement",
             location=location,
-            measurement_type=self.power_type
+            unit=self.test_unit
         )
 
         # Store IDs for verification
         location_id = location.pk
         measurement_id = measurement.pk
-        measurement_type_id = self.power_type.pk
+        unit_id = self.test_unit.pk
+        type_id = self.test_unit.type.id
+        category_id = self.test_unit.type.category.id
 
         # Delete project
         url = reverse('project-detail', kwargs={'pk': project.pk})
@@ -112,19 +127,19 @@ class TestProjectAPI(BaseAPITestCase):
         self.assertFalse(Project.objects.filter(pk=project.pk).exists())
         self.assertFalse(Location.objects.filter(pk=location_id).exists())
         self.assertFalse(Measurement.objects.filter(pk=measurement_id).exists())
-        # Verify measurement type is NOT deleted
-        self.assertTrue(
-            MeasurementType.objects.filter(pk=measurement_type_id).exists(),
-            "MeasurementType should not be deleted on cascade"
-        )
+        
+        # Verify measurement categories, types and units are NOT deleted
+        self.assertTrue(MeasurementUnit.objects.filter(pk=unit_id).exists())
+        self.assertTrue(MeasurementType.objects.filter(pk=type_id).exists())
+        self.assertTrue(MeasurementCategory.objects.filter(pk=category_id).exists())
 
     def test_project_list_structure(self):
-        """Test project list includes correct nested structure"""
+        """Test project list includes correct nested structure with measurement info"""
         # Create measurement in test location
         measurement = Measurement.objects.create(
             name="API Test Measurement",
             location=self.test_location,
-            measurement_type=self.power_type
+            unit=self.test_unit
         )
 
         response = self.client.get(self.list_url)
@@ -141,17 +156,16 @@ class TestProjectAPI(BaseAPITestCase):
         location_data = project_data['locations'][0]
         self.assertIn('measurements', location_data)
         
-        # Verify measurement includes type information
+        # Verify measurement includes full unit information
         measurement_data = next(
             m for m in location_data['measurements'] 
             if m['id'] == measurement.id
         )
-        self.assertIn('measurement_type', measurement_data)
-        self.assertEqual(
-            measurement_data['measurement_type']['name'], 
-            self.power_type.name
-        )
-        self.assertEqual(
-            measurement_data['measurement_type']['unit'],
-            self.power_type.unit
-        )
+        self.assertIn('unit', measurement_data)
+        self.assertIn('category', measurement_data)
+        self.assertIn('type', measurement_data)
+        
+        # Verify specific measurement attributes
+        self.assertEqual(measurement_data['unit']['id'], self.test_unit.id)
+        self.assertEqual(measurement_data['category']['id'], self.test_unit.type.category.id)
+        self.assertEqual(measurement_data['type']['id'], self.test_unit.type.id)

@@ -1,9 +1,9 @@
 from django.db import models
 from django.core.exceptions import ValidationError
-from django.utils import timezone
+import pytz
 
 class MeasurementCategory(models.Model):
-    """Categories like Energy, Power, Flow, etc."""
+    """Top level categories like Pressure, Flow, Temperature"""
     name = models.CharField(max_length=50, unique=True)
     display_name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
@@ -15,7 +15,7 @@ class MeasurementCategory(models.Model):
         verbose_name_plural = "Measurement Categories"
 
 class MeasurementType(models.Model):
-    """Base units like Watt, BTU, Therm"""
+    """Types within categories, e.g., Absolute Pressure within Pressure"""
     MULTIPLIER_CHOICES = [
         ('p', 'pico'),    # 10^-12
         ('n', 'nano'),    # 10^-9
@@ -33,24 +33,12 @@ class MeasurementType(models.Model):
         on_delete=models.PROTECT,
         related_name='types'
     )
-    name = models.CharField(max_length=50)
-    symbol = models.CharField(max_length=10)
-    description = models.TextField(blank=True)
-    conversion_factor = models.FloatField(
-        default=1.0,
-        help_text="Conversion factor to category's base unit"
-    )
-    is_base_unit = models.BooleanField(
-        default=False,
-        help_text="Whether this is the base unit for its category"
-    )
+    name = models.CharField(max_length=100)
+    description = models.TextField()
     supports_multipliers = models.BooleanField(
         default=True,
         help_text="Whether this type supports SI multipliers"
     )
-
-    def __str__(self):
-        return f"{self.name} ({self.symbol})"
 
     class Meta:
         constraints = [
@@ -60,101 +48,52 @@ class MeasurementType(models.Model):
             )
         ]
 
+    def __str__(self):
+        return f"{self.category.name} - {self.name}"
+
+class MeasurementUnit(models.Model):
+    """Units valid for specific types, e.g., Pascal for Absolute Pressure"""
+    type = models.ForeignKey(
+        MeasurementType,
+        on_delete=models.PROTECT,
+        related_name='units'
+    )
+    name = models.CharField(max_length=50)
+    description = models.TextField(blank=True)
+    conversion_factor = models.FloatField(
+        default=1.0,
+        help_text="Conversion factor to type's base unit"
+    )
+    is_base_unit = models.BooleanField(
+        default=False,
+        help_text="Whether this is the base unit for its type"
+    )
+    
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['type', 'name'],
+                name='unique_unit_name_per_type'
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
     def clean(self):
         super().clean()
         if self.is_base_unit:
-            existing_base = MeasurementType.objects.filter(
-                category=self.category,
+            existing_base = MeasurementUnit.objects.filter(
+                type=self.type,
                 is_base_unit=True
             )
             if self.pk:
                 existing_base = existing_base.exclude(pk=self.pk)
             if existing_base.exists():
                 raise ValidationError({
-                    'is_base_unit': f'{self.category} already has a base unit'
+                    'is_base_unit': f'{self.type} already has a base unit'
                 })
 
-class MeasurementUnit(models.Model):
-    """Specific units including multipliers"""
-    type = models.ForeignKey(
-        MeasurementType,
-        on_delete=models.PROTECT,
-        related_name='units'
-    )
-    multiplier = models.CharField(
-        max_length=2,
-        choices=MeasurementType.MULTIPLIER_CHOICES,
-        default='',
-        blank=True
-    )
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=['type', 'multiplier'],
-                name='unique_type_multiplier'
-            )
-        ]
-
-    def __str__(self):
-        if self.multiplier and self.type.supports_multipliers:
-            return f"{self.multiplier}{self.type.symbol}"
-        return self.type.symbol
-
-    def clean(self):
-        super().clean()
-        if self.multiplier and not self.type.supports_multipliers:
-            raise ValidationError({
-                'multiplier': f'{self.type} does not support multipliers'
-            })
-
-class Measurement(models.Model):
-    """Individual measurements"""
-    name = models.CharField(max_length=100)
-    description = models.TextField(blank=True)
-    unit = models.ForeignKey(
-        MeasurementUnit,
-        on_delete=models.PROTECT
-    )
-    location = models.ForeignKey(
-        'Location',
-        on_delete=models.CASCADE,
-        related_name='measurements'
-    )
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=['name', 'location'],
-                name='unique_measurement_name_per_location'
-            )
-        ]
-
-    def __str__(self):
-        return f"{self.name} ({self.unit})"
-
-    def clean(self):
-        super().clean()
-        if self.name:
-            existing = Measurement.objects.filter(
-                location=self.location,
-                name=self.name
-            )
-            if self.pk:
-                existing = existing.exclude(pk=self.pk)
-            if existing.exists():
-                raise ValidationError({
-                    'name': 'A measurement with this name already exists in this location'
-                })
-
-    @property
-    def type(self):
-        return self.unit.type
-
-    @property
-    def category(self):
-        return self.type.category
-    
 class Project(models.Model):
     PROJECT_TYPES = [
         ('Audit', 'Audit'),
@@ -177,22 +116,98 @@ class Project(models.Model):
             })
 
 class Location(models.Model):
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name='locations')
+    project = models.ForeignKey(
+        'Project',
+        on_delete=models.CASCADE,
+        related_name='locations'
+    )
     name = models.CharField(max_length=100)
     address = models.TextField()
-    parent = models.ForeignKey('self', on_delete=models.CASCADE, related_name='children', null=True, blank=True)
-    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True
+    )
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True
+    )
 
     def __str__(self):
         return f"{self.name} - Project: {self.project.name}"
 
+class Measurement(models.Model):
+    """Individual measurement points"""
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    location = models.ForeignKey(
+        'Location',
+        on_delete=models.CASCADE,
+        related_name='measurements'
+    )
+    type = models.ForeignKey(
+        MeasurementType,
+        on_delete=models.PROTECT,
+        related_name='measurements'
+    )
+    unit = models.ForeignKey(
+        MeasurementUnit,
+        on_delete=models.PROTECT,
+        help_text="Unit for this measurement"
+    )
+    multiplier = models.CharField(
+        max_length=2,
+        choices=MeasurementType.MULTIPLIER_CHOICES,
+        null=True,
+        blank=True,
+        help_text="SI multiplier for the measurement (if supported by type)"
+    )
+    source_timezone = models.CharField(
+        max_length=50,
+        choices=[(tz, tz) for tz in pytz.all_timezones],
+        default='UTC',
+        help_text="Timezone of the incoming data"
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['name', 'location'],
+                name='unique_measurement_name_per_location'
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.unit})"
+
     def clean(self):
         super().clean()
-        if self.parent and self.parent.project != self.project:
+        # Validate timezone
+        try:
+            pytz.timezone(self.source_timezone)
+        except pytz.exceptions.UnknownTimeZoneError:
             raise ValidationError({
-                'parent': 'Parent location must belong to the same project'
+                'source_timezone': f'Invalid timezone: {self.source_timezone}'
             })
+        
+        # Validate multiplier usage
+        if self.multiplier and not self.type.supports_multipliers:
+            raise ValidationError({
+                'multiplier': f'Type {self.type} does not support multipliers'
+            })
+
+        # Validate unit belongs to type
+        if self.unit.type != self.type:
+            raise ValidationError({
+                'unit': f'Unit {self.unit} does not belong to type {self.type}'
+            })
+
+    @property
+    def category(self):
+        return self.type.category
 
 class DataSource(models.Model):
     """Base model for all data sources"""
@@ -242,10 +257,14 @@ class APIDataSource(DataSource):
         super().clean()
         if self.source_type != 'api':
             raise ValidationError("APIDataSource must have source_type='api'")
-        
+
 class DataSourceMapping(models.Model):
     """Maps a measurement to its exact source location"""
-    measurement = models.ForeignKey('Measurement', on_delete=models.CASCADE, related_name='source_mappings')
+    measurement = models.ForeignKey(
+        Measurement,
+        on_delete=models.CASCADE,
+        related_name='source_mappings'
+    )
     data_source = models.ForeignKey(DataSource, on_delete=models.CASCADE)
     
     # JSON field storing ALL identifiers needed to uniquely identify the point
@@ -299,40 +318,32 @@ class DataSourceMapping(models.Model):
                 })
 
 class TimeSeriesData(models.Model):
-   """
-   Time series data storage using Django's datetime with UTC
-   """
-   timestamp = models.DateTimeField(
-       db_index=True,
-       help_text="UTC timestamp"
-   )
-   measurement = models.ForeignKey(
-       Measurement, 
-       on_delete=models.CASCADE,
-       related_name='timeseries'
-   )
-   value = models.FloatField()
+    """Time series data storage as received from source"""
+    timestamp = models.DateTimeField(
+        help_text="Timestamp as received from source (interpreted using measurement's source_timezone)"
+    )
+    measurement = models.ForeignKey(
+        Measurement, 
+        on_delete=models.CASCADE,
+        related_name='timeseries'
+    )
+    value = models.FloatField()
 
-   class Meta:
-       indexes = [
-           models.Index(fields=['measurement', 'timestamp']),
-       ]
-       constraints = [
-           models.UniqueConstraint(
-               fields=['timestamp', 'measurement'],
-               name='unique_measurement_timestamp'
-           )
-       ]
-       ordering = ['-timestamp']
+    class Meta:
+        indexes = [
+            models.Index(fields=['measurement', 'timestamp']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['timestamp', 'measurement'],
+                name='unique_measurement_timestamp'
+            )
+        ]
+        ordering = ['-timestamp']
 
-   def __str__(self):
-       return f"{self.measurement}: {self.value} at {self.timestamp}"
+    def __str__(self):
+        return f"{self.measurement}: {self.value} at {self.timestamp}"
 
-   @property 
-   def local_time(self):
-       """Get timestamp in local timezone"""
-       return timezone.localtime(self.timestamp)
-   
 class DataImport(models.Model):
     """Tracks individual import attempts"""
     IMPORT_STATUS = [
@@ -346,18 +357,22 @@ class DataImport(models.Model):
     status = models.CharField(max_length=20, choices=IMPORT_STATUS, default='pending')
     started_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True)
-    
-    # For file imports: reference to the specific file
     import_file = models.FileField(upload_to='imports/', null=True, blank=True)
-    
-    # Metadata about the import
     row_count = models.IntegerField(default=0)
     error_count = models.IntegerField(default=0)
     error_log = models.JSONField(default=list)
-    
-    # Record who initiated/approved the import
-    created_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, related_name='created_imports')
-    approved_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True, related_name='approved_imports')
+    created_by = models.ForeignKey(
+        'auth.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_imports'
+    )
+    approved_by = models.ForeignKey(
+        'auth.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='approved_imports'
+    )
     
     def __str__(self):
         return f"Import {self.id} from {self.data_source} ({self.status})"

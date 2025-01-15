@@ -6,9 +6,11 @@ from django.contrib.contenttypes.models import ContentType
 from rest_framework.test import APIClient
 from ..models import (
     Project, Location, Measurement, MeasurementCategory,
-    MeasurementType, MeasurementUnit
+    MeasurementType, MeasurementUnit, DataSource, APIDataSource,
+    DataSourceMapping, TimeSeriesData
 )
 from .utils_data import create_model_table_data
+
 
 class BaseTestCase(TestCase):
     @classmethod
@@ -24,48 +26,53 @@ class BaseTestCase(TestCase):
             last_name='User'
         )
 
-        # Get content types
-        project_ct = ContentType.objects.get_for_model(Project)
-        location_ct = ContentType.objects.get_for_model(Location)
-        measurement_ct = ContentType.objects.get_for_model(Measurement)
-        category_ct = ContentType.objects.get_for_model(MeasurementCategory)
-        type_ct = ContentType.objects.get_for_model(MeasurementType)
-        unit_ct = ContentType.objects.get_for_model(MeasurementUnit)
-
+        # Get content types for all models
+        model_classes = [
+            Project, Location, Measurement, MeasurementCategory,
+            MeasurementType, MeasurementUnit, DataSource, APIDataSource,
+            DataSourceMapping, TimeSeriesData
+        ]
+        
         # Get all model permissions
-        model_permissions = Permission.objects.filter(
-            content_type__in=[
-                project_ct, 
-                location_ct, 
-                measurement_ct,
-                category_ct,
-                type_ct,
-                unit_ct
-            ]
-        )
-
+        perms = []
+        for model in model_classes:
+            ct = ContentType.objects.get_for_model(model)
+            perms.extend(Permission.objects.filter(content_type=ct))
+        
         # Assign permissions to test user
-        cls.test_user.user_permissions.add(*model_permissions)
+        cls.test_user.user_permissions.add(*perms)
         
         # Create initial test data
         create_model_table_data()
         
-        # Get reference to test project
+        # Cache commonly used test objects
         cls.test_project = Project.objects.get(name="Energy Trust Production")
-        
-        # Get reference to test location
         cls.test_location = Location.objects.get(name="Industrial Facility")
-        
-        # Get reference to test measurement
         cls.test_measurement = Measurement.objects.get(name="Building Pressure")
-
-        # Get references to categories, types and units
+        
+        # Cache measurement hierarchy objects
         cls.pressure_category = MeasurementCategory.objects.get(name='pressure')
-        cls.pressure_type = MeasurementType.objects.get(name='Differential Pressure')
-        cls.pressure_unit = MeasurementUnit.objects.get(
-            type__name='Differential Pressure',
-            multiplier=''  # base unit
+        cls.flow_category = MeasurementCategory.objects.get(name='flow')
+        cls.temperature_category = MeasurementCategory.objects.get(name='temperature')
+        
+        cls.diff_pressure_type = MeasurementType.objects.get(name='Differential Pressure') 
+        cls.vol_flow_type = MeasurementType.objects.get(name='Volumetric Flow (Fluid)')
+        cls.temperature_type = MeasurementType.objects.get(name='Thermal Measurement')
+        
+        cls.inh2o_unit = MeasurementUnit.objects.get(name='inH₂O')
+        cls.gpm_unit = MeasurementUnit.objects.get(name='Gallons per minute')
+        cls.fahrenheit_unit = MeasurementUnit.objects.get(name='Fahrenheit')
+        
+        # Cache data source objects
+        cls.file_source = DataSource.objects.get(name="CSV Import")
+        cls.api_source = APIDataSource.objects.get(name="Test Niagara")
+        
+        # Cache data mapping
+        cls.pressure_mapping = DataSourceMapping.objects.get(
+            measurement=cls.test_measurement,
+            data_source=cls.api_source
         )
+
 
 class BaseAPITestCase(BaseTestCase):
     def setUp(self):

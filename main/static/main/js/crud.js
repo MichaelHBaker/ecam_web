@@ -1,3 +1,9 @@
+
+
+
+
+
+
 // CSRF Token setup
 export const CSRF_TOKEN = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
 if (!CSRF_TOKEN) {
@@ -67,7 +73,7 @@ export const apiFetch = async (endpoint, options = {}, basePath = '/api') => {
     }
 };
 
-const processMeasurementChoices = (data) => {
+export const processMeasurementChoices = (data) => {
     if (data?.measurement?.fields) {
         const unitField = data.measurement.fields.find(f => f.name === 'unit_id');
         if (unitField) {
@@ -91,6 +97,7 @@ const processMeasurementChoices = (data) => {
     return data;
 };
 
+
 // Initialize MODEL_FIELDS from API
 export const initializeModelFields = async () => {
     if (modelFieldsPromise) {
@@ -110,7 +117,6 @@ export const initializeModelFields = async () => {
 
     return modelFieldsPromise;
 };
-
 // Helper function to ensure MODEL_FIELDS is initialized
 const ensureInitialized = async () => {
     if (!MODEL_FIELDS) {
@@ -119,23 +125,6 @@ const ensureInitialized = async () => {
     return MODEL_FIELDS;
 };
 
-// Helper function to get measurement choices
-export const getMeasurementChoices = async () => {
-    const modelFields = await ensureInitialized();
-    const measurementConfig = modelFields?.measurement;
-    if (!measurementConfig) return null;
-
-    const unitField = measurementConfig.fields.find(f => f.name === 'unit_id');
-    return unitField?.choices || null;
-};
-
-// Helper functions for input handling and field creation
-
-// Helper function for consistent field ID generation
-export const getFieldId = (type, field, id) => {
-    const fieldName = typeof field === 'string' ? field : field.name;
-    return `field_${type}_${fieldName}_${id}`;
-};
 
 // Generalizing the input type mapping
 const getInputType = (fieldConfig) => {
@@ -160,45 +149,140 @@ const getInputType = (fieldConfig) => {
     return typeMap[fieldConfig.type] || 'text';
 };
 
-// Helper function to handle field value updates
-const updateFieldValue = async (response, type, id, fieldConfig) => {
-    const fieldElement = document.getElementById(`id_${type}${fieldConfig.name.charAt(0).toUpperCase() + fieldConfig.name.slice(1)}-${id}`);
-    if (!fieldElement) return;
+// Helper function for consistent field ID generation
+export const getFieldId = (type, field, id) => {
+    const fieldName = typeof field === 'string' ? field : field.name;
+    return `field_${type}_${fieldName}_${id}`;
+};
 
-    if (fieldConfig.is_foreign_key) {
-        // Handle foreign key fields
-        const relatedData = response[fieldConfig.name];
-        if (relatedData) {
-            const displayValue = relatedData[fieldConfig.display_field || 'name'];
-            const unit = relatedData.unit ? ` (${relatedData.unit})` : '';
-            
-            // Update display if there's a separate display element
-            const displayElement = document.getElementById(`id_${type}${fieldConfig.name}Display-${id}`);
-            if (displayElement) {
-                displayElement.innerHTML = `${displayValue}${unit}`;
-            }
-            
-            // Update the select element's value
-            fieldElement.value = relatedData.id;
-        }
-    } else if (fieldConfig.type === 'choice') {
-        // Handle choice fields
-        const choiceValue = response[fieldConfig.name];
-        fieldElement.value = choiceValue;
-        
-        // Update display value if needed
-        const displayElement = document.getElementById(`id_${type}${fieldConfig.name}Display-${id}`);
-        if (displayElement) {
-            const selectedOption = Array.from(fieldElement.options)
-                .find(option => option.value === choiceValue);
-            if (selectedOption) {
-                displayElement.textContent = selectedOption.textContent;
-            }
-        }
-    } else {
-        // Handle regular fields
-        fieldElement.value = response[fieldConfig.name] || '';
+const getUnitDisplayInfo = (type, unitId, modelFields) => {
+    if (!unitId || !modelFields) return null;
+
+    const unitField = modelFields[type]?.fields.find(f => f.name === 'unit_id');
+    if (!unitField?.choices?.units) return null;
+
+    const unit = unitField.choices.units.find(u => u.id === parseInt(unitId, 10));
+    if (!unit) return null;
+
+    return {
+        unit: unit.display_name,
+        category: unitField.choices.categories.find(c => c.id === unit.category_id)?.display_name,
+        type: `${unit.type_name} (${unit.type_symbol})`
+    };
+};
+
+export const validateMeasurementForm = (data) => {
+    const errors = {};
+
+    if (!data.unit_id) {
+        errors.unit_id = 'Unit is required';
     }
+
+    if (!data.name) {
+        errors.name = 'Name is required';
+    }
+
+    // New validation for multiplier
+    if (data.multiplier && !data.type_supports_multipliers) {
+        errors.multiplier = 'This measurement type does not support multipliers';
+    }
+
+    // Timezone validation (defaults to UTC if not provided)
+    if (data.source_timezone) {
+        try {
+            Intl.DateTimeFormat(undefined, {timeZone: data.source_timezone});
+        } catch (e) {
+            errors.source_timezone = 'Invalid timezone';
+        }
+    }
+
+    return Object.keys(errors).length > 0 ? errors : null;
+};
+const validateUnitConsistency = (type, selectedUnit, modelFields) => {
+    if (!selectedUnit || !modelFields) return true;
+
+    const unitField = modelFields[type]?.fields.find(f => f.name === 'unit_id');
+    if (!unitField?.choices?.units) return true;
+
+    const unit = unitField.choices.units.find(u => u.id === parseInt(selectedUnit, 10));
+    if (!unit) return false;
+
+    // Add validation to ensure unit matches type
+    if (unit.type_id !== modelFields.selected_type_id) {
+        return false;
+    }
+
+    return true;
+};
+
+export const clearFormErrors = (type, id) => {
+    const form = document.getElementById(`id_${type}Form-${id}`);
+    if (!form) return;
+
+    // Remove error display
+    const errorDisplay = document.getElementById(`id_${type}Error-${form.id}`);
+    if (errorDisplay) {
+        errorDisplay.remove();
+    }
+
+    // Remove error highlighting from fields
+    const fields = form.querySelectorAll('input, select');
+    fields.forEach(field => {
+        field.classList.remove('error');
+    });
+};
+// Display form errors
+const showFormError = (form, error, type) => {
+    // Remove any existing error displays
+    const existingError = document.getElementById(`id_${type}Error-${form.id}`);
+    if (existingError) {
+        existingError.remove();
+    }
+
+    // Create error display
+    const errorDisplay = document.createElement('div');
+    errorDisplay.id = `id_${type}Error-${form.id}`;
+    errorDisplay.className = 'w3-text-red';
+    errorDisplay.style.marginTop = '4px';
+
+    // Handle different error formats
+    let errorMessage = '';
+    if (error.message) {
+        errorMessage = error.message;
+    } else if (typeof error === 'object') {
+        // Handle validation errors for measurement fields
+        const messages = [];
+        Object.entries(error).forEach(([field, msg]) => {
+            if (field === 'unit_id') {
+                messages.push('Please select a valid unit');
+            } else if (field === 'category') {
+                messages.push('Invalid measurement category');
+            } else if (field === 'type') {
+                messages.push('Invalid measurement type');
+            } else {
+                messages.push(`${field}: ${msg}`);
+            }
+        });
+        errorMessage = messages.join('\n');
+    } else {
+        errorMessage = String(error);
+    }
+
+    errorDisplay.textContent = errorMessage;
+
+    // Add error highlighting to relevant fields
+    fields.forEach(field => {
+        const element = document.getElementById(getFieldId(type, field, form.id));
+        if (element) {
+            if (error[field]) {
+                element.classList.add('error');
+            } else {
+                element.classList.remove('error');
+            }
+        }
+    });
+
+    form.appendChild(errorDisplay);
 };
 
 const createField = (field, type, tempId, fieldInfo) => {
@@ -331,26 +415,32 @@ const collectFormData = (type, id, fields, modelInfo) => {
             if (field === 'unit_id') {
                 if (value) {
                     data.unit_id = parseInt(value, 10);
-                    
-                    // Also get the selected option for category and type info
                     const selectedOption = element.options[element.selectedIndex];
                     if (selectedOption) {
                         data.category_id = parseInt(selectedOption.dataset.categoryId, 10);
                         data.type_id = parseInt(selectedOption.dataset.typeId, 10);
+                        // Add support for multiplier validation
+                        data.type_supports_multipliers = selectedOption.dataset.supportsMultipliers === 'true';
                     }
                 } else {
                     data.unit_id = null;
                 }
             }
-            // Handle other foreign keys
+            // Handle multiplier field
+            else if (field === 'multiplier') {
+                data.multiplier = value || null;
+            }
+            // Handle timezone field - ensure UTC default
+            else if (field === 'source_timezone') {
+                data.source_timezone = value || 'UTC';
+            }
+            // Handle other fields
             else if (fieldConfig?.is_foreign_key) {
                 data[field] = value ? parseInt(value, 10) : null;
             }
-            // Handle choice fields
             else if (fieldConfig?.type === 'choice') {
                 data[field] = value || null;
             }
-            // Handle regular fields
             else {
                 data[field] = value || null;
             }
@@ -359,21 +449,104 @@ const collectFormData = (type, id, fields, modelInfo) => {
     return data;
 };
 
-// Display form errors
-const showFormError = (form, error, type) => {
-    const errorId = `id_${type}Error-${form.id}`;
-    let errorDisplay = document.getElementById(errorId);
-    
-    if (!errorDisplay) {
-        errorDisplay = document.createElement('div');
-        errorDisplay.id = errorId;
-        errorDisplay.className = 'w3-text-red';
-        errorDisplay.style.marginTop = '4px';
+
+
+
+// Utility functions for handling measurement units
+
+export const handleUnitChange = (unitElement, type, id) => {
+    if (!unitElement) return;
+
+    const selectedOption = unitElement.options[unitElement.selectedIndex];
+    if (!selectedOption) return;
+
+    const categoryDisplay = document.getElementById(getFieldId(type, 'category', id));
+    const typeDisplay = document.getElementById(getFieldId(type, 'type', id));
+    const displayDiv = document.getElementById(getFieldId(type, 'unit_display', id));
+
+    if (selectedOption.value) {
+        // Update displays
+        if (categoryDisplay) {
+            categoryDisplay.textContent = selectedOption.dataset.categoryName || '';
+            categoryDisplay.style.display = 'inline-block';
+        }
+        
+        if (typeDisplay) {
+            typeDisplay.textContent = selectedOption.dataset.typeName || '';
+            typeDisplay.style.display = 'inline-block';
+        }
+
+        if (displayDiv) {
+            displayDiv.textContent = selectedOption.text;
+            displayDiv.style.display = 'inline-block';
+        }
+
+        // Store the selected values
+        unitElement.dataset.selectedCategoryId = selectedOption.dataset.categoryId;
+        unitElement.dataset.selectedTypeId = selectedOption.dataset.typeId;
+        unitElement.dataset.selectedDisplay = selectedOption.text;
+    } else {
+        // Clear displays if no unit selected
+        if (categoryDisplay) {
+            categoryDisplay.textContent = '';
+            categoryDisplay.style.display = 'none';
+        }
+        
+        if (typeDisplay) {
+            typeDisplay.textContent = '';
+            typeDisplay.style.display = 'none';
+        }
+
+        if (displayDiv) {
+            displayDiv.textContent = '';
+            displayDiv.style.display = 'none';
+        }
+
+        // Clear stored values
+        delete unitElement.dataset.selectedCategoryId;
+        delete unitElement.dataset.selectedTypeId;
+        delete unitElement.dataset.selectedDisplay;
     }
-    
-    errorDisplay.textContent = error.message;
-    form.appendChild(errorDisplay);
 };
+
+export const attachUnitChangeHandler = (element, type, id) => {
+    if (!element) return;
+
+    const changeHandler = () => handleUnitChange(element, type, id);
+    element.addEventListener('change', changeHandler);
+
+    // Store the handler reference for potential cleanup
+    element.dataset.changeHandler = changeHandler;
+
+    // Initial update
+    handleUnitChange(element, type, id);
+
+    return changeHandler;
+};
+
+export const removeUnitChangeHandler = (element) => {
+    if (!element || !element.dataset.changeHandler) return;
+
+    element.removeEventListener('change', element.dataset.changeHandler);
+    delete element.dataset.changeHandler;
+};
+
+export const setupMeasurementHandlers = (type, id) => {
+    const unitElement = document.getElementById(getFieldId(type, 'unit_id', id));
+    if (unitElement) {
+        attachUnitChangeHandler(unitElement, type, id);
+    }
+};
+
+export const cleanupMeasurementHandlers = (type, id) => {
+    const unitElement = document.getElementById(getFieldId(type, 'unit_id', id));
+    if (unitElement) {
+        removeUnitChangeHandler(unitElement);
+    }
+};
+
+
+
 
 
 // Add new item function
@@ -412,19 +585,67 @@ export const addItem = async (type, fields, parentId = null) => {
             form.appendChild(parentInput);
         }
 
+        // Create field container div
+        const fieldContainer = document.createElement('div');
+        fieldContainer.className = 'field-container';
+
         // Create and add fields
         fields.forEach(field => {
             const fieldConfig = modelInfo.fields.find(f => f.name === field);
+            const fieldWrapper = document.createElement('div');
+            fieldWrapper.className = 'field-wrapper';
+
             const fieldElement = createField(field, type, tempId, fieldConfig);
-            form.appendChild(fieldElement);
+            fieldWrapper.appendChild(fieldElement);
+
+            // For unit_id field in measurements, add display elements
+            if (type === 'measurement' && field === 'unit_id') {
+                // Category display
+                const categoryWrapper = document.createElement('div');
+                categoryWrapper.className = 'category-display-wrapper';
+                const categorySpan = document.createElement('span');
+                categorySpan.id = getFieldId(type, 'category', tempId);
+                categorySpan.className = 'measurement-category';
+                categorySpan.style.display = 'none';
+                categoryWrapper.appendChild(categorySpan);
+                fieldWrapper.appendChild(categoryWrapper);
+
+                // Type display
+                const typeWrapper = document.createElement('div');
+                typeWrapper.className = 'type-display-wrapper';
+                const typeSpan = document.createElement('span');
+                typeSpan.id = getFieldId(type, 'type', tempId);
+                typeSpan.className = 'measurement-type';
+                typeSpan.style.display = 'none';
+                typeWrapper.appendChild(typeSpan);
+                fieldWrapper.appendChild(typeWrapper);
+
+                // Add change handler for unit selection
+                fieldElement.addEventListener('change', () => {
+                    const unitInfo = getUnitDisplayInfo(type, fieldElement.value, modelFields);
+                    if (unitInfo) {
+                        categorySpan.textContent = unitInfo.category;
+                        categorySpan.style.display = 'inline';
+                        typeSpan.textContent = unitInfo.type;
+                        typeSpan.style.display = 'inline';
+                    } else {
+                        categorySpan.style.display = 'none';
+                        typeSpan.style.display = 'none';
+                    }
+                });
+            }
+
+            fieldContainer.appendChild(fieldWrapper);
         });
+
+        form.appendChild(fieldContainer);
 
         // Add edit controls
         const controls = createEditControls(type, tempId);
         form.appendChild(controls);
         tempContainer.appendChild(form);
 
-        // Find parent container and insert form
+        // Find and setup parent container
         const parentContainer = parentId ?
             document.getElementById(`id_${modelInfo.parent_type}-${parentId}`) :
             document.querySelector('.tree-headings');
@@ -433,28 +654,30 @@ export const addItem = async (type, fields, parentId = null) => {
             throw new Error('Parent container not found');
         }
 
-        // If this is a child item (has parentId), insert inside the parent container
+        // Insert form in appropriate location
         if (parentId) {
-            // Make sure parent container is visible when adding child
             parentContainer.classList.remove('w3-hide');
             parentContainer.classList.add('w3-show');
-            
-            // Insert at the beginning of parent container
             parentContainer.insertAdjacentElement('afterbegin', tempContainer);
             
-            // Update the chevron icon to show expansion
             const chevronIcon = document.getElementById(`id_chevronIcon-id_${modelInfo.parent_type}-${parentId}`);
             if (chevronIcon) {
                 chevronIcon.className = "bi bi-chevron-down";
             }
         } else {
-            // For top-level items, insert after the headings
             parentContainer.insertAdjacentElement('afterend', tempContainer);
+        }
+
+        // Setup measurement handlers if needed
+        if (type === 'measurement') {
+            setupMeasurementHandlers(type, tempId);
         }
 
         // Handle form submission
         form.onsubmit = async (event) => {
             event.preventDefault();
+            clearFormErrors(type, tempId);
+
             try {
                 const data = collectFormData(type, tempId, fields, modelInfo);
 
@@ -463,26 +686,33 @@ export const addItem = async (type, fields, parentId = null) => {
                     data[modelInfo.parent_type] = parseInt(parentId, 10);
                 }
 
+                // Validate measurement specific data
+                if (type === 'measurement') {
+                    const validationErrors = validateMeasurementForm(data);
+                    if (validationErrors) {
+                        throw validationErrors;
+                    }
+
+                    // Validate unit consistency
+                    if (!validateUnitConsistency(type, data.unit_id, modelFields)) {
+                        throw new Error('Invalid unit selection');
+                    }
+                }
+
                 const response = await apiFetch(`/${type}s/`, {
                     method: 'POST',
                     body: JSON.stringify(data)
                 });
-                
 
                 // Create a temporary div to hold the new HTML
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = response.html;
                 
-                // Find the tree item div
+                // Find and replace the tree item
                 const treeItem = tempDiv.querySelector('.tree-item');
-                
-                // Replace the temporary form
                 if (treeItem) {
                     if (parentId) {
-                        // For child items, keep them inside the parent container
                         tempContainer.replaceWith(treeItem);
-                        
-                        // If there's a container div, insert it right after the tree item
                         const containerDiv = Array.from(tempDiv.children).find(
                             child => child.classList.contains('w3-container')
                         );
@@ -490,7 +720,6 @@ export const addItem = async (type, fields, parentId = null) => {
                             treeItem.after(containerDiv);
                         }
                     } else {
-                        // For top-level items, replace normally
                         tempContainer.replaceWith(treeItem);
                         const containerDiv = Array.from(tempDiv.children).find(
                             child => child.classList.contains('w3-container')
@@ -504,14 +733,18 @@ export const addItem = async (type, fields, parentId = null) => {
                 }
 
             } catch (error) {
-                console.error('Error in addItem:', error);
                 showFormError(form, error, type);
             }
         };
 
         // Handle cancel
         const cancelButton = controls.querySelector('button[type="button"]');
-        cancelButton.onclick = () => tempContainer.remove();
+        cancelButton.onclick = () => {
+            if (type === 'measurement') {
+                cleanupMeasurementHandlers(type, tempId);
+            }
+            tempContainer.remove();
+        };
 
         // Focus first field
         form.querySelector('input, select')?.focus();
@@ -525,6 +758,8 @@ export const addItem = async (type, fields, parentId = null) => {
 // Update existing functions to use the new ID pattern
 export const updateItem = async (event, type, id, fields) => {
     event.preventDefault();
+    clearFormErrors(type, id);
+    
     try {
         const modelFields = await ensureInitialized();
         const typeConfig = modelFields[type];
@@ -553,19 +788,23 @@ export const updateItem = async (event, type, id, fields) => {
                 } else {
                     element.classList.remove('error');
                     
-                    // Handle unit_id updates
-                    if (field === 'unit_id') {
-                        if (value) {
-                            data.unit_id = parseInt(value, 10);
+                    // Handle unit updates with validation
+                    if (field === 'unit_id' && value) {
+                        const isValidUnit = validateUnitConsistency(type, value, modelFields);
+                        if (!isValidUnit) {
+                            element.classList.add('error');
+                            hasErrors = true;
+                            throw new Error('Invalid unit selection');
+                        }
+                        data.unit_id = parseInt(value, 10);
+                        
+                        const unitInfo = getUnitDisplayInfo(type, value, modelFields);
+                        if (unitInfo) {
+                            const categoryElement = document.getElementById(getFieldId(type, 'category', id));
+                            const typeElement = document.getElementById(getFieldId(type, 'type', id));
                             
-                            // Get category and type info from selected option
-                            const selectedOption = element.options[element.selectedIndex];
-                            if (selectedOption) {
-                                data.category_id = parseInt(selectedOption.dataset.categoryId, 10);
-                                data.type_id = parseInt(selectedOption.dataset.typeId, 10);
-                            }
-                        } else {
-                            data.unit_id = null;
+                            if (categoryElement) categoryElement.textContent = unitInfo.category;
+                            if (typeElement) typeElement.textContent = unitInfo.type;
                         }
                     }
                     // Handle other foreign keys
@@ -585,12 +824,15 @@ export const updateItem = async (event, type, id, fields) => {
         });
 
         if (hasErrors) {
-            throw new Error('Please fill in all required fields');
+            throw new Error('Please fill in all required fields correctly');
         }
 
-        const existingError = document.getElementById(`id_${type}Error-${id}`);
-        if (existingError) {
-            existingError.remove();
+        // For measurements, perform additional validation
+        if (type === 'measurement') {
+            const validationErrors = validateMeasurementForm(data);
+            if (validationErrors) {
+                throw validationErrors;
+            }
         }
 
         const response = await apiFetch(`/${type}s/${id}/`, {
@@ -598,36 +840,25 @@ export const updateItem = async (event, type, id, fields) => {
             body: JSON.stringify(data),
         });
 
-        // Update display values for measurement-specific fields
-        if (type === 'measurement') {
-            const unitElement = document.getElementById(getFieldId(type, 'unit', id));
-            const categoryElement = document.getElementById(getFieldId(type, 'category', id));
-            const typeElement = document.getElementById(getFieldId(type, 'type', id));
+        // Update displays after successful update
+        if (type === 'measurement' && response.unit) {
+            const unitInfo = getUnitDisplayInfo(type, response.unit.id, modelFields);
+            if (unitInfo) {
+                const categoryElement = document.getElementById(getFieldId(type, 'category', id));
+                const typeElement = document.getElementById(getFieldId(type, 'type', id));
+                const unitDisplay = document.getElementById(getFieldId(type, 'unit_display', id));
 
-            if (unitElement && response.unit) {
-                unitElement.textContent = response.unit;
-            }
-            if (categoryElement && response.category) {
-                categoryElement.textContent = response.category.display_name;
-            }
-            if (typeElement && response.type) {
-                typeElement.textContent = `${response.type.name} (${response.type.symbol})`;
+                if (categoryElement) categoryElement.textContent = unitInfo.category;
+                if (typeElement) typeElement.textContent = unitInfo.type;
+                if (unitDisplay) unitDisplay.textContent = unitInfo.unit;
             }
         }
 
         resetFields(type, id, fields);
-
         return response;
+
     } catch (error) {
-        const errorDisplay = document.createElement('div');
-        errorDisplay.id = `id_${type}Error-${id}`;
-        errorDisplay.className = 'w3-text-red';
-        errorDisplay.style.marginTop = '4px';
-        errorDisplay.textContent = error.message;
-
-        const form = document.getElementById(`id_${type}Form-${id}`);
-        form.appendChild(errorDisplay);
-
+        showFormError(document.getElementById(`id_${type}Form-${id}`), error, type);
         throw error;
     }
 };
@@ -806,7 +1037,7 @@ export const cancelEdit = (event, type, id, fields) => {
 };
 
 
-const resetFields = (type, id, fields) => {
+export const resetFields = (type, id, fields) => {
     // Clean up measurement handlers first
     cleanupMeasurementHandlers(type, id);
 
@@ -866,95 +1097,5 @@ const resetFields = (type, id, fields) => {
     }
 };
 
-// Utility functions for handling measurement units
 
-const handleUnitChange = (unitElement, type, id) => {
-    if (!unitElement) return;
 
-    const selectedOption = unitElement.options[unitElement.selectedIndex];
-    if (!selectedOption) return;
-
-    const categoryDisplay = document.getElementById(getFieldId(type, 'category', id));
-    const typeDisplay = document.getElementById(getFieldId(type, 'type', id));
-    const displayDiv = document.getElementById(getFieldId(type, 'unit_display', id));
-
-    if (selectedOption.value) {
-        // Update displays
-        if (categoryDisplay) {
-            categoryDisplay.textContent = selectedOption.dataset.categoryName || '';
-            categoryDisplay.style.display = 'inline-block';
-        }
-        
-        if (typeDisplay) {
-            typeDisplay.textContent = selectedOption.dataset.typeName || '';
-            typeDisplay.style.display = 'inline-block';
-        }
-
-        if (displayDiv) {
-            displayDiv.textContent = selectedOption.text;
-            displayDiv.style.display = 'inline-block';
-        }
-
-        // Store the selected values
-        unitElement.dataset.selectedCategoryId = selectedOption.dataset.categoryId;
-        unitElement.dataset.selectedTypeId = selectedOption.dataset.typeId;
-        unitElement.dataset.selectedDisplay = selectedOption.text;
-    } else {
-        // Clear displays if no unit selected
-        if (categoryDisplay) {
-            categoryDisplay.textContent = '';
-            categoryDisplay.style.display = 'none';
-        }
-        
-        if (typeDisplay) {
-            typeDisplay.textContent = '';
-            typeDisplay.style.display = 'none';
-        }
-
-        if (displayDiv) {
-            displayDiv.textContent = '';
-            displayDiv.style.display = 'none';
-        }
-
-        // Clear stored values
-        delete unitElement.dataset.selectedCategoryId;
-        delete unitElement.dataset.selectedTypeId;
-        delete unitElement.dataset.selectedDisplay;
-    }
-};
-
-const attachUnitChangeHandler = (element, type, id) => {
-    if (!element) return;
-
-    const changeHandler = () => handleUnitChange(element, type, id);
-    element.addEventListener('change', changeHandler);
-
-    // Store the handler reference for potential cleanup
-    element.dataset.changeHandler = changeHandler;
-
-    // Initial update
-    handleUnitChange(element, type, id);
-
-    return changeHandler;
-};
-
-const removeUnitChangeHandler = (element) => {
-    if (!element || !element.dataset.changeHandler) return;
-
-    element.removeEventListener('change', element.dataset.changeHandler);
-    delete element.dataset.changeHandler;
-};
-
-export const setupMeasurementHandlers = (type, id) => {
-    const unitElement = document.getElementById(getFieldId(type, 'unit_id', id));
-    if (unitElement) {
-        attachUnitChangeHandler(unitElement, type, id);
-    }
-};
-
-export const cleanupMeasurementHandlers = (type, id) => {
-    const unitElement = document.getElementById(getFieldId(type, 'unit_id', id));
-    if (unitElement) {
-        removeUnitChangeHandler(unitElement);
-    }
-};

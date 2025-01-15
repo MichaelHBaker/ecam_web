@@ -1,11 +1,29 @@
-delete all records in database
-migrate
+complete test rewrite
+have it check services.py
 
-source  select  view    import  cancel
+parent only in location model, 
+confirm it is not used and not needed in other models
+note that tree_item has been working even though this is only in location
 
-name description type unit include view 
----- ----------- ---- ---- ------- ----
----- ----------- ---- ---- ------- ----
----- ----------- ---- ---- ------- ----
----- ----------- ---- ---- ------- ----
+delete, modify admin.py and migrate
+review modify all other code where it is referenced.
+
+run tests, resolve errors
+
+get tree working again
+
+add measurement modal form
+initially support file source and .csv
+
+
+add measurement form 
+
+source          select                                    view import cancel
+file api db     [object containing measurements] timezone
+
+name description category type unit multiplier  include view start end
+---- ----------- -------- ---- ----  ---        ------- ----
+---- ----------- -------- ---- ----  ---        ------- ----
+---- ----------- -------- ---- ----  ---        ------- ----
+---- ----------- -------- ---- ----  ---        ------- ----
 

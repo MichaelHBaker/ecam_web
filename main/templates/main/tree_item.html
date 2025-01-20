@@ -1,12 +1,14 @@
+{% load custom_tags %}
 <div class="tree-item w3-hover-light-grey">
     <!-- Main Tree Content -->
     <div id="id_form-{{ level_type }}-{{ item.id }}" class="tree-text">
         <form id="id_{{ level_type }}Form-{{ item.id }}" 
-              onsubmit="return crud.updateItem(event, '{{ level_type }}', '{{ item.id }}', [{% for field in fields %}'{{ field.name }}'{% if not forloop.last %}, {% endif %}{% endfor %}])"
-              data-type="{{ level_type }}"
-              data-id="{{ item.id }}">
+              onsubmit="return crud.updateItem(event, '{{ level_type }}', '{{ item.id }}', [{% for field in fields %}'{{ field.name }}'{% if not forloop.last %}, {% endif %}{% endfor %}])">
             {% csrf_token %}
             <input type="hidden" name="{{ level_type }}_id" value="{{ item.id }}">
+            {% if parent %}
+                <input type="hidden" name="parent_id" value="{{ parent.id }}">
+            {% endif %}
 
             <!-- Expand/Collapse Button -->
             {% if next_level_type %}
@@ -18,148 +20,18 @@
                        class="bi bi-chevron-right"></i>
                 </button>
             {% endif %}
-
+            
             <!-- Fields Container -->
             <div class="fields-container">
                 {% for field in fields %}
-                    {% if field.name == 'name' %}
-                        <!-- Name field -->
-                        <input id="field_{{ level_type }}_{{ field.name }}_{{ item.id }}" 
-                               type="text"
-                               name="{{ field.name }}"
-                               value="{{ item|get_attr:field.name }}"
-                               class="tree-item-field"
-                               style="display: inline;"
-                               title="{{ field.verbose_name }}"
-                               readonly>
-
-                    {% elif field.name == 'unit_id' %}
-                        <!-- Unit and related fields for measurements -->
-                        <div class="measurement-fields">
-                            <!-- Unit Select -->
-                            <select id="field_{{ level_type }}_{{ field.name }}_{{ item.id }}"
-                                    name="{{ field.name }}"
-                                    class="tree-item-field unit-select"
-                                    style="display: none;"
-                                    disabled>
-                                <option value="">Select Unit</option>
-                                {% for category in field.choices.categories %}
-                                    <optgroup label="{{ category.display_name }}"
-                                            title="{{ category.description }}">
-                                        {% for unit in field.choices.units %}
-                                            {% if unit.category_id == category.id %}
-                                                <option value="{{ unit.id }}" 
-                                                        data-category-id="{{ unit.category_id }}"
-                                                        data-type-id="{{ unit.type_id }}"
-                                                        data-supports-multipliers="{{ unit.type.supports_multipliers }}"
-                                                        data-category-name="{{ category.display_name }}"
-                                                        data-type-name="{{ unit.type_name }}"
-                                                        data-conversion-factor="{{ unit.conversion_factor }}"
-                                                        data-is-base-unit="{{ unit.is_base_unit }}"
-                                                        {% if unit.id == item|get_attr:'unit.id' %}selected{% endif %}>
-                                                    {{ unit.display_name }}
-                                                </option>
-                                            {% endif %}
-                                        {% endfor %}
-                                    </optgroup>
-                                {% endfor %}
-                            </select>
-
-                            <!-- Multiplier Select (only shown for SI units) -->
-                            {% if item|get_attr:'type.supports_multipliers' %}
-                                <select id="field_{{ level_type }}_multiplier_{{ item.id }}"
-                                        name="multiplier"
-                                        class="tree-item-field multiplier-select"
-                                        style="display: none;"
-                                        disabled>
-                                    <option value="">No Multiplier</option>
-                                    {% for choice in measurement_choices.multipliers %}
-                                        <option value="{{ choice.value }}"
-                                                {% if choice.value == item|get_attr:'multiplier' %}selected{% endif %}>
-                                            {{ choice.display_name }}
-                                        </option>
-                                    {% endfor %}
-                                </select>
-                            {% endif %}
-
-                            <!-- Category and Type Display -->
-                            <span id="field_{{ level_type }}_category_{{ item.id }}" 
-                                  class="measurement-category-display"
-                                  title="{{ item|get_attr:'category.description' }}">
-                                {{ item|get_attr:'category.display_name' }}
-                            </span>
-                            <span id="field_{{ level_type }}_type_{{ item.id }}"
-                                  class="measurement-type-display"
-                                  title="{{ item|get_attr:'type.description' }}">
-                                {{ item|get_attr:'type.name' }}
-                                {% if item|get_attr:'type.supports_multipliers' %}
-                                    <span class="si-indicator">(SI)</span>
-                                {% endif %}
-                            </span>
-                        </div>
-
-                        <!-- Timezone Select for Measurements -->
-                        {% if level_type == 'measurement' %}
-                            <select id="field_{{ level_type }}_source_timezone_{{ item.id }}"
-                                    name="source_timezone"
-                                    class="tree-item-field timezone-select"
-                                    style="display: none;"
-                                    title="Source Timezone"
-                                    disabled>
-                                {% for tz in measurement_choices.timezones %}
-                                    <option value="{{ tz.value }}"
-                                            {% if tz.value == item|get_attr:'source_timezone' %}selected{% endif %}>
-                                        {{ tz.display_name }}
-                                    </option>
-                                {% endfor %}
-                            </select>
-                        {% endif %}
-
-                    {% elif field.is_foreign_key %}
-                        <!-- Foreign Key Fields -->
-                        <select id="field_{{ level_type }}_{{ field.name }}_{{ item.id }}"
-                                name="{{ field.name }}"
-                                class="tree-item-field fk-select"
-                                style="display: none;"
-                                disabled>
-                            <option value="">Select {{ field.name|title }}</option>
-                            {% for choice in field.choices %}
-                                <option value="{{ choice.id }}" 
-                                        {% if choice.id == item|get_attr:field.name|get_attr:'id' %}selected{% endif %}
-                                        title="{{ choice.description|default:'' }}">
-                                    {{ choice.display_name }}
-                                </option>
-                            {% endfor %}
-                        </select>
-
-                    {% elif field.type == 'choice' %}
-                        <!-- Choice Fields -->
-                        <select id="field_{{ level_type }}_{{ field.name }}_{{ item.id }}"
-                                name="{{ field.name }}"
-                                class="tree-item-field choice-select"
-                                style="display: none;"
-                                disabled>
-                            <option value="">Select {{ field.name|title }}</option>
-                            {% for choice in field.choices %}
-                                <option value="{{ choice.id }}" 
-                                        {% if choice.id == item|get_attr:field.name %}selected{% endif %}
-                                        title="{{ choice.description|default:'' }}">
-                                    {{ choice.display_name }}
-                                </option>
-                            {% endfor %}
-                        </select>
-
-                    {% else %}
-                        <!-- Regular Fields -->
-                        <input id="field_{{ level_type }}_{{ field.name }}_{{ item.id }}" 
-                               type="{{ field.input_type|default:'text' }}"
-                               name="{{ field.name }}"
-                               value="{{ item|get_attr:field.name }}"
-                               class="tree-item-field"
-                               style="display: none;"
-                               title="{{ field.verbose_name }}"
-                               readonly>
-                    {% endif %}
+                    <input id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}-{{ item.id }}" 
+                           type="text"
+                           name="{{ field.name }}"
+                           value="{{ item|get_field_value:field }}"
+                           class="tree-item-field"
+                           style="display: {% if field.name == 'name' %}inline{% else %}none{% endif %};"
+                           title="{% if field.name == 'name' %}{% for f in fields %}{% if f.name != 'name' %}{{ f.name }}: {{ item|get_field_value:f }}{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}{% endif %};"
+                           readonly>
                 {% endfor %}
             </div>
 
@@ -182,28 +54,30 @@
             <i class="bi bi-three-dots-vertical"></i>
         </button>
         <div class="w3-dropdown-content w3-bar-block w3-border">
-            <a href="#" class="w3-bar-item w3-button"
-               onclick="crud.editItem('{{ level_type }}', '{{ item.id }}', [{% for field in fields %}'{{ field.name }}'{% if not forloop.last %}, {% endif %}{% endfor %}]); return false;">
-                <i class="bi bi-pencil"></i> Edit
-            </a>
-            <a href="#" class="w3-bar-item w3-button"
-               onclick="crud.deleteItem('{{ level_type }}', '{{ item.id }}'); return false;">
-                <i class="bi bi-trash"></i> Delete
-            </a>
             {% if next_level_type %}
                 <a href="#" class="w3-bar-item w3-button"
                    onclick="crud.addItem('{{ next_level_type }}', [{% for field in model_fields|get_item:next_level_type|get_item:'fields' %}'{{ field.name }}'{% if not forloop.last %}, {% endif %}{% endfor %}], '{{ item.id }}'); return false;">
                     <i class="bi bi-plus"></i> Add {{ next_level_type|title }}
                 </a>
             {% endif %}
+
+            <a href="#" class="w3-bar-item w3-button"
+               onclick="crud.editItem('{{ level_type }}', '{{ item.id }}', [{% for field in fields %}'{{ field.name }}'{% if not forloop.last %}, {% endif %}{% endfor %}]); return false;">
+                <i class="bi bi-pencil"></i> Edit
+            </a>
+
+            <a href="#" class="w3-bar-item w3-button"
+               onclick="crud.deleteItem('{{ level_type }}', '{{ item.id }}'); return false;">
+                <i class="bi bi-trash"></i> Delete
+            </a>
         </div>
     </div>
 </div>
 
-{% if next_level_type %}
-    <div id="id_{{ level_type }}-{{ item.id }}" class="w3-container w3-hide">
+{% if next_level_type and children_attr %}
+    <div id="id_{{ level_type }}-{{ item.id }}" class="w3-container w3-hide w3-margin-left">
         {% for child in item|get_attr:children_attr %}
-            {% render_tree_item child next_level_type model_fields %}
+            {% render_tree_item child next_level_type model_fields parent=item %}
         {% endfor %}
     </div>
 {% endif %}

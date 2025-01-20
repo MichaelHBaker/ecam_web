@@ -1,9 +1,3 @@
-
-
-
-
-
-
 // CSRF Token setup
 export const CSRF_TOKEN = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
 if (!CSRF_TOKEN) {
@@ -286,53 +280,16 @@ const showFormError = (form, error, type) => {
 };
 
 const createField = (field, type, tempId, fieldInfo) => {
-    const isSelect = fieldInfo?.is_foreign_key || fieldInfo?.type === 'choice';
-    const input = document.createElement(isSelect ? 'select' : 'input');
+    // Create select for choice fields, input for others
+    const element = fieldInfo?.type === 'choice' ? 'select' : 'input';
+    const input = document.createElement(element);
     
-    // Set basic attributes
+    // Set common attributes
     input.id = `id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${tempId}`;
     input.name = field;
     input.className = 'tree-item-field editing';
-
-    // Handle measurement unit selection
-    if (field === 'unit_id') {
-        input.className += ' unit-select';
-        
-        // Add empty option
-        const emptyOption = document.createElement('option');
-        emptyOption.value = '';
-        emptyOption.textContent = 'Select unit';
-        input.appendChild(emptyOption);
-
-        // Add measurement choices grouped by category and type
-        if (fieldInfo.choices) {
-            const categories = fieldInfo.choices.categories || [];
-            const units = fieldInfo.choices.units || [];
-
-            categories.forEach(category => {
-                const categoryUnits = units.filter(u => u.category_id === category.id);
-                if (categoryUnits.length > 0) {
-                    const group = document.createElement('optgroup');
-                    group.label = category.display_name;
-                    
-                    categoryUnits.forEach(unit => {
-                        const option = document.createElement('option');
-                        option.value = unit.id;
-                        option.textContent = unit.display_name;
-                        option.dataset.categoryId = unit.category_id;
-                        option.dataset.typeId = unit.type_id;
-                        group.appendChild(option);
-                    });
-                    
-                    input.appendChild(group);
-                }
-            });
-        }
-    }
-    // Handle other foreign key fields
-    else if (fieldInfo?.is_foreign_key) {
-        input.className += ' fk-select';
-        
+    
+    if (fieldInfo?.type === 'choice' && fieldInfo.choices) {
         // Add empty option
         const emptyOption = document.createElement('option');
         emptyOption.value = '';
@@ -340,40 +297,20 @@ const createField = (field, type, tempId, fieldInfo) => {
         input.appendChild(emptyOption);
 
         // Add choices
-        if (fieldInfo.choices) {
-            fieldInfo.choices.forEach(choice => {
-                const option = document.createElement('option');
-                option.value = choice.id;
-                option.textContent = choice.display_name || choice.name || choice.id;
-                input.appendChild(option);
-            });
-        }
-    }
-    // Handle regular choice fields
-    else if (fieldInfo?.type === 'choice') {
-        input.className += ' choice-select';
-        
-        // Add empty option
-        const emptyOption = document.createElement('option');
-        emptyOption.value = '';
-        emptyOption.textContent = `Select ${field.replace(/_/g, ' ')}`;
-        input.appendChild(emptyOption);
-
-        // Add choices
-        if (fieldInfo.choices) {
-            fieldInfo.choices.forEach(choice => {
-                const option = document.createElement('option');
-                option.value = choice.id;
-                option.textContent = choice.display_name || choice.name || choice.id;
-                input.appendChild(option);
-            });
-        }
-    }
-    // Handle regular input fields
-    else {
-        input.type = getInputType(fieldInfo);
+        fieldInfo.choices.forEach(choice => {
+            const option = document.createElement('option');
+            option.value = choice.id;
+            option.textContent = choice.display_name;
+            input.appendChild(option);
+        });
+    } else {
+        // Regular input field
+        input.type = fieldInfo?.type === 'date' ? 'date' : 'text';
         input.placeholder = field.replace(/_/g, ' ');
     }
+
+    // Make sure field is visible during edit/create
+    input.style.display = 'inline';
 
     if (fieldInfo?.required) {
         input.required = true;
@@ -545,10 +482,6 @@ export const cleanupMeasurementHandlers = (type, id) => {
     }
 };
 
-
-
-
-
 // Add new item function
 export const addItem = async (type, fields, parentId = null) => {
     try {
@@ -564,10 +497,14 @@ export const addItem = async (type, fields, parentId = null) => {
         tempContainer.id = tempId;
         tempContainer.className = 'tree-item w3-hover-light-grey';
 
-        // Create form with fields
+        // Create form wrapper div
+        const formWrapper = document.createElement('div');
+        formWrapper.className = 'tree-text';
+        formWrapper.id = `id_form-${type}-${tempId}`;
+
+        // Create form
         const form = document.createElement('form');
         form.id = `id_${type}Form-${tempId}`;
-        form.className = 'fields-container';
 
         // Add CSRF token
         const csrfInput = document.createElement('input');
@@ -575,6 +512,13 @@ export const addItem = async (type, fields, parentId = null) => {
         csrfInput.name = 'csrfmiddlewaretoken';
         csrfInput.value = CSRF_TOKEN;
         form.appendChild(csrfInput);
+
+        // Add type ID if needed
+        const typeIdInput = document.createElement('input');
+        typeIdInput.type = 'hidden';
+        typeIdInput.name = `${type}_id`;
+        typeIdInput.value = tempId;
+        form.appendChild(typeIdInput);
 
         // Add parent ID if needed
         if (parentId && modelInfo.parent_type) {
@@ -585,67 +529,40 @@ export const addItem = async (type, fields, parentId = null) => {
             form.appendChild(parentInput);
         }
 
-        // Create field container div
-        const fieldContainer = document.createElement('div');
-        fieldContainer.className = 'field-container';
+        // Create fields container
+        const fieldsContainer = document.createElement('div');
+        fieldsContainer.className = 'fields-container';
+        fieldsContainer.style.display = 'inline-flex';
 
         // Create and add fields
         fields.forEach(field => {
             const fieldConfig = modelInfo.fields.find(f => f.name === field);
-            const fieldWrapper = document.createElement('div');
-            fieldWrapper.className = 'field-wrapper';
-
             const fieldElement = createField(field, type, tempId, fieldConfig);
-            fieldWrapper.appendChild(fieldElement);
-
-            // For unit_id field in measurements, add display elements
-            if (type === 'measurement' && field === 'unit_id') {
-                // Category display
-                const categoryWrapper = document.createElement('div');
-                categoryWrapper.className = 'category-display-wrapper';
-                const categorySpan = document.createElement('span');
-                categorySpan.id = getFieldId(type, 'category', tempId);
-                categorySpan.className = 'measurement-category';
-                categorySpan.style.display = 'none';
-                categoryWrapper.appendChild(categorySpan);
-                fieldWrapper.appendChild(categoryWrapper);
-
-                // Type display
-                const typeWrapper = document.createElement('div');
-                typeWrapper.className = 'type-display-wrapper';
-                const typeSpan = document.createElement('span');
-                typeSpan.id = getFieldId(type, 'type', tempId);
-                typeSpan.className = 'measurement-type';
-                typeSpan.style.display = 'none';
-                typeWrapper.appendChild(typeSpan);
-                fieldWrapper.appendChild(typeWrapper);
-
-                // Add change handler for unit selection
-                fieldElement.addEventListener('change', () => {
-                    const unitInfo = getUnitDisplayInfo(type, fieldElement.value, modelFields);
-                    if (unitInfo) {
-                        categorySpan.textContent = unitInfo.category;
-                        categorySpan.style.display = 'inline';
-                        typeSpan.textContent = unitInfo.type;
-                        typeSpan.style.display = 'inline';
-                    } else {
-                        categorySpan.style.display = 'none';
-                        typeSpan.style.display = 'none';
-                    }
-                });
-            }
-
-            fieldContainer.appendChild(fieldWrapper);
+            fieldsContainer.appendChild(fieldElement);
         });
 
-        form.appendChild(fieldContainer);
+        form.appendChild(fieldsContainer);
 
         // Add edit controls
-        const controls = createEditControls(type, tempId);
+        const controls = document.createElement('span');
+        controls.id = `id_${type}EditControls-${tempId}`;
+        controls.style.display = 'inline-flex';
+        controls.style.marginLeft = '4px';
+        controls.innerHTML = `
+            <button type="submit" class="w3-button" style="padding: 0 4px;" onclick="event.stopPropagation()">
+                <i class="bi bi-check w3-large"></i>
+            </button>
+            <button type="button" class="w3-button" style="padding: 0 4px;">
+                <i class="bi bi-x w3-large"></i>
+            </button>
+        `;
         form.appendChild(controls);
-        tempContainer.appendChild(form);
 
-        // Find and setup parent container
+        // Assemble the structure
+        formWrapper.appendChild(form);
+        tempContainer.appendChild(formWrapper);
+
+        // Find parent container
         const parentContainer = parentId ?
             document.getElementById(`id_${modelInfo.parent_type}-${parentId}`) :
             document.querySelector('.tree-headings');
@@ -654,7 +571,7 @@ export const addItem = async (type, fields, parentId = null) => {
             throw new Error('Parent container not found');
         }
 
-        // Insert form in appropriate location
+        // Insert in appropriate location
         if (parentId) {
             parentContainer.classList.remove('w3-hide');
             parentContainer.classList.add('w3-show');
@@ -668,35 +585,20 @@ export const addItem = async (type, fields, parentId = null) => {
             parentContainer.insertAdjacentElement('afterend', tempContainer);
         }
 
-        // Setup measurement handlers if needed
-        if (type === 'measurement') {
-            setupMeasurementHandlers(type, tempId);
-        }
-
         // Handle form submission
         form.onsubmit = async (event) => {
             event.preventDefault();
-            clearFormErrors(type, tempId);
-
             try {
-                const data = collectFormData(type, tempId, fields, modelInfo);
+                const data = {};
+                fields.forEach(field => {
+                    const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${tempId}`);
+                    if (element) {
+                        data[field] = element.value;
+                    }
+                });
 
-                // Add parent relationship if needed
                 if (parentId && modelInfo.parent_type) {
                     data[modelInfo.parent_type] = parseInt(parentId, 10);
-                }
-
-                // Validate measurement specific data
-                if (type === 'measurement') {
-                    const validationErrors = validateMeasurementForm(data);
-                    if (validationErrors) {
-                        throw validationErrors;
-                    }
-
-                    // Validate unit consistency
-                    if (!validateUnitConsistency(type, data.unit_id, modelFields)) {
-                        throw new Error('Invalid unit selection');
-                    }
                 }
 
                 const response = await apiFetch(`/${type}s/`, {
@@ -704,47 +606,36 @@ export const addItem = async (type, fields, parentId = null) => {
                     body: JSON.stringify(data)
                 });
 
-                // Create a temporary div to hold the new HTML
+                // Create temp div to hold new HTML
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = response.html;
                 
-                // Find and replace the tree item
+                // Find and replace tree item
                 const treeItem = tempDiv.querySelector('.tree-item');
                 if (treeItem) {
-                    if (parentId) {
-                        tempContainer.replaceWith(treeItem);
-                        const containerDiv = Array.from(tempDiv.children).find(
-                            child => child.classList.contains('w3-container')
-                        );
-                        if (containerDiv) {
-                            treeItem.after(containerDiv);
-                        }
-                    } else {
-                        tempContainer.replaceWith(treeItem);
-                        const containerDiv = Array.from(tempDiv.children).find(
-                            child => child.classList.contains('w3-container')
-                        );
-                        if (containerDiv) {
-                            treeItem.after(containerDiv);
-                        }
+                    tempContainer.replaceWith(treeItem);
+                    const containerDiv = Array.from(tempDiv.children).find(
+                        child => child.classList.contains('w3-container')
+                    );
+                    if (containerDiv) {
+                        treeItem.after(containerDiv);
                     }
                 } else {
                     console.error('No tree item found in response HTML');
                 }
 
             } catch (error) {
-                showFormError(form, error, type);
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'w3-text-red';
+                errorDiv.style.marginTop = '4px';
+                errorDiv.textContent = error.message;
+                form.appendChild(errorDiv);
             }
         };
 
         // Handle cancel
         const cancelButton = controls.querySelector('button[type="button"]');
-        cancelButton.onclick = () => {
-            if (type === 'measurement') {
-                cleanupMeasurementHandlers(type, tempId);
-            }
-            tempContainer.remove();
-        };
+        cancelButton.onclick = () => tempContainer.remove();
 
         // Focus first field
         form.querySelector('input, select')?.focus();

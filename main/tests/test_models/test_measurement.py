@@ -10,6 +10,7 @@ class TestMeasurementModel(BaseTestCase):
         measurement = Measurement.objects.create(
             name="String Test",
             location=self.test_location,
+            type=self.pressure_type,
             unit=self.test_unit
         )
         expected = f"String Test ({self.test_unit})"
@@ -21,52 +22,63 @@ class TestMeasurementModel(BaseTestCase):
             Measurement(
                 name="Missing Unit Test",
                 location=self.test_location,
+                type=self.pressure_type,
                 unit=None
             ).full_clean()
         self.assertIn('unit', str(context.exception))
+
+    def test_type_required(self):
+        """Test type is required"""
+        with self.assertRaises(ValidationError) as context:
+            Measurement(
+                name="Missing Type Test",
+                location=self.test_location,
+                type=None,
+                unit=self.test_unit
+            ).full_clean()
+        self.assertIn('type', str(context.exception))
 
     def test_category_type_relationships(self):
         """Test relationships to category and type through unit"""
         measurement = Measurement.objects.create(
             name="Relationship Test",
             location=self.test_location,
+            type=self.pressure_type,
             unit=self.test_unit
         )
         self.assertEqual(measurement.type, self.test_unit.type)
         self.assertEqual(measurement.category, self.test_unit.type.category)
 
     def test_unit_validation(self):
-        """Test unit validation with different multipliers"""
-        # Get units with different multipliers
-        base_unit = MeasurementUnit.objects.get(
+        """Test unit validation with correct type"""
+        # Ensure the unit belongs to the correct type
+        measurement = Measurement.objects.create(
+            name="Unit Type Validation Test",
+            location=self.test_location,
             type=self.pressure_type,
-            multiplier=''
-        )
-        kilo_unit = MeasurementUnit.objects.get(
-            type=self.pressure_type,
-            multiplier='k'
+            unit=self.test_unit
         )
         
-        # Both should work
-        measurement1 = Measurement.objects.create(
-            name="Base Unit Test",
-            location=self.test_location,
-            unit=base_unit
-        )
-        measurement2 = Measurement.objects.create(
-            name="Kilo Unit Test",
-            location=self.test_location,
-            unit=kilo_unit
-        )
-        
-        self.assertEqual(measurement1.unit, base_unit)
-        self.assertEqual(measurement2.unit, kilo_unit)
+        self.assertEqual(measurement.unit, self.test_unit)
+        self.assertEqual(measurement.type, self.test_unit.type)
+
+    def test_unit_type_mismatch(self):
+        """Test that unit must match measurement type"""
+        with self.assertRaises(ValidationError) as context:
+            Measurement(
+                name="Mismatched Unit Test",
+                location=self.test_location,
+                type=self.flow_category.types.first(),
+                unit=self.test_unit
+            ).full_clean()
+        self.assertIn('unit', str(context.exception))
 
     def test_duplicate_names_same_location(self):
         """Test measurements in same location can't have duplicate names"""
-        measurement1 = Measurement.objects.create(
+        Measurement.objects.create(
             name="Duplicate Test",
             location=self.test_location,
+            type=self.pressure_type,
             unit=self.test_unit
         )
         
@@ -74,6 +86,7 @@ class TestMeasurementModel(BaseTestCase):
             measurement2 = Measurement(
                 name="Duplicate Test",  # Same name
                 location=self.test_location,  # Same location
+                type=self.pressure_type,
                 unit=self.test_unit
             )
             measurement2.full_clean()
@@ -81,9 +94,10 @@ class TestMeasurementModel(BaseTestCase):
 
     def test_duplicate_names_different_locations(self):
         """Test measurements in different locations can have same name"""
-        measurement1 = Measurement.objects.create(
+        Measurement.objects.create(
             name="Same Name Test",
             location=self.test_location,
+            type=self.pressure_type,
             unit=self.test_unit
         )
         
@@ -97,6 +111,7 @@ class TestMeasurementModel(BaseTestCase):
             measurement2 = Measurement(
                 name="Same Name Test",  # Same name
                 location=different_location,  # Different location
+                type=self.pressure_type,
                 unit=self.test_unit
             )
             measurement2.full_clean()
@@ -109,6 +124,7 @@ class TestMeasurementModel(BaseTestCase):
         measurement = Measurement.objects.create(
             name="Protection Test",
             location=self.test_location,
+            type=self.pressure_type,
             unit=self.test_unit
         )
         
@@ -131,6 +147,7 @@ class TestMeasurementModel(BaseTestCase):
         measurement = Measurement(
             name="No Description Test",
             location=self.test_location,
+            type=self.pressure_type,
             unit=self.test_unit
         )
         try:

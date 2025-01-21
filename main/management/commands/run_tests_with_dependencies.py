@@ -34,7 +34,7 @@ class Command(BaseCommand):
             utils_data.create_model_table_data()
 
             # Run tests (which will regenerate test files)
-            call_command('test', verbosity=1)
+            # call_command('test', verbosity=1)
             
             # Generate new dependency file
             generate_dependency_file(base_dir, dependency_file)

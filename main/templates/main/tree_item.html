@@ -54,10 +54,17 @@
             <i class="bi bi-three-dots-vertical"></i>
         </button>
         <div class="w3-dropdown-content w3-bar-block w3-border">
-            {% if next_level_type %}
+            {% if next_level_type == 'location' %}
+            <a href="#" class="w3-bar-item w3-button"
+               onclick="crud.addItem('{{ next_level_type }}', [{% for field in model_fields|get_item:next_level_type|get_item:'fields' %}'{{ field.name }}'{% if not forloop.last %}, {% endif %}{% endfor %}], '{{ item.id }}'); return false;">
+                <i class="bi bi-plus"></i> Add Location
+            </a>
+            {% endif %}
+            
+            {% if next_level_type == 'measurement' %}
                 <a href="#" class="w3-bar-item w3-button"
-                   onclick="crud.addItem('{{ next_level_type }}', [{% for field in model_fields|get_item:next_level_type|get_item:'fields' %}'{{ field.name }}'{% if not forloop.last %}, {% endif %}{% endfor %}], '{{ item.id }}'); return false;">
-                    <i class="bi bi-plus"></i> Add {{ next_level_type|title }}
+                   onclick="crud.showMeasurementModal('{{ item.id }}'); return false;">
+                    <i class="bi bi-plus"></i> Add Measurement
                 </a>
             {% endif %}
 
@@ -73,6 +80,56 @@
         </div>
     </div>
 </div>
+
+<!-- Measurement Modal -->
+{% if next_level_type == 'measurement' %}
+<div id="id_modal-location-{{ item.id }}" class="w3-modal" style="display:none; z-index: 1000;">
+   <div class="w3-modal-content w3-card-4 w3-animate-top" style="max-width:600px;">
+       <header class="w3-container w3-border-bottom"> 
+           <span onclick="crud.hideMeasurementModal('{{ item.id }}')" 
+                 class="w3-button w3-display-topright">&times;</span>
+           <h4>Add Measurement</h4>
+       </header>
+   
+       <div class="w3-container w3-padding">
+           <!-- Source Dropdown -->
+           <div class="w3-dropdown-hover">
+               <button class="w3-button">
+                   Source <i class="bi bi-chevron-down"></i>
+               </button>
+               <div class="w3-dropdown-content w3-bar-block w3-border">
+                   <!-- Hidden file input -->
+                   <input type="file" 
+                          id="id_file_input-{{ item.id }}" 
+                          accept=".csv"
+                          style="display: none;" 
+                          onchange="crud.handleFileChange(event, '{{ item.id }}')">
+                          
+                   <a href="#" class="w3-bar-item w3-button"
+                      onclick="crud.handleFileSelect('{{ item.id }}'); return false;">
+                       <i class="bi bi-file-earmark-text"></i> File
+                   </a>
+                   <a href="#" class="w3-bar-item w3-button w3-disabled">
+                       <i class="bi bi-cloud"></i> API
+                   </a>
+                   <a href="#" class="w3-bar-item w3-button w3-disabled">
+                       <i class="bi bi-database"></i> Database
+                   </a>
+               </div>
+           </div>
+
+           <!-- File Display -->
+           <div id="id_file_display-{{ item.id }}" 
+                class="w3-padding-small w3-text-dark-grey">
+               No file selected
+           </div>
+
+           <!-- Future measurement grid will go here -->
+           
+       </div>
+   </div>
+</div>
+{% endif %}
 
 {% if next_level_type and children_attr %}
     <div id="id_{{ level_type }}-{{ item.id }}" class="w3-container w3-hide w3-margin-left">

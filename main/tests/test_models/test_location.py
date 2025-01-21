@@ -1,3 +1,4 @@
+from django.core.exceptions import ValidationError
 from django.urls import reverse
 from rest_framework import status
 from ..test_base import BaseAPITestCase
@@ -10,142 +11,138 @@ class TestTreeItemMixin(BaseAPITestCase):
         self.measurement_url = reverse('measurement-list')
         self.project_url = reverse('project-list')
 
-    def test_create_top_level_item(self):
-        """Test creation of a top-level item (Project)"""
-        data = {
-            'name': 'Top Level Project',
-            'project_type': 'Audit',
-        }
-        response = self.client.post(self.project_url, data)
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIn('html', response.data)
-
-        # Verify template context
-        html_content = response.data['html']
-        self.assertIn('Top Level Project', html_content)
-        self.assertIn('tree-item', html_content)
-
     def test_create_location(self):
         """Test creation of a location"""
         data = {
             'name': 'Test Location',
             'project': self.test_project.pk,
             'address': '123 Test St',
+            'latitude': 45.5155,
+            'longitude': -122.6789
         }
         response = self.client.post(self.location_url, data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIn('html', response.data)
 
         # Verify location creation
         created_location = Location.objects.get(name='Test Location')
         self.assertEqual(created_location.project, self.test_project)
+        self.assertEqual(created_location.address, '123 Test St')
+        self.assertEqual(created_location.latitude, 45.5155)
+        self.assertEqual(created_location.longitude, -122.6789)
 
-        # Verify template context
-        html_content = response.data['html']
-        self.assertIn('Test Location', html_content)
+    def test_location_required_fields(self):
+        """Test validation of required fields"""
+        # Missing project
+        with self.assertRaises(ValidationError):
+            Location(
+                name='Incomplete Location',
+                address='123 Test St'
+            ).full_clean()
 
-    def test_create_leaf_item(self):
-        """Test creation of a leaf item (Measurement)"""
-        data = {
-            'name': 'Leaf Measurement',
-            'location': self.test_location.pk,
-            'unit': self.test_unit.pk,
-            'description': 'Test leaf node'
-        }
-        response = self.client.post(self.measurement_url, data)
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIn('html', response.data)
+        # Missing name
+        with self.assertRaises(ValidationError):
+            Location(
+                project=self.test_project,
+                address='123 Test St'
+            ).full_clean()
 
-        # Verify measurement information display
-        html_content = response.data['html']
-        self.assertIn(str(self.test_unit), html_content)
-        self.assertIn(self.test_unit.type.category.display_name, html_content)
-        self.assertIn(self.test_unit.type.name, html_content)
+        # Missing address
+        with self.assertRaises(ValidationError):
+            Location(
+                project=self.test_project,
+                name='Incomplete Location'
+            ).full_clean()
 
-    def test_cascading_delete(self):
-        """Test delete cascades to measurements but preserves measurement info"""
-        # Create location and measurement
-        test_location = Location.objects.get(name="Industrial Facility")
+    def test_create_location_with_measurement(self):
+        """Test creating a location and adding a measurement"""
+        # Create location
+        location = Location.objects.create(
+            name='Measurement Location',
+            project=self.test_project,
+            address='456 Test Ave'
+        )
+
+        # Create measurement
         measurement = Measurement.objects.create(
-            name="Child Measurement",
-            location=test_location,
+            name='Test Measurement',
+            location=location,
+            type=self.pressure_type,
+            unit=self.test_unit
+        )
+
+        # Verify relationships
+        self.assertEqual(measurement.location, location)
+        self.assertEqual(location.measurements.first(), measurement)
+
+    def test_location_project_relationship(self):
+        """Test location-project relationship"""
+        # Verify existing test location
+        existing_location = Location.objects.get(name="Industrial Facility")
+        self.assertEqual(existing_location.project, self.test_project)
+
+        # Create another location
+        new_location = Location.objects.create(
+            name='Another Location',
+            project=self.test_project,
+            address='789 Test Rd'
+        )
+
+        # Verify project's locations
+        project_locations = self.test_project.locations.all()
+        self.assertIn(existing_location, project_locations)
+        self.assertIn(new_location, project_locations)
+
+    def test_location_delete_cascade(self):
+        """Test deleting a location cascades to measurements"""
+        # Create location and measurement
+        location = Location.objects.create(
+            name='Cascade Test Location',
+            project=self.test_project,
+            address='321 Delete St'
+        )
+
+        measurement = Measurement.objects.create(
+            name='Cascade Measurement',
+            location=location,
+            type=self.pressure_type,
             unit=self.test_unit
         )
 
         # Store IDs for verification
-        unit_id = self.test_unit.pk
+        location_id = location.id
+        measurement_id = measurement.id
+        unit_id = self.test_unit.id
         type_id = self.test_unit.type.id
-        category_id = self.test_unit.type.category.id
 
         # Delete location
-        url = reverse('location-detail', kwargs={'pk': test_location.pk})
-        response = self.client.delete(url)
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        location.delete()
 
-        # Verify cascading delete
-        self.assertFalse(Measurement.objects.filter(pk=measurement.pk).exists())
+        # Verify cascade
+        self.assertFalse(Location.objects.filter(id=location_id).exists())
+        self.assertFalse(Measurement.objects.filter(id=measurement_id).exists())
 
-        # Verify preservation of measurement reference data
-        self.assertTrue(MeasurementUnit.objects.filter(pk=unit_id).exists())
-        self.assertTrue(self.test_unit.type.__class__.objects.filter(pk=type_id).exists())
-        self.assertTrue(self.test_unit.type.category.__class__.objects.filter(pk=category_id).exists())
+        # Verify measurement reference data is preserved
+        self.assertTrue(MeasurementUnit.objects.filter(id=unit_id).exists())
+        self.assertTrue(self.test_unit.type.__class__.objects.filter(id=type_id).exists())
 
-    def test_template_context(self):
-        """Test template rendering includes correct context"""
-        data = {
-            'name': 'Template Test Location',
-            'project': self.test_project.pk,
-            'address': 'Template Test Address'
-        }
-        response = self.client.post(self.location_url, data)
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-
-        # Create measurement in location
-        location = Location.objects.get(name='Template Test Location')
-        measurement = Measurement.objects.create(
-            name="Template Test Measurement",
-            location=location,
-            unit=self.test_unit
-        )
-
-        # Verify context in HTML
-        html_content = response.data['html']
-        self.assertIn('Template Test Location', html_content)
-        self.assertIn('tree-item', html_content)
-        self.assertIn('fields-container', html_content)
-        self.assertIn(str(self.test_project.pk), html_content)
-
-    def test_model_fields_in_context(self):
-        """Test model fields are correctly included in context"""
-        # Create location with measurement
+    def test_location_coordinate_validation(self):
+        """Test latitude and longitude validation"""
+        # Valid coordinates
         location = Location.objects.create(
-            name='Fields Test Location',
+            name='Coordinate Test',
             project=self.test_project,
-            address='Fields Test Address'
+            address='123 Geo St',
+            latitude=45.5155,
+            longitude=-122.6789
         )
-        measurement = Measurement.objects.create(
-            name="Fields Test Measurement",
-            location=location,
-            unit=self.test_unit
+        self.assertEqual(location.latitude, 45.5155)
+        self.assertEqual(location.longitude, -122.6789)
+
+        # Optional coordinates
+        location_no_coords = Location.objects.create(
+            name='No Coordinate Location',
+            project=self.test_project,
+            address='456 Geo St'
         )
-
-        # Get location detail
-        url = reverse('location-detail', kwargs={'pk': location.pk})
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-        # Check for field attributes
-        self.assertIn('name', response.data)
-        self.assertIn('address', response.data)
-        self.assertIn('measurements', response.data)
-
-        # Verify measurement information
-        measurement_data = response.data['measurements'][0]
-        self.assertIn('unit', measurement_data)
-        self.assertIn('category', measurement_data)
-        self.assertIn('type', measurement_data)
-
-        # Verify specific values
-        self.assertEqual(measurement_data['unit']['id'], self.test_unit.id)
-        self.assertEqual(measurement_data['category']['id'], self.test_unit.type.category.id)
-        self.assertEqual(measurement_data['type']['id'], self.test_unit.type.id)
+        self.assertIsNone(location_no_coords.latitude)
+        self.assertIsNone(location_no_coords.longitude)

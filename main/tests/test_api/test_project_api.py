@@ -10,10 +10,12 @@ class TestProjectAPI(BaseAPITestCase):
         super().setUp()
         self.list_url = reverse('project-list')
         self.detail_url = reverse('project-detail', kwargs={'pk': self.test_project.pk})
-        self.test_unit = MeasurementUnit.objects.get(
+        
+        # Get base unit for the pressure type
+        self.test_unit = MeasurementUnit.objects.filter(
             type=self.pressure_type,
-            multiplier=''  # base unit
-        )
+            is_base_unit=True
+        ).first()
 
     def test_list_projects(self):
         """Test retrieving list of projects"""
@@ -108,6 +110,7 @@ class TestProjectAPI(BaseAPITestCase):
         measurement = Measurement.objects.create(
             name="Test Measurement",
             location=location,
+            type=self.pressure_type,
             unit=self.test_unit
         )
 
@@ -139,6 +142,7 @@ class TestProjectAPI(BaseAPITestCase):
         measurement = Measurement.objects.create(
             name="API Test Measurement",
             location=self.test_location,
+            type=self.pressure_type,
             unit=self.test_unit
         )
 

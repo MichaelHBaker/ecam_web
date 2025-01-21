@@ -149,6 +149,55 @@ export const getFieldId = (type, field, id) => {
     return `field_${type}_${fieldName}_${id}`;
 };
 
+// Modal management functions
+export const showMeasurementModal = (locationId) => {
+    const modal = document.getElementById(`id_modal-location-${locationId}`);
+    if (modal) {
+        modal.style.display = 'block';
+    }
+};
+
+export const hideMeasurementModal = (locationId) => {
+    const modal = document.getElementById(`id_modal-location-${locationId}`);
+    if (modal) {
+        modal.style.display = 'none';
+    }
+};
+
+// Add our new file handling functions here
+export const handleFileSelect = async (locationId) => {
+    const fileInput = document.getElementById(`id_file_input-${locationId}`);
+    if (fileInput) {
+        fileInput.click();
+    }
+};
+
+export const handleFileChange = async (event, locationId) => {
+    const fileInput = event.target;
+    const fileDisplay = document.getElementById(`id_file_display-${locationId}`);
+    
+    if (fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        if (fileDisplay) {
+            fileDisplay.textContent = file.name;
+        }
+    }
+};
+
+export const processFile = async (locationId) => {
+    const fileInput = document.getElementById(`id_file_input-${locationId}`);
+    if (!fileInput || !fileInput.files.length) {
+        return;
+    }
+    
+    const nextButton = fileInput.closest('.w3-container')
+                              .querySelector('button[onclick*="processFile"]');
+    if (nextButton) {
+        nextButton.disabled = false;
+    }
+};
+
+
 const getUnitDisplayInfo = (type, unitId, modelFields) => {
     if (!unitId || !modelFields) return null;
 

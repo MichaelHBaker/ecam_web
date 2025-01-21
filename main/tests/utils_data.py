@@ -6,8 +6,16 @@ from ..models import (
 )
 from django.contrib.auth.models import User
 import datetime
-import pytz
+import decimal
+import csv
+import os
 import random
+
+def create_csv_file(file_path, data, delimiter=',', encoding='utf-8'):
+    """Create a CSV file with the given data"""
+    with open(file_path, 'w', newline='', encoding=encoding) as csvfile:
+        writer = csv.writer(csvfile, delimiter=delimiter)
+        writer.writerows(data)
 
 def create_test_user():
     """Create a test user for authentication"""
@@ -20,351 +28,394 @@ def create_test_user():
         user.save()
     return user
 
-def create_measurement_categories():
-    """Create measurement categories"""
-    categories = {}
-    
-    category_data = [
-        ('pressure', 'Pressure', 'Various pressure measurements'),
-        ('flow', 'Flow', 'Flow measurements'),
-        ('frequency', 'Frequency', 'Frequency measurements'),
-        ('count', 'Count', 'Count measurements'),
-        ('percent', 'Percentage', 'Percentage measurements'),
-        ('temperature', 'Temperature', 'Temperature measurements'),
-        ('elevation', 'Elevation', 'Height measurements'),
-    ]
-    
-    for name, display_name, description in category_data:
-        category = MeasurementCategory.objects.create(
-            name=name,
-            display_name=display_name,
-            description=description
-        )
-        categories[name] = category
-    
-    return categories
-
-def create_measurement_types(categories):
-    """Create measurement types"""
-    types = {}
-    
-    type_data = [
-        # Pressure types
-        ('absolute_pressure', {
-            'category': categories['pressure'],
-            'name': 'Absolute Pressure',
-            'description': 'Pressure relative to a perfect vacuum',
-            'supports_multipliers': True
-        }),
-        ('gauge_pressure', {
-            'category': categories['pressure'],
-            'name': 'Gauge Pressure',
-            'description': 'Pressure relative to atmospheric pressure',
-            'supports_multipliers': True
-        }),
-        ('differential_pressure', {
-            'category': categories['pressure'],
-            'name': 'Differential Pressure',
-            'description': 'Difference between two pressure points',
-            'supports_multipliers': True
-        }),
-        ('atmospheric_pressure', {
-            'category': categories['pressure'],
-            'name': 'Atmospheric Pressure',
-            'description': "Force exerted by Earth's atmosphere",
-            'supports_multipliers': True
-        }),
-        ('vacuum_pressure', {
-            'category': categories['pressure'],
-            'name': 'Vacuum Pressure',
-            'description': 'Pressure below atmospheric pressure',
-            'supports_multipliers': True
-        }),
-        ('sealed_pressure', {
-            'category': categories['pressure'],
-            'name': 'Sealed Pressure',
-            'description': 'Pressure relative to sealed reference',
-            'supports_multipliers': True
-        }),
-        ('hydrostatic_pressure', {
-            'category': categories['pressure'],
-            'name': 'Hydrostatic Pressure',
-            'description': 'Pressure due to weight of a fluid column',
-            'supports_multipliers': True
-        }),
-        
-        # Flow types
-        ('volumetric_flow', {
-            'category': categories['flow'],
-            'name': 'Volumetric Flow (Fluid)',
-            'description': 'Volume of fluid passing through a point per time',
-            'supports_multipliers': True
-        }),
-        ('mass_flow', {
-            'category': categories['flow'],
-            'name': 'Mass Flow (Fluid)',
-            'description': 'Mass of fluid passing through a point per time',
-            'supports_multipliers': True
-        }),
-        
-        # Other types
-        ('frequency', {
-            'category': categories['frequency'],
-            'name': 'Frequency',
-            'description': 'Cycles or events per unit time',
-            'supports_multipliers': True
-        }),
-        ('count', {
-            'category': categories['count'],
-            'name': 'Count',
-            'description': 'Total number of items',
-            'supports_multipliers': False
-        }),
-        ('percent', {
-            'category': categories['percent'],
-            'name': 'Percentage',
-            'description': 'Proportion expressed as a fraction of 100',
-            'supports_multipliers': False
-        }),
-        ('temperature', {
-            'category': categories['temperature'],
-            'name': 'Thermal Measurement',
-            'description': 'Measurement of heat intensity',
-            'supports_multipliers': False
-        }),
-        ('elevation', {
-            'category': categories['elevation'],
-            'name': 'Height',
-            'description': 'Height or vertical distance above a reference point',
-            'supports_multipliers': True
-        })
-    ]
-    
-    for type_id, type_info in type_data:
-        measurement_type = MeasurementType.objects.create(**type_info)
-        types[type_id] = measurement_type
-    
-    return types
-
-def create_measurement_units(types):
-    """Create measurement units with conversion factors"""
-    units = {}
-    
-    unit_data = [
-        # Pressure units
-        ('pa', {
-            'type': types['absolute_pressure'],
-            'name': 'Pascal',
-            'is_base_unit': True,
-            'conversion_factor': 1.0
-        }),
-        ('bar', {
-            'type': types['absolute_pressure'],
-            'name': 'Bar',
-            'is_base_unit': False,
-            'conversion_factor': 100000.0  # 1 bar = 100,000 Pa
-        }),
-        ('psi', {
-            'type': types['gauge_pressure'],
-            'name': 'PSI',
-            'is_base_unit': False,
-            'conversion_factor': 6894.76  # 1 PSI = 6894.76 Pa
-        }),
-        ('mmhg', {
-            'type': types['absolute_pressure'],
-            'name': 'mmHg',
-            'is_base_unit': False,
-            'conversion_factor': 133.322  # 1 mmHg = 133.322 Pa
-        }),
-        ('inh2o', {
-            'type': types['differential_pressure'],
-            'name': 'inH₂O',
-            'is_base_unit': False,
-            'conversion_factor': 248.84  # 1 inH2O = 248.84 Pa
-        }),
-        
-        # Flow units
-        ('m3s', {
-            'type': types['volumetric_flow'],
-            'name': 'Cubic meters per second',
-            'is_base_unit': True,
-            'conversion_factor': 1.0
-        }),
-        ('lpm', {
-            'type': types['volumetric_flow'],
-            'name': 'Liters per minute',
-            'is_base_unit': False,
-            'conversion_factor': 1/60000  # L/min to m³/s
-        }),
-        ('gpm', {
-            'type': types['volumetric_flow'],
-            'name': 'Gallons per minute',
-            'is_base_unit': False,
-            'conversion_factor': 0.0000630902  # GPM to m³/s
-        }),
-        ('cfm', {
-            'type': types['volumetric_flow'],
-            'name': 'Cubic feet per minute',
-            'is_base_unit': False,
-            'conversion_factor': 0.000471947  # CFM to m³/s
-        }),
-        ('kgs', {
-            'type': types['mass_flow'],
-            'name': 'Kilograms per second',
-            'is_base_unit': True,
-            'conversion_factor': 1.0
-        }),
-        
-        # Other basic units
-        ('hz', {
-            'type': types['frequency'],
-            'name': 'Hertz',
-            'is_base_unit': True,
-            'conversion_factor': 1.0
-        }),
-        ('count', {
-            'type': types['count'],
-            'name': 'Count',
-            'is_base_unit': True,
-            'conversion_factor': 1.0
-        }),
-        ('percent', {
-            'type': types['percent'],
-            'name': 'Percent',
-            'is_base_unit': True,
-            'conversion_factor': 1.0
-        }),
-        ('celsius', {
-            'type': types['temperature'],
-            'name': 'Celsius',
-            'is_base_unit': True,
-            'conversion_factor': 1.0
-        }),
-        ('fahrenheit', {
-            'type': types['temperature'],
-            'name': 'Fahrenheit',
-            'is_base_unit': False,
-            'conversion_factor': 1.0  # Special handling required for °F to °C
-        }),
-        ('meter', {
-            'type': types['elevation'],
-            'name': 'Meter',
-            'is_base_unit': True,
-            'conversion_factor': 1.0
-        })
-    ]
-    
-    for unit_id, unit_info in unit_data:
-        unit = MeasurementUnit.objects.create(**unit_info)
-        units[unit_id] = unit
-    
-    return units
-
 def create_model_table_data():
     """Create test data for all models"""
+    
     # Create test user
     test_user = create_test_user()
-    
-    # Create measurement-related data
-    categories = create_measurement_categories()
-    types = create_measurement_types(categories)
-    units = create_measurement_units(types)
-    
-    # Create Projects
-    projects = {
-        'audit': Project.objects.create(
-            name="Energy Trust Production",
-            project_type="Audit",
-            start_date=datetime.date(2024, 1, 15),
-            end_date=datetime.date(2024, 3, 15)
-        ),
-        'mv': Project.objects.create(
-            name="BPA Custom",
-            project_type="M&V",
-            start_date=datetime.date(2024, 5, 1)
-        )
+
+    # Create Categories with get_or_create
+    categories_data = {
+        'pressure': {
+            'display_name': 'Pressure',
+            'description': 'Various pressure measurements'
+        },
+        'flow': {
+            'display_name': 'Flow',
+            'description': 'Fluid flow measurements'
+        },
+        'frequency': {
+            'display_name': 'Frequency',
+            'description': 'Frequency measurements'
+        },
+        'count': {
+            'display_name': 'Count',
+            'description': 'Count measurements'
+        },
+        'percent': {
+            'display_name': 'Percentage',
+            'description': 'Percentage measurements'
+        },
+        'temperature': {
+            'display_name': 'Temperature',
+            'description': 'Temperature measurements'
+        },
+        'elevation': {
+            'display_name': 'Elevation',
+            'description': 'Height measurements'
+        }
     }
-    
-    # Create Locations
-    locations = {
-        'industrial': Location.objects.create(
-            project=projects['audit'],
-            name="Industrial Facility",
-            address="123 Factory Lane",
-            latitude=45.5155,
-            longitude=-122.6789
-        ),
-        'commercial': Location.objects.create(
-            project=projects['mv'],
-            name="Office Complex",
-            address="456 Business Park",
-            latitude=45.5231,
-            longitude=-122.6765
+
+    categories = {}
+    for name, details in categories_data.items():
+        categories[name], _ = MeasurementCategory.objects.get_or_create(
+            name=name,
+            defaults={
+                'display_name': details['display_name'],
+                'description': details.get('description', '')
+            }
         )
+
+    # Create Types with get_or_create
+    types_data = {
+        'pressure_types': {
+            'absolute': {
+                'category': categories['pressure'],
+                'description': 'Pressure relative to a perfect vacuum',
+                'supports_multipliers': True
+            },
+            'gauge': {
+                'category': categories['pressure'],
+                'description': 'Pressure relative to atmospheric pressure',
+                'supports_multipliers': True
+            },
+            'differential': {
+                'category': categories['pressure'],
+                'description': 'Difference between two pressure points',
+                'supports_multipliers': True
+            }
+        },
+        'flow_types': {
+            'volumetric': {
+                'category': categories['flow'],
+                'description': 'Volume of fluid passing through a point per time',
+                'supports_multipliers': True
+            },
+            'mass': {
+                'category': categories['flow'],
+                'description': 'Mass of fluid passing through a point per time',
+                'supports_multipliers': True
+            }
+        },
+        'other_types': {
+            'frequency': {
+                'category': categories['frequency'],
+                'description': 'Cycles or events per unit time',
+                'supports_multipliers': True
+            },
+            'count': {
+                'category': categories['count'],
+                'description': 'Total number of items',
+                'supports_multipliers': False
+            },
+            'percent': {
+                'category': categories['percent'],
+                'description': 'Proportion expressed as a fraction of 100',
+                'supports_multipliers': False
+            },
+            'celsius': {
+                'category': categories['temperature'],
+                'description': 'Temperature measurement',
+                'supports_multipliers': False
+            },
+            'elevation': {
+                'category': categories['elevation'],
+                'description': 'Height or vertical distance',
+                'supports_multipliers': True
+            }
+        }
     }
-    
-    # Create example measurements
-    measurements = {
-        'pressure': Measurement.objects.create(
-            name="Building Pressure",
-            description="Building pressure relative to atmosphere",
-            location=locations['industrial'],
-            type=types['differential_pressure'],
-            unit=units['inh2o'],
-            source_timezone='America/Los_Angeles'
-        ),
-        'flow': Measurement.objects.create(
-            name="Chilled Water Flow",
-            description="Chilled water flow rate",
-            location=locations['industrial'],
-            type=types['volumetric_flow'],
-            unit=units['gpm'],
-            source_timezone='America/Los_Angeles'
-        ),
-        'temp': Measurement.objects.create(
-            name="Zone Temperature",
-            description="Zone temperature sensor",
-            location=locations['commercial'],
-            type=types['temperature'],
-            unit=units['fahrenheit'],
-            source_timezone='America/Los_Angeles'
+
+    # Combine all type dictionaries
+    all_type_data = {}
+    all_type_data.update(types_data['pressure_types'])
+    all_type_data.update(types_data['flow_types'])
+    all_type_data.update(types_data['other_types'])
+
+    types = {}
+    for name, details in all_type_data.items():
+        # Adjust name for lookup
+        lookup_names = {
+            'absolute': 'Absolute Pressure',
+            'gauge': 'Gauge Pressure',
+            'differential': 'Differential Pressure',
+            'volumetric': 'Volumetric Flow',
+            'mass': 'Mass Flow',
+            'frequency': 'Frequency',
+            'count': 'Count',
+            'percent': 'Percentage',
+            'celsius': 'Celsius',
+            'elevation': 'Height'
+        }
+        lookup_name = lookup_names.get(name, name.capitalize())
+
+        types[name], _ = MeasurementType.objects.get_or_create(
+            category=details['category'],
+            name=lookup_name,
+            defaults={
+                'description': details['description'],
+                'supports_multipliers': details['supports_multipliers']
+            }
         )
+
+    # Create Units with get_or_create
+    units_data = {
+        'pressure_units': {
+            'Pa Base': {
+                'type': types['absolute'], 
+                'description': 'Pascal base unit',
+                'conversion_factor': 1.0,
+                'is_base_unit': True
+            },
+            'PSI': {
+                'type': types['gauge'], 
+                'description': 'Pounds per square inch',
+                'conversion_factor': 6894.76,
+                'is_base_unit': False
+            },
+            'inH2O': {
+                'type': types['differential'], 
+                'description': 'Inches of water',
+                'conversion_factor': 248.84,
+                'is_base_unit': False
+            }
+        },
+        'flow_units': {
+            'm³/s Base': {
+                'type': types['volumetric'], 
+                'description': 'Cubic meters per second base unit',
+                'conversion_factor': 1.0,
+                'is_base_unit': True
+            },
+            'L/min': {
+                'type': types['volumetric'], 
+                'description': 'Liters per minute',
+                'conversion_factor': 1/60000,
+                'is_base_unit': False
+            },
+            'GPM': {
+                'type': types['volumetric'], 
+                'description': 'Gallons per minute',
+                'conversion_factor': 0.0000630902,
+                'is_base_unit': False
+            }
+        },
+        'basic_units': {
+            'Hz': {
+                'type': types['frequency'], 
+                'description': 'Hertz base unit',
+                'conversion_factor': 1.0,
+                'is_base_unit': True
+            },
+            'Count': {
+                'type': types['count'], 
+                'description': 'Base count unit',
+                'conversion_factor': 1.0,
+                'is_base_unit': True
+            },
+            '°C': {
+                'type': types['celsius'], 
+                'description': 'Celsius base temperature unit',
+                'conversion_factor': 1.0,
+                'is_base_unit': True
+            }
+        }
     }
-    
-    # Create Data Sources
-    sources = {
-        'niagara': APIDataSource.objects.create(
-            name="Test Niagara",
-            source_type='api',
-            middleware_type='niagara',
-            url_base='https://test.niagara.com',
-            auth_type='basic',
-            is_active=True
-        ),
-        'file': DataSource.objects.create(
-            name="CSV Import",
-            source_type='file',
-            is_active=True
+
+    # Combine all unit dictionaries
+    all_unit_data = {}
+    all_unit_data.update(units_data['pressure_units'])
+    all_unit_data.update(units_data['flow_units'])
+    all_unit_data.update(units_data['basic_units'])
+
+    units = {}
+    for name, details in all_unit_data.items():
+        units[name], _ = MeasurementUnit.objects.get_or_create(
+            type=details['type'],
+            name=name,
+            defaults={
+                'description': details['description'],
+                'conversion_factor': details['conversion_factor'],
+                'is_base_unit': details['is_base_unit']
+            }
         )
+
+    # Create Projects with get_or_create
+    projects_data = {
+        'audit': {
+            'name': "Energy Trust Production",
+            'project_type': "Audit",
+            'start_date': "2024-01-15",
+            'end_date': "2024-03-15",
+        },
+        'mv': {
+            'name': "BPA Custom",
+            'project_type': "M&V",
+            'start_date': "2024-05-01",
+        }
     }
-    
+
+    projects = {}
+    for key, details in projects_data.items():
+        projects[key], _ = Project.objects.get_or_create(
+            name=details['name'],
+            project_type=details['project_type'],
+            defaults={
+                'start_date': details.get('start_date'),
+                'end_date': details.get('end_date')
+            }
+        )
+
+    # Create Locations with get_or_create
+    locations_data = {
+        'industrial': {
+            'project': projects['audit'],
+            'name': "Industrial Facility",
+            'address': "123 Factory Lane",
+            'latitude': 45.5155,
+            'longitude': -122.6789
+        },
+        'commercial': {
+            'project': projects['mv'],
+            'name': "Office Complex",
+            'address': "456 Business Park",
+            'latitude': 45.5231,
+            'longitude': -122.6765
+        }
+    }
+
+    locations = {}
+    for key, details in locations_data.items():
+        locations[key], _ = Location.objects.get_or_create(
+            name=details['name'],
+            project=details['project'],
+            defaults={
+                'address': details['address'],
+                'latitude': details['latitude'],
+                'longitude': details['longitude']
+            }
+        )
+
+    # Create Measurements with get_or_create
+    measurements_data = {
+        'pressure': {
+            'name': "Building Pressure",
+            'description': "Building pressure relative to atmosphere",
+            'location': locations['industrial'],
+            'type': types['differential'],
+            'unit': units['inH2O'],
+            'multiplier': None
+        },
+        'flow': {
+            'name': "Chilled Water Flow",
+            'description': "Chilled water flow rate",
+            'location': locations['industrial'],
+            'type': types['volumetric'],
+            'unit': units['GPM'],
+            'multiplier': None
+        },
+        'temp': {
+            'name': "Zone Temperature",
+            'description': "Zone temperature sensor",
+            'location': locations['commercial'],
+            'type': types['celsius'],
+            'unit': units['°C'],
+            'multiplier': None
+        }
+    }
+
+    measurements = {}
+    for key, details in measurements_data.items():
+        measurements[key], _ = Measurement.objects.get_or_create(
+            name=details['name'],
+            location=details['location'],
+            type=details['type'],
+            unit=details['unit'],
+            defaults={
+                'description': details['description'],
+                'multiplier': details['multiplier']
+            }
+        )
+
+    # Create Data Sources with get_or_create
+    sources_data = {
+        'niagara': {
+            'type': APIDataSource,
+            'name': "Test Niagara",
+            'source_type': 'api',
+            'middleware_type': 'niagara',
+            'url_base': 'https://test.niagara.com',
+            'auth_type': 'basic',
+            'is_active': True
+        },
+        'file': {
+            'type': DataSource,
+            'name': "CSV Import",
+            'source_type': 'file',
+            'is_active': True
+        }
+    }
+
+    sources = {}
+    for key, details in sources_data.items():
+        # Get the model type
+        model_type = details.pop('type')
+        
+        # Prepare defaults
+        defaults = {k: v for k, v in details.items() if k != 'name'}
+        
+        # Use get_or_create with the specific model
+        sources[key], _ = model_type.objects.get_or_create(
+            name=details['name'],
+            source_type=details['source_type'],
+            defaults=defaults
+        )
+
     # Create Data Source Mappings
-    DataSourceMapping.objects.create(
+    DataSourceMapping.objects.get_or_create(
         measurement=measurements['pressure'],
         data_source=sources['niagara'],
         source_identifiers={
             'station_name': 'Station1',
             'point_path': '/Building/Pressure'
+        },
+        defaults={
+            'mapping_config': {}
         }
     )
-    
-    # Create Time Series Data
-    now = datetime.datetime.now(pytz.UTC)
+
+    # Create or update time series data
+    now = datetime.datetime.now(datetime.timezone.utc)
     for i in range(24):  # 24 hours of data
-        TimeSeriesData.objects.create(
+        TimeSeriesData.objects.get_or_create(
             timestamp=now - datetime.timedelta(hours=i),
             measurement=measurements['pressure'],
-            value=round(random.uniform(-0.1, 0.1), 3)
+            defaults={
+                'value': round(random.uniform(-0.1, 0.1), 3)
+            }
         )
-    
+
     return "Test data created successfully"
+
+def create_timeseries_csv(measurement_id, start_date, end_date, file_path):
+    """Create a CSV file with time series data for testing imports"""
+    headers = ['timestamp', 'value']
+    data = [headers]
+    
+    current = start_date
+    while current <= end_date:
+        value = round(random.uniform(0, 100), 2)
+        data.append([current.isoformat(), value])
+        current += datetime.timedelta(hours=1)
+
+    create_csv_file(file_path, data)

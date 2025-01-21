@@ -1,21 +1,12 @@
-complete test rewrite
-have it check services.py
-
-parent only in location model, 
-confirm it is not used and not needed in other models
-note that tree_item has been working even though this is only in location
-
-delete, modify admin.py and migrate
-review modify all other code where it is referenced.
-
-run tests, resolve errors
-
-get tree working again
 
 add measurement modal form
 initially support file source and .csv
 
-
+Use ML or simpler algorithms to scan file for tabular patterns
+Ace editor
+Selection and action menu
+Mark start for table
+Scan to get table dimensions 
 add measurement form 
 
 source          select                                    view import cancel

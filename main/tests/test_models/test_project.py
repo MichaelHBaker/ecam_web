@@ -100,6 +100,7 @@ class TestProjectModel(BaseTestCase):
         measurement = Measurement.objects.create(
             location=location,
             name="Test Measurement",
+            type=self.pressure_type,
             unit=self.test_unit
         )
         

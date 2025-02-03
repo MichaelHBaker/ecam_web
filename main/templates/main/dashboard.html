@@ -6,6 +6,7 @@
 
 {% block extra_css %}
 <style>
+    /* Tree structure and dropdowns */
     .w3-dropdown-content {
         transform: translateX(-10%);
     }
@@ -52,11 +53,7 @@
         display: block;
     }
 
-    .tree-item:hover {
-        background-color: #f1f1f1;
-    }
-
-    /* Enhanced measurement styles */
+    /* Measurement specific styles */
     .measurement-fields {
         display: inline-flex;
         align-items: center;
@@ -64,70 +61,20 @@
         flex-wrap: wrap;
     }
 
-    .unit-select {
-        min-width: 120px;
-        padding: 4px 8px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        background-color: white;
-    }
-
-    /* Multiplier select styles */
-    .multiplier-select {
-        width: 100px;
-        padding: 4px 8px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        background-color: white;
-        margin-left: 4px;
-    }
-
-    /* Timezone select styles */
+    .unit-select,
+    .multiplier-select,
     .timezone-select {
-        width: 160px;
         padding: 4px 8px;
-        border: 1px solid #ddd;
+        border: 1px solid #ccc;
         border-radius: 4px;
-        background-color: white;
-        margin-left: 8px;
     }
 
-    .measurement-category-display {
-        color: #666;
-        font-size: 0.9em;
-        margin-left: 8px;
-        padding: 2px 6px;
-        background-color: #f8f8f8;
-        border-radius: 3px;
-    }
-
-    .measurement-type-display {
-        color: #888;
-        font-size: 0.9em;
-        margin-left: 4px;
-        padding: 2px 6px;
-        background-color: #f0f0f0;
-        border-radius: 3px;
-    }
-
-    /* SI indicator style */
-    .si-indicator {
-        font-size: 0.8em;
-        color: #666;
-        padding: 2px 4px;
-        background-color: #f0f0f0;
-        border-radius: 3px;
-        margin-left: 4px;
-    }
+    .unit-select { min-width: 120px; }
+    .multiplier-select { width: 100px; }
+    .timezone-select { width: 160px; }
 
     .w3-container-tree {
         width: fit-content !important;
-    }
-
-    .w3-bar-item.w3-button.section-button {
-        width: 200px;
-        text-align: left;
-        padding-left: 16px;
     }
 
     .fields-container {
@@ -136,7 +83,8 @@
         gap: 8px;
     }
     
-    .tree-item-name, .tree-item-field {
+    .tree-item-name, 
+    .tree-item-field {
         border: none;
         background: transparent;
         padding: 4px 8px;
@@ -150,32 +98,6 @@
         border: 1px solid #ccc;
         background-color: white;
         padding: 4px;
-    }
-    
-    .tree-item-name {
-        font-weight: normal;
-    }
-
-    /* Error state styles */
-    .tree-item-field.error {
-        border-color: #ff4444;
-        background-color: #fff8f8;
-    }
-
-    .error-message {
-        color: #ff4444;
-        font-size: 0.9em;
-        margin-top: 4px;
-    }
-
-    /* Unit selection styles */
-    optgroup {
-        font-weight: bold;
-        color: #666;
-    }
-
-    option {
-        padding: 4px 8px;
     }
 </style>
 {% endblock %}

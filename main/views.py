@@ -8,17 +8,18 @@ from django.template.loader import render_to_string
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.views import View
+from django.views.decorators.http import require_http_methods
+
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework import serializers
 from rest_framework.authentication import SessionAuthentication, BasicAuthentication
 from rest_framework.permissions import IsAuthenticated
 
 from .models import (
     Project, Location, Measurement, MeasurementCategory,
-    MeasurementType, MeasurementUnit
+    MeasurementType, MeasurementUnit, DataImport, DataSource
 )
 from .serializers import (
     ProjectSerializer, LocationSerializer, MeasurementSerializer,
@@ -1539,3 +1540,176 @@ def data(request):
 
 def model(request):
     return render(request, 'main/model.html')
+
+
+def get_preview_content(file_like_object, max_size=5000):
+    """
+    Get preview content from any file-like object
+    Returns preview content and whether it was truncated
+    """
+    try:
+        file_like_object.seek(0)
+        # Read raw bytes first
+        raw_content = file_like_object.read()
+        if not raw_content:
+            return "Empty file", False
+
+        # Try UTF-8 first
+        try:
+            content = raw_content.decode('utf-8')
+        except UnicodeDecodeError:
+            # If UTF-8 fails, try to detect encoding
+            import chardet
+            detected = chardet.detect(raw_content)
+            if detected and detected['encoding']:
+                try:
+                    content = raw_content.decode(detected['encoding'])
+                except UnicodeDecodeError:
+                    # If all else fails, try with 'latin1' (which always works but might be incorrect)
+                    content = raw_content.decode('latin1')
+            else:
+                content = raw_content.decode('latin1')
+
+        # Truncate if needed
+        if len(content) > max_size:
+            content = content[:max_size] + "\n... (content truncated for preview)"
+            was_truncated = True
+        else:
+            was_truncated = False
+
+        # Reset file pointer for future reads
+        file_like_object.seek(0)
+        return content, was_truncated
+
+    except Exception as e:
+        print(f"Error in get_preview_content: {str(e)}")
+        raise ValueError(f'Error reading file content: {str(e)}')
+    
+@login_required
+@require_http_methods(["POST"])
+def create_data_import(request):
+   try:
+       # Detailed request debugging
+       print("="*50)
+       print("DEBUG: create_data_import called")
+       print(f"Request method: {request.method}")
+       print(f"Content type: {request.content_type}")
+       print(f"Headers: {dict(request.headers)}")
+       print(f"POST data keys: {list(request.POST.keys())}")
+       print(f"POST data: {dict(request.POST)}")
+       print(f"FILES keys: {list(request.FILES.keys())}")
+       print(f"FILES: {dict(request.FILES)}")
+       
+       # Get the location_id
+       location_id = request.POST.get('location_id')
+       print(f"Location ID from POST: {location_id}")
+       
+       if not location_id:
+           error_response = {
+               'error': 'No location ID provided',
+               'debug': {
+                   'post_keys': list(request.POST.keys()),
+                   'files_keys': list(request.FILES.keys()),
+                   'content_type': request.content_type,
+                   'method': request.method
+               }
+           }
+           print(f"Error response: {error_response}")
+           return JsonResponse(error_response, status=400)
+           
+       try:
+           print(f"Looking up location with ID: {location_id}")
+           location = Location.objects.get(id=location_id)
+           print(f"Found location: {location}")
+       except Location.DoesNotExist:
+           print(f"Location not found with ID: {location_id}")
+           return JsonResponse({'error': 'Invalid location ID'}, status=400)
+
+       # Handle file upload source
+       if 'file' in request.FILES:
+           file = request.FILES['file']
+           print(f"Processing file: {file.name} (content-type: {file.content_type})")
+           
+           # Check both file extension and content type
+           valid_csv = (
+               file.name.lower().endswith('.csv') or 
+               file.content_type in ['text/csv', 'application/csv']
+           )
+           
+           if not valid_csv:
+               print(f"Invalid file type: {file.name} (content-type: {file.content_type})")
+               return JsonResponse({'error': 'Only CSV files are supported'}, status=400)
+               
+           # Get or create file data source
+           data_source, created = DataSource.objects.get_or_create(
+               name=f'File Upload - location-{location.id}_filename-{file.name}',
+               defaults={
+                   'source_type': 'file',
+                   'description': f'File upload for location {location.name}'
+               }
+           )
+           print(f"Data source {'created' if created else 'retrieved'}: {data_source}")
+           
+           # Create the import record
+           data_import = DataImport.objects.create(
+               data_source=data_source,
+               status='pending',
+               import_file=file,
+               created_by=request.user
+           )
+           print(f"Created DataImport record: {data_import.id}")
+
+           try:
+               preview_content, was_truncated = get_preview_content(file)
+               print(f"Generated preview content (truncated: {was_truncated})")
+           except Exception as e:
+               print(f"Error generating preview: {str(e)}")
+               preview_content = "Error generating preview"
+               was_truncated = False
+
+           response_data = {
+               'import_id': data_import.id,
+               'preview_content': preview_content,
+               'preview_truncated': was_truncated,
+               'status': 'success',
+               'message': f'Successfully created import from {data_source.get_source_type_display()}'
+           }
+           print(f"Sending success response: {response_data}")
+           return JsonResponse(response_data)
+           
+       else:
+           print("No file found in request")
+           return JsonResponse({
+               'error': 'No file provided',
+               'debug': {
+                   'files_keys': list(request.FILES.keys())
+               }
+           }, status=400)
+       
+   except ValueError as ve:
+       print(f"ValueError: {str(ve)}")
+       return JsonResponse({'error': str(ve)}, status=400)
+   except Exception as e:
+       print(f"Unexpected error: {str(e)}")
+       import traceback
+       print("Full traceback:", traceback.format_exc())
+       return JsonResponse({'error': str(e)}, status=500)       
+
+
+@login_required
+@require_http_methods(["GET"])
+def get_data_import(request, import_id):
+    try:
+        data_import = DataImport.objects.get(id=import_id)
+        
+        return JsonResponse({
+            'id': data_import.id,
+            'status': data_import.status,
+            'created_at': data_import.started_at.isoformat(),
+            'file_name': data_import.import_file.name if data_import.import_file else None,
+        })
+        
+    except DataImport.DoesNotExist:
+        return JsonResponse({'error': 'Import not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)

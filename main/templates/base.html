@@ -11,6 +11,10 @@
     <!-- Google Icons -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 
+    <!-- CodeMirror CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/default.min.css">
+
     <!-- Global Form Styles -->
     <style>
         /* Global :valid input styles */
@@ -35,6 +39,23 @@
         /* Optional rounded styles using W3.CSS */
         input.w3-input {
             border-radius: 5px; /* Rounded corners */
+        }
+
+        /* Essential CodeMirror styles - minimal overrides */
+        .CodeMirror {
+            height: 100% !important;
+            border: 1px solid #ccc;
+        }
+
+        /* Modal content scroll area */
+        .modal-content-scroll {
+            height: calc(100% - 200px);
+            overflow: auto;
+        }
+
+        /* Icon spacing in display containers */
+        .w3-display-container i {
+            margin-right: 8px;
         }
     </style>
 

@@ -1,12 +1,23 @@
+trap for duplicate file name within location, replace or cancel
+let ai figure out location id part of name
+ask about scan before load to server
+    Quick way to get the record count, typical interval and date range from a source. Source may not be sorted so going to end does not work
+
+next lesson
+    discuss https://claude.ai/chat/29e54197-dccb-4cd5-86a7-edec699d30d4
+    scan before upload to server?
+    serializer before return to page
+
 
 add measurement modal form
 initially support file source and .csv
 
 Use ML or simpler algorithms to scan file for tabular patterns
-Ace editor
+CodeMirror editor
 Selection and action menu
 Mark start for table
 Scan to get table dimensions 
+
 add measurement form 
 
 source          select                                    view import cancel
@@ -17,4 +28,16 @@ name description category type unit multiplier  include view start end
 ---- ----------- -------- ---- ----  ---        ------- ----
 ---- ----------- -------- ---- ----  ---        ------- ----
 ---- ----------- -------- ---- ----  ---        ------- ----
+
+project
+    add location form (source enter, file, db, api) [note: no enter for measurement, because you are not going to key in timeseries data]
+
+
+Models
+    individual measurement, descriptive stats
+    set of measurements for a location, e.g, temp and power
+    set of locations with the same measurements, within a project
+        individual location Models
+        grouped location models
+
 

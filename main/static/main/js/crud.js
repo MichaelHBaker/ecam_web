@@ -8,13 +8,50 @@ if (!CSRF_TOKEN) {
 export let MODEL_FIELDS = null;
 let modelFieldsPromise = null;
 
+// CodeMirror state management
+let codeMirrorInstances = {};
+let codeMirrorLoaded = false;
+
+// Helper function for CodeMirror instances
+const generateModalInstanceId = (locationId) => {
+    return `${locationId}-${Date.now()}`;
+};
+
+const getModalInstanceId = (locationId) => {
+    const modal = document.getElementById(`id_modal-location-${locationId}`);
+    return modal?.dataset.instanceId;
+};
+
+// Function to load CodeMirror and its dependencies
+const loadCodeMirror = async () => {
+    if (codeMirrorLoaded) return;
+    
+    if (!window.CodeMirror) {
+        await new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js';
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+        });
+    }
+
+    codeMirrorLoaded = true;
+};
+
 // Generalized API fetch function with enhanced error handling
 export const apiFetch = async (endpoint, options = {}, basePath = '/api') => {
+    let headers = {
+        'X-CSRFToken': CSRF_TOKEN,
+    };
+
+    // Only set Content-Type for non-FormData requests
+    if (!(options.body instanceof FormData)) {
+        headers['Content-Type'] = 'application/json';
+    }
+
     const defaultOptions = {
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': CSRF_TOKEN,
-        },
+        headers: headers,
         credentials: 'include',  // Ensure cookies are sent
     };
 
@@ -152,20 +189,111 @@ export const getFieldId = (type, field, id) => {
 // Modal management functions
 export const showMeasurementModal = (locationId) => {
     const modal = document.getElementById(`id_modal-location-${locationId}`);
-    if (modal) {
-        modal.style.display = 'block';
+    if (!modal) return;
+
+    // Generate and store instance ID
+    const instanceId = generateModalInstanceId(locationId);
+    modal.dataset.instanceId = instanceId;
+
+    // Show modal
+    modal.style.display = 'block';
+    
+    // Set up resize observer for CodeMirror refresh
+    const modalContent = modal.querySelector('.w3-modal-content');
+    if (modalContent) {
+        const resizeObserver = new ResizeObserver(entries => {
+            // Refresh CodeMirror when modal is resized
+            if (codeMirrorInstances[instanceId]) {
+                codeMirrorInstances[instanceId].refresh();
+            }
+        });
+        
+        resizeObserver.observe(modalContent);
+
+        // Clean up observer when modal is closed
+        const cleanup = () => {
+            resizeObserver.disconnect();
+            modal.removeEventListener('hide', cleanup);
+        };
+        
+        modal.addEventListener('hide', cleanup);
     }
+
+    // Handle Escape key
+    const handleEscape = (event) => {
+        if (event.key === 'Escape') {
+            hideMeasurementModal(locationId);
+            document.removeEventListener('keydown', handleEscape);
+        }
+    };
+    document.addEventListener('keydown', handleEscape);
+
+    // Handle click outside modal
+    const handleOutsideClick = (event) => {
+        if (event.target === modal) {
+            hideMeasurementModal(locationId);
+            modal.removeEventListener('click', handleOutsideClick);
+        }
+    };
+    modal.addEventListener('click', handleOutsideClick);
 };
 
 export const hideMeasurementModal = (locationId) => {
     const modal = document.getElementById(`id_modal-location-${locationId}`);
-    if (modal) {
-        modal.style.display = 'none';
+    if (!modal) return;
+
+    const instanceId = modal.dataset.instanceId;
+    if (instanceId && codeMirrorInstances[instanceId]) {
+        // Clean up the CodeMirror instance
+        codeMirrorInstances[instanceId].toTextArea();
+        delete codeMirrorInstances[instanceId];
+    }
+
+    // Clear instance ID
+    delete modal.dataset.instanceId;
+    
+    // Hide modal
+    modal.style.display = 'none';
+    
+    // Clear file input and import ID
+    const fileInput = document.getElementById(`id_file_input-${locationId}`);
+    if (fileInput) {
+        fileInput.value = '';
+    }
+    
+    const importIdInput = document.getElementById(`id_import_id-${locationId}`);
+    if (importIdInput) {
+        importIdInput.value = '';
+    }
+    
+    // Reset file display
+    const fileDisplay = document.getElementById(`id_file_display-${locationId}`);
+    if (fileDisplay) {
+        fileDisplay.innerHTML = '<i class="bi bi-file-earmark"></i> No file selected';
+        fileDisplay.className = 'w3-panel w3-pale-blue w3-leftbar w3-border-blue file-display';
+    }
+    
+    // Hide and clean up CodeMirror container
+    const cmContainer = document.getElementById(`id_codemirror_container-${locationId}`);
+    if (cmContainer) {
+        cmContainer.style.display = 'none';
+        
+        // Remove any truncation notice
+        const notice = cmContainer.querySelector('.w3-panel');
+        if (notice) {
+            notice.remove();
+        }
+    }
+
+    // Disable Next button
+    const nextButton = document.querySelector(`button[onclick*="processFile('${locationId}')"]`);
+    if (nextButton) {
+        nextButton.disabled = true;
     }
 };
 
 // Add our new file handling functions here
-export const handleFileSelect = async (locationId) => {
+export const handleFileSelect = (locationId) => {
     const fileInput = document.getElementById(`id_file_input-${locationId}`);
     if (fileInput) {
         fileInput.click();
@@ -173,13 +301,99 @@ export const handleFileSelect = async (locationId) => {
 };
 
 export const handleFileChange = async (event, locationId) => {
-    const fileInput = event.target;
+    const instanceId = getModalInstanceId(locationId);
+    if (!instanceId) return;
+
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Update file display with loading state
     const fileDisplay = document.getElementById(`id_file_display-${locationId}`);
-    
-    if (fileInput.files.length > 0) {
-        const file = fileInput.files[0];
+    if (fileDisplay) {
+        fileDisplay.innerHTML = `<i class="bi bi-arrow-clockwise"></i> Uploading ${file.name}...`;
+        // Changed to w3-css classes
+        fileDisplay.className = 'w3-panel w3-leftbar w3-pale-yellow w3-border-yellow file-display';
+    }
+
+    try {
+        // Create FormData and append file and location_id
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('location_id', String(locationId));
+
+        // Upload file and create DataImport record
+        const response = await apiFetch('/data-imports/', {
+            method: 'POST',
+            body: formData
+        });
+
+        // Update file display with success state
         if (fileDisplay) {
-            fileDisplay.textContent = file.name;
+            fileDisplay.innerHTML = `<i class="bi bi-file-earmark-check"></i> ${file.name}`;
+            // Changed to w3-css classes
+            fileDisplay.className = 'w3-panel w3-leftbar w3-pale-green w3-border-green file-display';
+        }
+
+        // Store the import ID
+        const importIdInput = document.getElementById(`id_import_id-${locationId}`);
+        if (importIdInput) {
+            importIdInput.value = response.import_id;
+        }
+
+        // Load and display file contents in CodeMirror
+        await loadCodeMirror();
+
+        // Show CodeMirror container
+        const cmContainer = document.getElementById(`id_codemirror_container-${locationId}`);
+        if (cmContainer) {
+            cmContainer.style.display = 'block';
+        }
+
+        // Initialize or get CodeMirror instance using the unique instance ID
+        if (!codeMirrorInstances[instanceId]) {
+            const textarea = document.getElementById(`id_codemirror_editor-${locationId}`);
+            if (textarea) {
+                codeMirrorInstances[instanceId] = CodeMirror.fromTextArea(textarea, {
+                    mode: 'text/plain',
+                    theme: 'default',
+                    lineNumbers: true,
+                    readOnly: true,
+                    viewportMargin: Infinity,
+                    lineWrapping: false,  // Disable line wrapping
+                    scrollbarStyle: 'native',
+                    fixedGutter: true,
+                    gutters: ["CodeMirror-linenumbers"],
+                });
+            }
+        }
+
+        // Set content from response
+        if (codeMirrorInstances[instanceId] && response.preview_content) {
+            codeMirrorInstances[instanceId].setValue(response.preview_content);
+            codeMirrorInstances[instanceId].refresh();
+            
+            // Add truncation notice if needed
+            if (response.preview_truncated) {
+                const notice = document.createElement('div');
+                // Changed to w3-css classes
+                notice.className = 'w3-panel w3-pale-yellow w3-leftbar w3-border-yellow';
+                notice.innerHTML = '<i class="bi bi-info-circle"></i> File content truncated for preview';
+                cmContainer.appendChild(notice);
+            }
+        }
+
+        // Enable the Next button
+        const nextButton = document.querySelector(`button[onclick*="processFile('${locationId}')"]`);
+        if (nextButton) {
+            nextButton.disabled = false;
+        }
+
+    } catch (error) {
+        console.error('Error uploading file:', error);
+        if (fileDisplay) {
+            fileDisplay.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Error: ${error.message || 'Failed to upload file'}`;
+            // Changed to w3-css classes
+            fileDisplay.className = 'w3-panel w3-leftbar w3-pale-red w3-border-red file-display';
         }
     }
 };

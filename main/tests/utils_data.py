@@ -68,7 +68,7 @@ def create_model_table_data():
 
     categories = {}
     for name, details in categories_data.items():
-        categories[name], _ = MeasurementCategory.objects.get_or_create(
+        categories[name], _ = MeasurementCategory.objects.update_or_create(
             name=name,
             defaults={
                 'display_name': details['display_name'],
@@ -159,7 +159,7 @@ def create_model_table_data():
         }
         lookup_name = lookup_names.get(name, name.capitalize())
 
-        types[name], _ = MeasurementType.objects.get_or_create(
+        types[name], _ = MeasurementType.objects.update_or_create(
             category=details['category'],
             name=lookup_name,
             defaults={
@@ -240,7 +240,7 @@ def create_model_table_data():
 
     units = {}
     for name, details in all_unit_data.items():
-        units[name], _ = MeasurementUnit.objects.get_or_create(
+        units[name], _ = MeasurementUnit.objects.update_or_create(
             type=details['type'],
             name=name,
             defaults={

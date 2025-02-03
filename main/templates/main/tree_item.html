@@ -84,49 +84,75 @@
 <!-- Measurement Modal -->
 {% if next_level_type == 'measurement' %}
 <div id="id_modal-location-{{ item.id }}" class="w3-modal" style="display:none; z-index: 1000;">
-   <div class="w3-modal-content w3-card-4 w3-animate-top" style="max-width:600px;">
-       <header class="w3-container w3-border-bottom"> 
+   <div class="w3-modal-content w3-card-4 w3-animate-top" 
+        style="width:90%; min-width:600px; min-height:400px; resize:both; overflow:auto;">
+       <!-- Use w3-bar instead of custom header -->
+       <div class="w3-bar w3-light-grey">
            <span onclick="crud.hideMeasurementModal('{{ item.id }}')" 
-                 class="w3-button w3-display-topright">&times;</span>
-           <h4>Add Measurement</h4>
-       </header>
+                 class="w3-bar-item w3-button w3-right">&times;</span>
+           <h4 class="w3-bar-item"><i class="bi bi-plus-circle"></i> Add Measurement</h4>
+       </div>
    
-       <div class="w3-container w3-padding">
-           <!-- Source Dropdown -->
-           <div class="w3-dropdown-hover">
-               <button class="w3-button">
-                   Source <i class="bi bi-chevron-down"></i>
-               </button>
-               <div class="w3-dropdown-content w3-bar-block w3-border">
-                   <!-- Hidden file input -->
-                   <input type="file" 
-                          id="id_file_input-{{ item.id }}" 
-                          accept=".csv"
-                          style="display: none;" 
-                          onchange="crud.handleFileChange(event, '{{ item.id }}')">
-                          
-                   <a href="#" class="w3-bar-item w3-button"
-                      onclick="crud.handleFileSelect('{{ item.id }}'); return false;">
-                       <i class="bi bi-file-earmark-text"></i> File
-                   </a>
-                   <a href="#" class="w3-bar-item w3-button w3-disabled">
-                       <i class="bi bi-cloud"></i> API
-                   </a>
-                   <a href="#" class="w3-bar-item w3-button w3-disabled">
-                       <i class="bi bi-database"></i> Database
-                   </a>
+       <!-- Use w3-container for consistent padding -->
+       <form id="id_measurement_form-{{ item.id }}" class="w3-container">
+           <!-- Hidden import ID field -->
+           <input type="hidden" id="id_import_id-{{ item.id }}" name="import_id" value="">
+           
+           <!-- Source Selection Bar - using w3-bar -->
+           <div class="w3-bar w3-padding">
+               <div class="w3-dropdown-hover">
+                   <button class="w3-button w3-white w3-border">
+                       <i class="bi bi-file-earmark-text"></i> Source
+                       <i class="bi bi-chevron-down"></i>
+                   </button>
+                   <div class="w3-dropdown-content w3-bar-block w3-card">
+                       <input type="file" 
+                              id="id_file_input-{{ item.id }}" 
+                              accept=".csv"
+                              style="display: none;" 
+                              onchange="crud.handleFileChange(event, '{{ item.id }}')">
+                              
+                       <a href="#" class="w3-bar-item w3-button"
+                          onclick="crud.handleFileSelect('{{ item.id }}'); return false;">
+                           <i class="bi bi-file-earmark-text"></i> File
+                       </a>
+                       <a href="#" class="w3-bar-item w3-button w3-disabled">
+                           <i class="bi bi-cloud"></i> API
+                       </a>
+                       <a href="#" class="w3-bar-item w3-button w3-disabled">
+                           <i class="bi bi-database"></i> Database
+                       </a>
+                   </div>
                </div>
            </div>
 
-           <!-- File Display -->
+           <!-- File Display with Status - using w3-panel -->
            <div id="id_file_display-{{ item.id }}" 
-                class="w3-padding-small w3-text-dark-grey">
-               No file selected
+                class="w3-panel w3-leftbar w3-pale-blue w3-border-blue w3-display-container">
+               <i class="bi bi-file-earmark"></i> No file selected
            </div>
 
-           <!-- Future measurement grid will go here -->
-           
-       </div>
+           <!-- CodeMirror Container -->
+           <div id="id_codemirror_container-{{ item.id }}" 
+                class="w3-container w3-border w3-round" 
+                style="display: none; height: calc(100% - 200px);">
+               <!-- The container will adjust with modal size -->
+               <div class="w3-block" style="height: 100%; overflow: auto;">
+                   <textarea id="id_codemirror_editor-{{ item.id }}" 
+                            style="display: none;"></textarea>
+               </div>
+           </div>
+
+           <!-- Action Buttons - using w3-bar -->
+           <div class="w3-bar w3-padding-16">
+               <button type="button"
+                       onclick="crud.processFile('{{ item.id }}')" 
+                       class="w3-button w3-blue w3-right" 
+                       disabled>
+                   Next <i class="bi bi-arrow-right"></i>
+               </button>
+           </div>
+       </form>
    </div>
 </div>
 {% endif %}

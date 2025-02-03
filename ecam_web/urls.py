@@ -26,5 +26,7 @@ urlpatterns = [
     path('measurement/', views.measurement, name='measurement'),
     path('data/', views.data, name='data'),
     path('model/', views.model, name='model'),
+    path('api/data-imports/', views.create_data_import, name='api-data-imports'),
+    path('api/data-imports/<int:import_id>/', views.get_data_import, name='api-data-import-detail'),
     path('api/', include(router.urls)),
 ]

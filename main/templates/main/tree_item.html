@@ -95,9 +95,10 @@
    
        <!-- Use w3-container for consistent padding -->
        <form id="id_measurement_form-{{ item.id }}" class="w3-container">
-           <!-- Hidden import ID field -->
+           <!-- Hidden dataset and import IDs -->
+           <input type="hidden" id="id_dataset_id-{{ item.id }}" name="dataset_id" value="">
            <input type="hidden" id="id_import_id-{{ item.id }}" name="import_id" value="">
-           
+
            <!-- Source Selection Bar - using w3-bar -->
            <div class="w3-bar w3-padding">
                <div class="w3-dropdown-hover">
@@ -146,11 +147,11 @@
            <!-- Action Buttons - using w3-bar -->
            <div class="w3-bar w3-padding-16">
                <button type="button"
-                       onclick="crud.processFile('{{ item.id }}')" 
-                       class="w3-button w3-blue w3-right" 
-                       disabled>
-                   Next <i class="bi bi-arrow-right"></i>
-               </button>
+                        onclick="crud.processFile('{{ item.id }}')" 
+                        class="w3-button w3-blue w3-right" 
+                        disabled>
+                    Analyze <i class="bi bi-arrow-right"></i>
+                </button>
            </div>
        </form>
    </div>

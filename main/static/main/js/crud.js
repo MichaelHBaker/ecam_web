@@ -4,13 +4,23 @@ if (!CSRF_TOKEN) {
     console.warn('CSRF token not found in the DOM.');
 }
 
+// Initialize state and event handlers
+let columnSelectionMenus = {};
+let codeMirrorInstances = {};
+let codeMirrorLoaded = false;
+
+const initializeColumnSelectionHandlers = () => {
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.action-menu') && !e.target.closest('.w3-card')) {
+            Object.keys(columnSelectionMenus).forEach(hideColumnSelectionMenus);
+        }
+    });
+};
+initializeColumnSelectionHandlers();
+
 // Initialize MODEL_FIELDS
 export let MODEL_FIELDS = null;
 let modelFieldsPromise = null;
-
-// CodeMirror state management
-let codeMirrorInstances = {};
-let codeMirrorLoaded = false;
 
 // Helper function for CodeMirror instances
 const generateModalInstanceId = (locationId) => {
@@ -186,6 +196,160 @@ export const getFieldId = (type, field, id) => {
     return `field_${type}_${fieldName}_${id}`;
 };
 
+const hideColumnSelectionMenus = (locationId) => {
+    if (columnSelectionMenus[locationId]) {
+        if (columnSelectionMenus[locationId].actionMenu) {
+            columnSelectionMenus[locationId].actionMenu.remove();
+        }
+        if (columnSelectionMenus[locationId].dropdownMenu) {
+            columnSelectionMenus[locationId].dropdownMenu.remove();
+        }
+        delete columnSelectionMenus[locationId];
+    }
+};
+
+const showColumnActionMenu = (editor, locationId) => {
+    hideColumnSelectionMenus(locationId);
+
+    const selection = editor.getSelection();
+    if (!selection) return;
+
+    const to = editor.getCursor('to');
+    const coords = editor.charCoords(to, 'window');
+    
+    console.log('Menu coordinates:', coords);
+    console.log('Creating menu at:', {
+        top: coords.top,
+        left: coords.left + 20
+    });
+
+    const menu = document.createElement('div');
+    menu.className = 'action-menu';
+    menu.style.cssText = `
+        position: fixed;  /* Changed from absolute */
+        top: ${coords.top}px;
+        left: ${(coords.left + 20)}px;
+        z-index: 1100;   /* Increased z-index */
+        background: white;
+        border-radius: 4px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        cursor: pointer;
+        padding: 2px;
+    `;
+
+    // Add a visible background and border
+    menu.innerHTML = `
+        <button class="w3-button w3-white w3-border" style="padding: 4px; min-width: 30px;">
+            <i class="bi bi-three-dots-vertical"></i>
+        </button>
+    `;
+
+    menu.onclick = (e) => {
+        console.log('Menu clicked');
+        e.stopPropagation();
+        showColumnDropdownMenu(editor, coords, locationId);
+    };
+
+    document.body.appendChild(menu);
+    console.log('Menu added to document');
+    
+    columnSelectionMenus[locationId] = {
+        actionMenu: menu,
+        dropdownMenu: null
+    };
+};
+
+const showColumnDropdownMenu = (editor, coords, locationId) => {
+    if (columnSelectionMenus[locationId]?.dropdownMenu) {
+        columnSelectionMenus[locationId].dropdownMenu.remove();
+    }
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'w3-card w3-white';
+    dropdown.style.cssText = `
+        position: absolute;
+        top: ${coords.top}px;
+        left: ${coords.left + 40}px;
+        z-index: 1001;
+        min-width: 150px;
+    `;
+
+    dropdown.innerHTML = `
+        <div class="w3-bar-block">
+            <a href="#" class="w3-bar-item w3-button" data-action="data-start">
+                <i class="bi bi-arrow-right-circle"></i> Data Start
+            </a>
+            <a href="#" class="w3-bar-item w3-button" data-action="data-type">
+                <i class="bi bi-graph-up"></i> Data Type
+            </a>
+            <a href="#" class="w3-bar-item w3-button" data-action="timestamp">
+                <i class="bi bi-clock"></i> Time Stamp
+            </a>
+        </div>
+    `;
+
+    dropdown.querySelectorAll('.w3-bar-item').forEach(item => {
+        item.onclick = (e) => {
+            e.preventDefault();
+            const action = e.currentTarget.dataset.action;
+            console.log('Selected action:', action);
+            hideColumnSelectionMenus(locationId);
+        };
+    });
+
+    document.body.appendChild(dropdown);
+    columnSelectionMenus[locationId].dropdownMenu = dropdown;
+};
+
+const initializeColumnSelection = (locationId) => {
+    const instanceId = getModalInstanceId(locationId);
+    console.log('Initializing column selection for instance:', instanceId);
+    
+    const editor = codeMirrorInstances[instanceId];
+    console.log('Editor found:', editor);
+    
+    if (!editor) {
+        console.log('No editor found for locationId:', locationId);
+        return;
+    }
+
+    console.log('Setting up selection events');
+
+    // Try multiple event types to see which one fires
+    editor.on('cursorActivity', () => {
+        console.log('Cursor Activity');
+        const selection = editor.getSelection();
+        console.log('Selection from cursor:', selection);
+    });
+
+    editor.on('select', () => {
+        console.log('Select Event');
+        const selection = editor.getSelection();
+        console.log('Selection from select:', selection);
+    });
+
+    editor.getWrapperElement().addEventListener('mouseup', () => {
+        console.log('Mouse Up on wrapper');
+        setTimeout(() => {
+            const selection = editor.getSelection();
+            console.log('Selection from mouseup:', selection);
+            if (selection && selection.trim()) {
+                showColumnActionMenu(editor, locationId);
+            }
+        }, 50);  // Slight delay to ensure selection is complete
+    });
+
+    // Add explicit test method to editor
+    editor.testSelection = () => {
+        console.log('Manual test of selection');
+        const selection = editor.getSelection();
+        console.log('Current selection:', selection);
+        if (selection && selection.trim()) {
+            showColumnActionMenu(editor, locationId);
+        }
+    };
+};
+
 // Modal management functions
 export const showMeasurementModal = (locationId) => {
     const modal = document.getElementById(`id_modal-location-${locationId}`);
@@ -244,27 +408,24 @@ export const hideMeasurementModal = (locationId) => {
 
     const instanceId = modal.dataset.instanceId;
     if (instanceId && codeMirrorInstances[instanceId]) {
-        // Clean up the CodeMirror instance
         codeMirrorInstances[instanceId].toTextArea();
         delete codeMirrorInstances[instanceId];
     }
 
-    // Clear instance ID
+    // Clean up column selection
+    hideColumnSelectionMenus(locationId);
+
     delete modal.dataset.instanceId;
-    
-    // Hide modal
     modal.style.display = 'none';
     
-    // Clear file input and import ID
+    // Clear both IDs and file input
     const fileInput = document.getElementById(`id_file_input-${locationId}`);
-    if (fileInput) {
-        fileInput.value = '';
-    }
-    
+    const datasetIdInput = document.getElementById(`id_dataset_id-${locationId}`);
     const importIdInput = document.getElementById(`id_import_id-${locationId}`);
-    if (importIdInput) {
-        importIdInput.value = '';
-    }
+    
+    if (fileInput) fileInput.value = '';
+    if (datasetIdInput) datasetIdInput.value = '';
+    if (importIdInput) importIdInput.value = '';
     
     // Reset file display
     const fileDisplay = document.getElementById(`id_file_display-${locationId}`);
@@ -273,19 +434,13 @@ export const hideMeasurementModal = (locationId) => {
         fileDisplay.className = 'w3-panel w3-pale-blue w3-leftbar w3-border-blue file-display';
     }
     
-    // Hide and clean up CodeMirror container
     const cmContainer = document.getElementById(`id_codemirror_container-${locationId}`);
     if (cmContainer) {
         cmContainer.style.display = 'none';
-        
-        // Remove any truncation notice
         const notice = cmContainer.querySelector('.w3-panel');
-        if (notice) {
-            notice.remove();
-        }
+        if (notice) notice.remove();
     }
 
-    // Disable Next button
     const nextButton = document.querySelector(`button[onclick*="processFile('${locationId}')"]`);
     if (nextButton) {
         nextButton.disabled = true;
@@ -307,82 +462,77 @@ export const handleFileChange = async (event, locationId) => {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Update file display with loading state
     const fileDisplay = document.getElementById(`id_file_display-${locationId}`);
     if (fileDisplay) {
         fileDisplay.innerHTML = `<i class="bi bi-arrow-clockwise"></i> Uploading ${file.name}...`;
-        // Changed to w3-css classes
         fileDisplay.className = 'w3-panel w3-leftbar w3-pale-yellow w3-border-yellow file-display';
     }
 
     try {
-        // Create FormData and append file and location_id
         const formData = new FormData();
         formData.append('file', file);
         formData.append('location_id', String(locationId));
 
-        // Upload file and create DataImport record
         const response = await apiFetch('/data-imports/', {
             method: 'POST',
             body: formData
         });
 
-        // Update file display with success state
         if (fileDisplay) {
             fileDisplay.innerHTML = `<i class="bi bi-file-earmark-check"></i> ${file.name}`;
-            // Changed to w3-css classes
             fileDisplay.className = 'w3-panel w3-leftbar w3-pale-green w3-border-green file-display';
         }
 
-        // Store the import ID
+        const datasetIdInput = document.getElementById(`id_dataset_id-${locationId}`);
         const importIdInput = document.getElementById(`id_import_id-${locationId}`);
-        if (importIdInput) {
-            importIdInput.value = response.import_id;
-        }
+        if (datasetIdInput) datasetIdInput.value = response.dataset_id;
+        if (importIdInput) importIdInput.value = response.import_id;
 
-        // Load and display file contents in CodeMirror
         await loadCodeMirror();
-
-        // Show CodeMirror container
         const cmContainer = document.getElementById(`id_codemirror_container-${locationId}`);
         if (cmContainer) {
             cmContainer.style.display = 'block';
         }
 
-        // Initialize or get CodeMirror instance using the unique instance ID
-        if (!codeMirrorInstances[instanceId]) {
+        if (!codeMirrorInstances[instanceId] && response.preview_content) {
             const textarea = document.getElementById(`id_codemirror_editor-${locationId}`);
             if (textarea) {
-                codeMirrorInstances[instanceId] = CodeMirror.fromTextArea(textarea, {
+                console.log('Creating CodeMirror instance');
+                const cm = CodeMirror.fromTextArea(textarea, {
                     mode: 'text/plain',
                     theme: 'default',
                     lineNumbers: true,
-                    readOnly: true,
+                    readOnly: false,
                     viewportMargin: Infinity,
-                    lineWrapping: false,  // Disable line wrapping
+                    lineWrapping: false,
                     scrollbarStyle: 'native',
                     fixedGutter: true,
                     gutters: ["CodeMirror-linenumbers"],
                 });
+                
+                codeMirrorInstances[instanceId] = cm;
+                console.log('CodeMirror instance created:', cm);
+                        
+                console.log('Initializing column selection');
+                initializeColumnSelection(locationId);
+                
+                // Test if we can access the editor
+                console.log('Can access editor after init:', codeMirrorInstances[instanceId]);
             }
         }
 
-        // Set content from response
         if (codeMirrorInstances[instanceId] && response.preview_content) {
             codeMirrorInstances[instanceId].setValue(response.preview_content);
             codeMirrorInstances[instanceId].refresh();
             
-            // Add truncation notice if needed
             if (response.preview_truncated) {
                 const notice = document.createElement('div');
-                // Changed to w3-css classes
                 notice.className = 'w3-panel w3-pale-yellow w3-leftbar w3-border-yellow';
                 notice.innerHTML = '<i class="bi bi-info-circle"></i> File content truncated for preview';
                 cmContainer.appendChild(notice);
             }
         }
 
-        // Enable the Next button
         const nextButton = document.querySelector(`button[onclick*="processFile('${locationId}')"]`);
         if (nextButton) {
             nextButton.disabled = false;
@@ -392,22 +542,24 @@ export const handleFileChange = async (event, locationId) => {
         console.error('Error uploading file:', error);
         if (fileDisplay) {
             fileDisplay.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Error: ${error.message || 'Failed to upload file'}`;
-            // Changed to w3-css classes
             fileDisplay.className = 'w3-panel w3-leftbar w3-pale-red w3-border-red file-display';
         }
     }
 };
 
 export const processFile = async (locationId) => {
-    const fileInput = document.getElementById(`id_file_input-${locationId}`);
-    if (!fileInput || !fileInput.files.length) {
+    const datasetId = document.getElementById(`id_dataset_id-${locationId}`)?.value;
+    if (!datasetId) {
+        console.error('No dataset ID found');
         return;
     }
     
-    const nextButton = fileInput.closest('.w3-container')
-                              .querySelector('button[onclick*="processFile"]');
-    if (nextButton) {
-        nextButton.disabled = false;
+    try {
+        await apiFetch(`/datasets/${datasetId}/analyze/`, {
+            method: 'POST'
+        });
+    } catch (error) {
+        console.error('Error analyzing file:', error);
     }
 };
 

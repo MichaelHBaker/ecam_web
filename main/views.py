@@ -19,14 +19,17 @@ from rest_framework.permissions import IsAuthenticated
 
 from .models import (
     Project, Location, Measurement, MeasurementCategory,
-    MeasurementType, MeasurementUnit, DataImport, DataSource
+    MeasurementType, MeasurementUnit, DataImport, DataSource,
+    Dataset, DataSourceLocation
 )
 from .serializers import (
     ProjectSerializer, LocationSerializer, MeasurementSerializer,
     MeasurementCategorySerializer, MeasurementTypeSerializer,
-    MeasurementUnitSerializer, ModelFieldsSerializer
+    MeasurementUnitSerializer, ModelFieldsSerializer,
+    DataSourceSerializer, DataSourceLocationSerializer,
+    DatasetSerializer, SourceColumnSerializer, DataImportSerializer,
+    ImportBatchSerializer
 )
-
 from openpyxl import Workbook
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.utils import get_column_letter
@@ -1588,112 +1591,62 @@ def get_preview_content(file_like_object, max_size=5000):
 @login_required
 @require_http_methods(["POST"])
 def create_data_import(request):
-   try:
-       # Detailed request debugging
-       print("="*50)
-       print("DEBUG: create_data_import called")
-       print(f"Request method: {request.method}")
-       print(f"Content type: {request.content_type}")
-       print(f"Headers: {dict(request.headers)}")
-       print(f"POST data keys: {list(request.POST.keys())}")
-       print(f"POST data: {dict(request.POST)}")
-       print(f"FILES keys: {list(request.FILES.keys())}")
-       print(f"FILES: {dict(request.FILES)}")
-       
-       # Get the location_id
-       location_id = request.POST.get('location_id')
-       print(f"Location ID from POST: {location_id}")
-       
-       if not location_id:
-           error_response = {
-               'error': 'No location ID provided',
-               'debug': {
-                   'post_keys': list(request.POST.keys()),
-                   'files_keys': list(request.FILES.keys()),
-                   'content_type': request.content_type,
-                   'method': request.method
-               }
-           }
-           print(f"Error response: {error_response}")
-           return JsonResponse(error_response, status=400)
-           
-       try:
-           print(f"Looking up location with ID: {location_id}")
-           location = Location.objects.get(id=location_id)
-           print(f"Found location: {location}")
-       except Location.DoesNotExist:
-           print(f"Location not found with ID: {location_id}")
-           return JsonResponse({'error': 'Invalid location ID'}, status=400)
+    try:
+        location_id = request.POST.get('location_id')
+        if not location_id:
+            return JsonResponse({'error': 'No location ID provided'}, status=400)
 
-       # Handle file upload source
-       if 'file' in request.FILES:
-           file = request.FILES['file']
-           print(f"Processing file: {file.name} (content-type: {file.content_type})")
-           
-           # Check both file extension and content type
-           valid_csv = (
-               file.name.lower().endswith('.csv') or 
-               file.content_type in ['text/csv', 'application/csv']
-           )
-           
-           if not valid_csv:
-               print(f"Invalid file type: {file.name} (content-type: {file.content_type})")
-               return JsonResponse({'error': 'Only CSV files are supported'}, status=400)
-               
-           # Get or create file data source
-           data_source, created = DataSource.objects.get_or_create(
-               name=f'File Upload - location-{location.id}_filename-{file.name}',
-               defaults={
-                   'source_type': 'file',
-                   'description': f'File upload for location {location.name}'
-               }
-           )
-           print(f"Data source {'created' if created else 'retrieved'}: {data_source}")
-           
-           # Create the import record
-           data_import = DataImport.objects.create(
-               data_source=data_source,
-               status='pending',
-               import_file=file,
-               created_by=request.user
-           )
-           print(f"Created DataImport record: {data_import.id}")
+        location = Location.objects.get(id=location_id)
 
-           try:
-               preview_content, was_truncated = get_preview_content(file)
-               print(f"Generated preview content (truncated: {was_truncated})")
-           except Exception as e:
-               print(f"Error generating preview: {str(e)}")
-               preview_content = "Error generating preview"
-               was_truncated = False
+        if 'file' not in request.FILES:
+            return JsonResponse({'error': 'No file provided'}, status=400)
+        
+        file = request.FILES['file']
+        if not file.name.lower().endswith('.csv'):
+            return JsonResponse({'error': 'Only CSV files are supported'}, status=400)
 
-           response_data = {
-               'import_id': data_import.id,
-               'preview_content': preview_content,
-               'preview_truncated': was_truncated,
-               'status': 'success',
-               'message': f'Successfully created import from {data_source.get_source_type_display()}'
-           }
-           print(f"Sending success response: {response_data}")
-           return JsonResponse(response_data)
-           
-       else:
-           print("No file found in request")
-           return JsonResponse({
-               'error': 'No file provided',
-               'debug': {
-                   'files_keys': list(request.FILES.keys())
-               }
-           }, status=400)
-       
-   except ValueError as ve:
-       print(f"ValueError: {str(ve)}")
-       return JsonResponse({'error': str(ve)}, status=400)
-   except Exception as e:
-       print(f"Unexpected error: {str(e)}")
-       import traceback
-       print("Full traceback:", traceback.format_exc())
-       return JsonResponse({'error': str(e)}, status=500)       
+        # Create data source
+        data_source = DataSource.objects.create(
+            name=f'File Upload - {file.name}',
+            source_type='file',
+            description=f'File upload for location {location.name}'
+        )
+
+        # Link data source to location
+        DataSourceLocation.objects.create(
+            data_source=data_source,
+            location=location
+        )
+
+        # Create dataset
+        dataset = Dataset.objects.create(
+            data_source=data_source,
+            name=f'Dataset - {file.name}',
+            source_timezone='UTC'
+        )
+
+        # Create import record
+        data_import = DataImport.objects.create(
+            dataset=dataset,
+            status='analyzing',
+            created_by=request.user
+        )
+
+        # Generate preview
+        preview_content, was_truncated = get_preview_content(file)
+
+        return JsonResponse({
+            'import_id': data_import.id,
+            'preview_content': preview_content,
+            'preview_truncated': was_truncated,
+            'status': 'success'
+        })
+
+    except Location.DoesNotExist:
+        return JsonResponse({'error': 'Invalid location ID'}, status=400)
+    except Exception as e:
+        print(f"Error in create_data_import: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)       
 
 
 @login_required

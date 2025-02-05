@@ -1,8 +1,14 @@
 # serializers.py
+# serializers.py
 from rest_framework import serializers
+from rest_framework.validators import UniqueTogetherValidator
+from django.contrib.auth.models import User
+import pytz
+
 from .models import (
     Project, Location, Measurement, MeasurementCategory,
-    MeasurementType, MeasurementUnit
+    MeasurementType, MeasurementUnit, DataSource, DataSourceLocation,
+    Dataset, SourceColumn, DataImport, ImportBatch
 )
 
 class MeasurementUnitSerializer(serializers.ModelSerializer):
@@ -15,7 +21,8 @@ class MeasurementTypeSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = MeasurementType
-        fields = ['id', 'name', 'category', 'description', 'supports_multipliers', 'units']
+        fields = ['id', 'category', 'name', 'description', 'supports_multipliers', 'units']
+
 
 class MeasurementCategorySerializer(serializers.ModelSerializer):
     types = MeasurementTypeSerializer(many=True, read_only=True)
@@ -37,17 +44,26 @@ class MeasurementSerializer(serializers.ModelSerializer):
 
     def get_category(self, obj):
         return {
-            'id': obj.category.id,
-            'name': obj.category.name,
-            'display_name': obj.category.display_name
+            'id': obj.type.category.id,
+            'name': obj.type.category.name,
+            'display_name': obj.type.category.display_name
         }
 
     def get_type(self, obj):
         return {
             'id': obj.type.id,
             'name': obj.type.name,
-            'description': obj.type.description
+            'description': obj.type.description,
+            'supports_multipliers': obj.type.supports_multipliers
         }
+
+    class Meta:
+        model = Measurement
+        fields = [
+            'id', 'name', 'description', 
+            'category', 'type', 'unit', 'unit_id',
+            'location', 'multiplier', 'source_timezone'
+        ]
 
     def validate(self, data):
         if not data.get('name'):
@@ -59,15 +75,15 @@ class MeasurementSerializer(serializers.ModelSerializer):
         if not data.get('location'):
             raise serializers.ValidationError({'location': 'Location is required'})
             
+        # Validate multiplier if present
+        unit = data.get('unit')
+        if unit and 'multiplier' in data and data['multiplier']:
+            if not unit.type.supports_multipliers:
+                raise serializers.ValidationError({
+                    'multiplier': f'Type {unit.type.name} does not support multipliers'
+                })
+            
         return data
-
-    class Meta:
-        model = Measurement
-        fields = [
-            'id', 'name', 'description', 
-            'category', 'type', 'unit', 'unit_id',
-            'location', 'multiplier', 'source_timezone'
-        ]
 
 class LocationSerializer(serializers.ModelSerializer):
     project = serializers.PrimaryKeyRelatedField(queryset=Project.objects.all())
@@ -164,3 +180,119 @@ class ModelFieldsSerializer(serializers.Serializer):
                 'display_field': 'name'
             }
         }
+    
+# Add to serializers.py
+
+class DataSourceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DataSource
+        fields = [
+            'id', 'name', 'description', 'source_type', 
+            'middleware_type', 'auth_type', 'url_base',
+            'connection_config', 'created_at', 'updated_at',
+            'is_active'
+        ]
+
+class DataSourceLocationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DataSourceLocation
+        fields = ['id', 'data_source', 'location']
+        validators = [
+            UniqueTogetherValidator(
+                queryset=DataSourceLocation.objects.all(),
+                fields=['data_source', 'location']
+            )
+        ]
+
+class SourceColumnSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SourceColumn
+        fields = [
+            'id', 'dataset', 'name', 'position', 'data_type',
+            'timestamp_role', 'sample_data', 'header_rows'
+        ]
+
+class DatasetSerializer(serializers.ModelSerializer):
+    columns = SourceColumnSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = Dataset
+        fields = [
+            'id', 'data_source', 'name', 'description',
+            'source_timezone', 'import_config', 'created_at',
+            'updated_at', 'columns'
+        ]
+
+    def validate_source_timezone(self, value):
+        try:
+            pytz.timezone(value)
+        except pytz.exceptions.UnknownTimeZoneError:
+            raise serializers.ValidationError("Invalid timezone")
+        return value
+
+class DataImportSerializer(serializers.ModelSerializer):
+    dataset = DatasetSerializer(read_only=True)
+    dataset_id = serializers.PrimaryKeyRelatedField(
+        write_only=True,
+        queryset=Dataset.objects.all(),
+        source='dataset'
+    )
+    created_by = serializers.PrimaryKeyRelatedField(
+        read_only=True,
+        default=serializers.CurrentUserDefault()
+    )
+    approved_by = serializers.PrimaryKeyRelatedField(
+        read_only=True,
+        allow_null=True
+    )
+    progress_percentage = serializers.FloatField(read_only=True)
+
+    class Meta:
+        model = DataImport
+        fields = [
+            'id', 'dataset', 'dataset_id', 'status',
+            'started_at', 'completed_at', 'total_rows',
+            'processed_rows', 'error_count', 'success_count',
+            'start_time', 'end_time', 'statistics', 'error_log',
+            'processing_log', 'created_by', 'approved_by',
+            'progress_percentage'
+        ]
+        read_only_fields = [
+            'started_at', 'completed_at', 'total_rows',
+            'processed_rows', 'error_count', 'success_count',
+            'statistics', 'error_log', 'processing_log',
+            'progress_percentage'
+        ]
+
+    def validate_status(self, value):
+        valid_transitions = {
+            'pending': ['analyzing', 'failed'],
+            'analyzing': ['configuring', 'failed'],
+            'configuring': ['validated', 'failed'],
+            'validated': ['in_progress', 'failed'],
+            'in_progress': ['completed', 'partially_completed', 'failed'],
+            'completed': [],
+            'failed': [],
+            'partially_completed': []
+        }
+
+        instance = getattr(self, 'instance', None)
+        if instance and value not in valid_transitions.get(instance.status, []):
+            raise serializers.ValidationError(
+                f"Invalid status transition from {instance.status} to {value}"
+            )
+        return value
+
+class ImportBatchSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ImportBatch
+        fields = [
+            'id', 'data_import', 'batch_number', 'start_row',
+            'end_row', 'status', 'error_count', 'success_count',
+            'processing_time', 'error_details', 'retry_count',
+            'last_error'
+        ]
+        read_only_fields = [
+            'error_count', 'success_count', 'processing_time',
+            'error_details', 'retry_count', 'last_error'
+        ]

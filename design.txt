@@ -1,7 +1,14 @@
-trap for duplicate file name within location, replace or cancel
-let ai figure out location id part of name
-ask about scan before load to server
-    Quick way to get the record count, typical interval and date range from a source. Source may not be sorted so going to end does not work
+Next step
+    rebuild database
+    serializer
+    views
+    tree_item
+
+issue
+    what happens if user is deleted?
+    safest thing is to delete all data associated with that user
+    
+
 
 next lesson
     discuss https://claude.ai/chat/29e54197-dccb-4cd5-86a7-edec699d30d4

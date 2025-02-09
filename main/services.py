@@ -1,10 +1,13 @@
 import pandas as pd
 from typing import Dict, List, Optional, Union
+
 from django.core.files.base import File
 from django.utils import timezone
 from django.core.exceptions import ValidationError
+from django.utils.timezone import make_aware
+from datetime import datetime
+
 from io import BytesIO
-import pytz
 
 from .models import (
     DataSourceMapping, DataImport, TimeSeriesData,
@@ -122,10 +125,12 @@ def process_csv_import(import_id: int) -> DataImport:
         if not (timestamp_col in df.columns and value_col in df.columns):
             raise ValidationError(f"Required columns not found: {timestamp_col}, {value_col}")
         
-        df[timestamp_col] = pd.to_datetime(df[timestamp_col])
-        source_tz = pytz.timezone(mapping.measurement.source_timezone)
-        df[timestamp_col] = df[timestamp_col].apply(lambda x: source_tz.localize(x) if x.tzinfo is None else x)
-        
+        # Convert to datetime (ensuring errors are handled gracefully)
+        df[timestamp_col] = pd.to_datetime(df[timestamp_col], errors='coerce')
+
+        # Apply timezone awareness only to naive timestamps
+        df[timestamp_col] = df[timestamp_col].map(lambda x: make_aware(x) if x is not pd.NaT and x.tzinfo is None else x)
+
         time_series_data = []
         error_log = []
         

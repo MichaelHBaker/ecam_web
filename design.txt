@@ -1,29 +1,28 @@
 Next step
-    rebuild database
-    serializer
-    views
-    tree_item
+    project security groups, creator is owner, add and invite user to the 3dot on project
+        when owner is deleted all data is deleted
+    project action menu needs add user
+    
+    There should be a floating menu with data start etc, always shown. If no selection you get a message to select something. A click outside the selection clears the selection
+    source
+        file
+            Write Excel Template
+            Open Existing
+
+    2 line form above the editor with action button and text
+        Select text then assign ==> data start data type
+                                                category
+                                                type
+                                                unit
 
 issue
-    what happens if user is deleted?
-    safest thing is to delete all data associated with that user
-    
+    how to handle TMY data or any date that is typical and has a partial datetime value    
 
 
 next lesson
-    discuss https://claude.ai/chat/29e54197-dccb-4cd5-86a7-edec699d30d4
-    scan before upload to server?
-    serializer before return to page
 
-
-add measurement modal form
-initially support file source and .csv
 
 Use ML or simpler algorithms to scan file for tabular patterns
-CodeMirror editor
-Selection and action menu
-Mark start for table
-Scan to get table dimensions 
 
 add measurement form 
 

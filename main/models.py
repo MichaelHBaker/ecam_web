@@ -1,14 +1,61 @@
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import User
-from django.db.models import Q, F
-from django.db.models import Exists, OuterRef
+from django.utils import timezone
 
-from datetime import datetime
-from typing import Dict, Any
-import pytz
-from zoneinfo import ZoneInfo
+from zoneinfo import available_timezones
 
+def get_valid_timezones():
+    """Get a list of valid timezones from Python's standard zoneinfo module."""
+    return [(tz, tz) for tz in sorted(available_timezones())]
+
+class ProjectAccess(models.Model):
+    """Manages user access rights to projects"""
+    project = models.ForeignKey(
+        'Project',
+        on_delete=models.CASCADE,
+        related_name='user_access'
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='project_access'
+    )
+    granted_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='granted_project_access'
+    )
+    granted_at = models.DateTimeField(auto_now_add=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['project', 'user'],
+                condition=models.Q(revoked_at__isnull=True),
+                name='unique_active_project_access'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['project', 'user', 'revoked_at']),
+            models.Index(fields=['user', 'revoked_at']),
+            models.Index(fields=['granted_at', 'revoked_at']),
+        ]
+        verbose_name = "Project Access"
+        verbose_name_plural = "Project Access"
+
+    def clean(self):
+        super().clean()
+        if self.user == self.project.owner:
+            raise ValidationError({
+                'user': 'Cannot grant access to project owner'
+            })
+
+    def __str__(self):
+        return f"{self.user.username} -> {self.project.name}"
+    
 class MeasurementCategory(models.Model):
     """Top level categories like Pressure, Flow, Temperature"""
     name = models.CharField(max_length=50, unique=True)
@@ -108,28 +155,33 @@ class MeasurementUnit(models.Model):
 
             
 class Location(models.Model):
-   project = models.ForeignKey(
-       'Project',
-       on_delete=models.CASCADE,
-       related_name='locations'
-   )
-   name = models.CharField(max_length=100)
-   address = models.TextField()
-   latitude = models.DecimalField(
-       max_digits=9,
-       decimal_places=6,
-       null=True,
-       blank=True
-   )
-   longitude = models.DecimalField(
-       max_digits=9,
-       decimal_places=6,
-       null=True,
-       blank=True
-   )
+    project = models.ForeignKey(
+        'Project',
+        on_delete=models.CASCADE,
+        related_name='locations'
+    )
+    name = models.CharField(max_length=100)
+    address = models.TextField()
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True
+    )
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True
+    )
 
-   def __str__(self):
-       return f"{self.name} - Project: {self.project.name}"
+    class Meta:
+        indexes = [
+            models.Index(fields=['latitude', 'longitude']),
+        ]
+
+    def __str__(self):
+        return f"{self.name} - Project: {self.project.name}"
    
 class Measurement(models.Model):
     """Individual measurement points"""
@@ -157,9 +209,10 @@ class Measurement(models.Model):
         blank=True,
         help_text="SI multiplier for the measurement (if supported by type)"
     )
+
     source_timezone = models.CharField(
         max_length=50,
-        choices=[(tz, tz) for tz in pytz.all_timezones],
+        choices=get_valid_timezones(),
         default='UTC',
         help_text="Timezone of the incoming data"
     )
@@ -191,15 +244,49 @@ class Measurement(models.Model):
 
 
 class Project(models.Model):
-    PROJECT_TYPES = [
-        ('Audit', 'Audit'),
-        ('M&V', 'Measurement & Verification'),
-    ]
+    class ProjectType(models.TextChoices):
+        AUDIT = 'Audit', 'Audit'
+        MV = 'M&V', 'Measurement & Verification'
 
-    name = models.CharField(max_length=100)
-    project_type = models.CharField(max_length=20, choices=PROJECT_TYPES)
-    start_date = models.DateField(null=True, blank=True)
-    end_date = models.DateField(null=True, blank=True)
+    owner = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='owned_projects',
+        help_text="User who owns this project"
+    )
+    name = models.CharField(
+        max_length=100,
+        help_text="Name of the project"
+    )
+    project_type = models.CharField(
+        max_length=20,
+        choices=ProjectType.choices,
+        help_text="Type of project"
+    )
+    start_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Project start date"
+    )
+    end_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Project end date"
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['name', 'owner'],
+                name='unique_project_name_per_owner'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['project_type', 'start_date']),
+            models.Index(fields=['start_date', 'end_date']),
+        ]
+        verbose_name = "Project"
+        verbose_name_plural = "Projects"
 
     def __str__(self):
         return f"{self.name} ({self.get_project_type_display()})"
@@ -210,164 +297,278 @@ class Project(models.Model):
             raise ValidationError({
                 'end_date': 'End date cannot be before start date'
             })
-        
+
+    def grant_access(self, user, granted_by):
+        """Grant access to a user"""
+        if user == self.owner:
+            raise ValidationError('Cannot grant access to project owner')
+        return ProjectAccess.objects.create(
+            project=self,
+            user=user,
+            granted_by=granted_by
+        )
+
+    def revoke_access(self, user):
+        """Revoke user access"""
+        if user == self.owner:
+            raise ValidationError('Cannot revoke access from project owner')
+        access = ProjectAccess.objects.get(
+            project=self,
+            user=user,
+            revoked_at__isnull=True
+        )
+        access.revoked_at = timezone.now()
+        access.save()
+
+    def has_access(self, user):
+        """Check if user has access to project"""
+        if user == self.owner:
+            return True
+        return ProjectAccess.objects.filter(
+            project=self,
+            user=user,
+            revoked_at__isnull=True
+        ).exists()
+            
 class DataSource(models.Model):
-   """Base model for all data sources"""
-   SOURCE_TYPES = [
-       ('file', 'File Upload'),
-       ('api', 'API Connection'),
-       ('db', 'Database Connection'),
-   ]
-   
-   MIDDLEWARE_TYPES = [
-       ('niagara', 'Niagara AX/N4'),
-       ('ecostruxure', 'EcoStruxure Building'),
-       ('metasys', 'Johnson Controls Metasys'),
-       ('desigo', 'Siemens Desigo CC'),
-       ('custom', 'Custom API'),
-   ]
+    """Base model for all data sources"""
+    SOURCE_TYPES = [
+        ('file', 'File Upload'),
+        ('api', 'API Connection'),
+        ('db', 'Database Connection'),
+    ]
+    
+    MIDDLEWARE_TYPES = [
+        ('niagara', 'Niagara AX/N4'),
+        ('ecostruxure', 'EcoStruxure Building'),
+        ('metasys', 'Johnson Controls Metasys'),
+        ('desigo', 'Siemens Desigo CC'),
+        ('custom', 'Custom API'),
+    ]
 
-   AUTH_TYPES = [
-       ('basic', 'Basic Auth'),
-       ('bearer', 'Bearer Token'),
-       ('oauth2', 'OAuth 2.0'),
-       ('cert', 'Client Certificate'),
-   ]
+    AUTH_TYPES = [
+        ('basic', 'Basic Auth'),
+        ('bearer', 'Bearer Token'),
+        ('oauth2', 'OAuth 2.0'),
+        ('cert', 'Client Certificate'),
+    ]
 
-   name = models.CharField(max_length=100)
-   description = models.TextField(blank=True)
-   source_type = models.CharField(max_length=20, choices=SOURCE_TYPES)
-   middleware_type = models.CharField(
-       max_length=20, 
-       choices=MIDDLEWARE_TYPES,
-       null=True,
-       blank=True
-   )
-   auth_type = models.CharField(
-       max_length=20,
-       choices=AUTH_TYPES,
-       null=True,
-       blank=True
-   )
-   url_base = models.URLField(null=True, blank=True)
-   connection_config = models.JSONField(default=dict)
-   created_at = models.DateTimeField(auto_now_add=True)
-   updated_at = models.DateTimeField(auto_now=True)
-   is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        'auth.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_data_sources',
+        help_text="User who created this data source"
+    )
+    project = models.ForeignKey(
+        'Project',
+        on_delete=models.CASCADE,
+        related_name='data_sources',
+        help_text="Project this data source belongs to"
+    )
+    name = models.CharField(
+        max_length=100,
+        help_text="Name of the data source"
+    )
+    description = models.TextField(
+        blank=True,
+        help_text="Optional description of the data source"
+    )
+    source_type = models.CharField(
+        max_length=20,
+        choices=SOURCE_TYPES,
+        help_text="Type of data source"
+    )
+    middleware_type = models.CharField(
+        max_length=20, 
+        choices=MIDDLEWARE_TYPES,
+        null=True,
+        blank=True,
+        help_text="Type of middleware for API connections"
+    )
+    auth_type = models.CharField(
+        max_length=20,
+        choices=AUTH_TYPES,
+        null=True,
+        blank=True,
+        help_text="Authentication method for API connections"
+    )
+    url_base = models.URLField(
+        null=True,
+        blank=True,
+        help_text="Base URL for API connections"
+    )
+    connection_config = models.JSONField(
+        default=dict,
+        help_text="Configuration details for the connection"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
 
-   def __str__(self):
-       return f"{self.name} ({self.get_source_type_display()})"
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['project', 'name'],
+                name='unique_data_source_name_per_project'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['source_type', 'middleware_type']),
+            models.Index(fields=['created_at', 'is_active']),
+        ]
+        verbose_name = "Data Source"
+        verbose_name_plural = "Data Sources"
 
-   def clean(self):
-       if self.source_type == 'api':
-           if not self.middleware_type:
-               raise ValidationError('Middleware type required for API sources')
-           if not self.auth_type:
-               raise ValidationError('Auth type required for API sources')
-           if not self.url_base:
-               raise ValidationError('URL required for API sources')
+    def __str__(self):
+        return f"{self.name} ({self.get_source_type_display()})"
+
+    def clean(self):
+        if self.source_type == 'api':
+            if not self.middleware_type:
+                raise ValidationError('Middleware type required for API sources')
+            if not self.auth_type:
+                raise ValidationError('Auth type required for API sources')
+            if not self.url_base:
+                raise ValidationError('URL required for API sources')
+        
+        if not (self.created_by == self.project.owner or 
+                ProjectAccess.objects.filter(
+                    project=self.project,
+                    user=self.created_by,
+                    revoked_at__isnull=True
+                ).exists()):
+            raise ValidationError('User does not have access to this project')
            
 class DataSourceLocation(models.Model):
-   """Many-to-many relationship between DataSources and Locations"""
-   data_source = models.ForeignKey(
-       DataSource,
-       on_delete=models.CASCADE,
-       related_name='location_links'
-   )
-   location = models.ForeignKey(
-       'Location',
-       on_delete=models.CASCADE,
-       related_name='source_links'
-   )
-   
-   class Meta:
-       unique_together = ['data_source', 'location']
+    """Many-to-many relationship between DataSources and Locations"""
+    data_source = models.ForeignKey(
+        DataSource,
+        on_delete=models.CASCADE,
+        related_name='location_links'
+    )
+    location = models.ForeignKey(
+        'Location',
+        on_delete=models.CASCADE,
+        related_name='source_links'
+    )
+    
+    class Meta:
+        unique_together = ['data_source', 'location']
 
-   def __str__(self):
-       return f"{self.data_source.name} -> {self.location.name}"
+    def __str__(self):
+        return f"{self.data_source.name} -> {self.location.name}"
+
+    def clean(self):
+        super().clean()
+        # Ensure data source only links to locations in projects where the owners match
+        if self.data_source.project.owner != self.location.project.owner:
+            raise ValidationError({
+                'location': 'Data source can only be linked to locations in projects you own'
+            })
 
 class Dataset(models.Model):
-   """Represents a specific set of data from a source"""
-   data_source = models.ForeignKey(
-       DataSource,
-       on_delete=models.CASCADE,
-       related_name='datasets'
-   )
-   name = models.CharField(max_length=255)
-   description = models.TextField(blank=True)
-   source_timezone = models.CharField(
-       max_length=50,
-       choices=[(tz, tz) for tz in pytz.all_timezones],
-       help_text="Timezone of source data"
-   )
-   import_config = models.JSONField(
-       default=dict,
-       help_text="Dataset-specific import settings"
-   )
-   created_at = models.DateTimeField(auto_now_add=True)
-   updated_at = models.DateTimeField(auto_now=True)
+    """Represents a specific set of data from a source"""
+    data_source = models.ForeignKey(
+        DataSource,
+        on_delete=models.CASCADE,
+        related_name='datasets'
+    )
+    created_by = models.ForeignKey(
+        'auth.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_datasets'
+    )
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    import_config = models.JSONField(
+        default=dict,
+        help_text="Dataset-specific import settings"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
-   class Meta:
-       constraints = [
-           models.UniqueConstraint(
-               fields=['data_source', 'name'],
-               name='unique_dataset_name_per_source'
-           )
-       ]
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['data_source', 'name', 'created_by'],
+                name='unique_dataset_name_per_source_creator'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['created_at', 'updated_at']),
+        ]
 
-   def __str__(self):
-       return f"{self.name} ({self.data_source.name})"
+    def __str__(self):
+        return f"{self.name} ({self.data_source.name})"
 
-   def assemble_timestamp(self, components: Dict[str, Any]) -> datetime:
-       """Assemble timestamp from components using dataset timezone"""
-       if 'timestamp' in components:
-           if isinstance(components['timestamp'], datetime):
-               ts = components['timestamp']
-           else:
-               format_string = self.import_config.get('timestamp_format')
-               if format_string:
-                   ts = datetime.strptime(components['timestamp'], format_string)
-               else:
-                   ts = datetime.fromisoformat(components['timestamp'])
-           
-           if ts.tzinfo is None:
-               ts = ts.replace(tzinfo=ZoneInfo(self.source_timezone))
-           return ts.astimezone(ZoneInfo('UTC'))
+    def clean(self):
+        super().clean()
+        if not (self.created_by == self.data_source.project.owner or 
+                ProjectAccess.objects.filter(
+                    project=self.data_source.project,
+                    user=self.created_by,
+                    revoked_at__isnull=True
+                ).exists()):
+            raise ValidationError('User does not have access to this project')
 
-       if 'date' in components:
-           date_str = components['date']
-           time_str = components.get('time', '00:00:00')
-           format_string = self.import_config.get('date_format')
-           if format_string:
-               ts = datetime.strptime(f"{date_str} {time_str}", format_string)
-           else:
-               ts = datetime.fromisoformat(f"{date_str}T{time_str}")
-           ts = ts.replace(tzinfo=ZoneInfo(self.source_timezone))
-           return ts.astimezone(ZoneInfo('UTC'))
+    def assemble_timestamp(self, components, measurement):
+        """
+        Assemble timestamp from components using measurement's timezone
+        
+        Args:
+            components: Dict with timestamp components
+            measurement: Measurement instance whose timezone should be used
+        """
+        if 'timestamp' in components:
+            if isinstance(components['timestamp'], timezone.datetime):
+                ts = components['timestamp']
+            else:
+                format_string = self.import_config.get('timestamp_format')
+                if format_string:
+                    ts = timezone.datetime.strptime(components['timestamp'], format_string)
+                else:
+                    ts = timezone.datetime.fromisoformat(components['timestamp'])
+            
+            if timezone.is_naive(ts):
+                ts = timezone.make_aware(ts, timezone.get_timezone(measurement.source_timezone))
+            return timezone.localtime(ts, timezone.UTC)
 
-       year = components.get('year')
-       month = components.get('month')
-       day = components.get('day')
-       hour = components.get('hour', 0)
-       minute = components.get('minute', 0)
-       second = components.get('second', 0)
-       microsecond = components.get('microsecond', 0)
+        if 'date' in components:
+            date_str = components['date']
+            time_str = components.get('time', '00:00:00')
+            format_string = self.import_config.get('date_format')
+            if format_string:
+                ts = timezone.datetime.strptime(f"{date_str} {time_str}", format_string)
+            else:
+                ts = timezone.datetime.fromisoformat(f"{date_str}T{time_str}")
+            ts = timezone.make_aware(ts, timezone.get_timezone(measurement.source_timezone))
+            return timezone.localtime(ts, timezone.UTC)
 
-       if not all(x is not None for x in [year, month, day]):
-           raise ValueError("Must provide at least year, month, and day")
+        year = components.get('year')
+        month = components.get('month')
+        day = components.get('day')
+        hour = components.get('hour', 0)
+        minute = components.get('minute', 0)
+        second = components.get('second', 0)
+        microsecond = components.get('microsecond', 0)
 
-       ts = datetime(
-           year=int(year),
-           month=int(month),
-           day=int(day),
-           hour=int(hour),
-           minute=int(minute),
-           second=int(second),
-           microsecond=int(microsecond),
-           tzinfo=ZoneInfo(self.source_timezone)
-       )
-       
-       return ts.astimezone(ZoneInfo('UTC'))
+        if not all(x is not None for x in [year, month, day]):
+            raise ValueError("Must provide at least year, month, and day")
+
+        ts = timezone.datetime(
+            year=int(year),
+            month=int(month),
+            day=int(day),
+            hour=int(hour),
+            minute=int(minute),
+            second=int(second),
+            microsecond=int(microsecond)
+        )
+        
+        ts = timezone.make_aware(ts, timezone.get_timezone(measurement.source_timezone))
+        return timezone.localtime(ts, timezone.UTC)
 
 class SourceColumn(models.Model):
    """Defines a column in the dataset"""
@@ -456,127 +657,291 @@ class ColumnMapping(models.Model):
             raise ValidationError({
                 'measurement': 'The data source must be linked to the measurement location'
             })
+
+        # Validate measurement access
+        measurement_owner = self.measurement.location.project.owner
+        dataset_owner = self.source_column.dataset.owner
         
-        # Additional validation for transform_config if needed
+        if measurement_owner != dataset_owner:
+            # Check if there's an active grant
+            has_grant = DataCopyGrant.objects.filter(
+                from_user=measurement_owner,
+                to_user=dataset_owner,
+                measurement=self.measurement,
+                start_time__lte=timezone.now(),
+                end_time__gte=timezone.now(),
+                revoked_at__isnull=True
+            ).exists()
+            
+            if not has_grant:
+                raise ValidationError({
+                    'measurement': 'You do not have permission to map to this measurement'
+                })
+        
+        # Validate configurations
         if self.transform_config and not isinstance(self.transform_config, dict):
             raise ValidationError({
                 'transform_config': 'Transform configuration must be a valid JSON object'
             })
             
-        # Additional validation for validation_rules if needed
         if self.validation_rules and not isinstance(self.validation_rules, dict):
             raise ValidationError({
                 'validation_rules': 'Validation rules must be a valid JSON object'
             })
         
 class DataImport(models.Model):
-   """Tracks individual import attempts"""
-   IMPORT_STATUS = [
-       ('pending', 'Pending'),
-       ('analyzing', 'Analyzing Source'),
-       ('configuring', 'Awaiting Configuration'),
-       ('validated', 'Configuration Validated'),
-       ('in_progress', 'Import In Progress'),
-       ('completed', 'Completed'),
-       ('failed', 'Failed'),
-       ('partially_completed', 'Partially Completed With Errors'),
-   ]
+    """Tracks individual import attempts"""
+    class ImportStatus(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        ANALYZING = 'analyzing', 'Analyzing Source'
+        CONFIGURING = 'configuring', 'Awaiting Configuration'
+        VALIDATED = 'validated', 'Configuration Validated'
+        IN_PROGRESS = 'in_progress', 'Import In Progress'
+        COMPLETED = 'completed', 'Completed'
+        FAILED = 'failed', 'Failed'
+        PARTIAL = 'partially_completed', 'Partially Completed With Errors'
 
-   dataset = models.ForeignKey(
-       Dataset,
-       on_delete=models.CASCADE,
-       related_name='imports'
-   )
-   status = models.CharField(
-       max_length=20, 
-       choices=IMPORT_STATUS,
-       default='pending'
-   )
-   started_at = models.DateTimeField(auto_now_add=True)
-   completed_at = models.DateTimeField(null=True)
-   total_rows = models.IntegerField(default=0)
-   processed_rows = models.IntegerField(default=0)
-   error_count = models.IntegerField(default=0)
-   success_count = models.IntegerField(default=0)
-   start_time = models.DateTimeField(null=True, blank=True)
-   end_time = models.DateTimeField(null=True, blank=True)
-   statistics = models.JSONField(default=dict)
-   error_log = models.JSONField(default=list)
-   processing_log = models.JSONField(default=list)
-   created_by = models.ForeignKey(
-       User,
-       on_delete=models.CASCADE,
-       null=True,
-       related_name='created_imports'
-   )
-   approved_by = models.ForeignKey(
-       User,
-       on_delete=models.CASCADE,
-       null=True,
-       related_name='approved_imports'
-   )
+    dataset = models.ForeignKey(
+        Dataset,
+        on_delete=models.CASCADE,
+        related_name='imports',
+        help_text="Dataset being imported"
+    )
+    status = models.CharField(
+        max_length=20, 
+        choices=ImportStatus.choices,
+        default=ImportStatus.PENDING,
+        help_text="Current import status"
+    )
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True)
+    
+    # File handling
+    import_file = models.FileField(
+        upload_to='imports/',
+        null=True,
+        blank=True,
+        help_text="Uploaded file for file-based imports"
+    )
+    
+    # Progress tracking
+    total_rows = models.IntegerField(default=0)
+    processed_rows = models.IntegerField(default=0)
+    error_count = models.IntegerField(default=0)
+    success_count = models.IntegerField(default=0)
+    
+    # Data time range
+    start_time = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Data start time"
+    )
+    end_time = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Data end time"
+    )
+    
+    # Detailed logging
+    statistics = models.JSONField(
+        default=dict,
+        help_text="Import statistics"
+    )
+    error_log = models.JSONField(
+        default=list,
+        help_text="Import errors"
+    )
+    processing_log = models.JSONField(
+        default=list,
+        help_text="Processing details"
+    )
+    
+    # User tracking
+    created_by = models.ForeignKey(
+        'auth.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_imports',
+        help_text="User who created this import"
+    )
+    approved_by = models.ForeignKey(
+        'auth.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='approved_imports',
+        help_text="User who approved this import"
+    )
 
-   class Meta:
-       ordering = ['-started_at']
+    class Meta:
+        ordering = ['-started_at']
+        indexes = [
+            models.Index(fields=['status', 'started_at']),
+            models.Index(fields=['started_at', 'completed_at']),
+        ]
+        verbose_name = "Data Import"
+        verbose_name_plural = "Data Imports"
 
-   def __str__(self):
-       return f"Import {self.id} - {self.dataset.name} ({self.status})"
+    def __str__(self):
+        return f"Import {self.id} - {self.dataset.name} ({self.status})"
 
-   @property
-   def progress_percentage(self):
+    @property
+    def progress_percentage(self):
         if self.total_rows == 0:
-            return 0  # Avoid division by zero
+            return 0
         return round((self.processed_rows / self.total_rows) * 100, 1)
 
+    def clean(self):
+        super().clean()
+        if not (self.created_by == self.dataset.data_source.project.owner or 
+                ProjectAccess.objects.filter(
+                    project=self.dataset.data_source.project,
+                    user=self.created_by,
+                    revoked_at__isnull=True
+                ).exists()):
+            raise ValidationError('User does not have access to this project')
+        if self.approved_by == self.created_by:
+            raise ValidationError({
+                'approved_by': 'Approver must be different from creator'
+            })
+
+
 class ImportBatch(models.Model):
-   """Tracks individual batches within an import"""
-   data_import = models.ForeignKey(
-       DataImport,
-       on_delete=models.CASCADE,
-       related_name='batches'
-   )
-   batch_number = models.IntegerField()
-   start_row = models.IntegerField()
-   end_row = models.IntegerField()
-   status = models.CharField(
-       max_length=20,
-       choices=DataImport.IMPORT_STATUS
-   )
-   error_count = models.IntegerField(default=0)
-   success_count = models.IntegerField(default=0)
-   processing_time = models.DurationField(null=True)
-   error_details = models.JSONField(default=list)
-   retry_count = models.IntegerField(default=0)
-   last_error = models.TextField(blank=True)
+    """Tracks individual batches within an import"""
+    data_import = models.ForeignKey(
+        DataImport,
+        on_delete=models.CASCADE,
+        related_name='batches'
+    )
+    batch_number = models.IntegerField()
+    start_row = models.IntegerField()
+    end_row = models.IntegerField()
+    status = models.CharField(
+        max_length=20,
+        choices=DataImport.ImportStatus.choices
+    )
+    error_count = models.IntegerField(default=0)
+    success_count = models.IntegerField(default=0)
+    processing_time = models.DurationField(null=True)
+    error_details = models.JSONField(default=list)
+    retry_count = models.IntegerField(default=0)
+    last_error = models.TextField(blank=True)
 
-   class Meta:
-       ordering = ['batch_number']
+    class Meta:
+        ordering = ['batch_number']
 
-   def __str__(self):
-       return f"Batch {self.batch_number} of Import {self.data_import.id}"
-
-class TimeSeriesData(models.Model):
-   """Time series data storage"""
-   timestamp = models.DateTimeField(db_index=True)
-   measurement = models.ForeignKey(
-       'Measurement',
-       on_delete=models.CASCADE,
-       related_name='timeseries'
-   )
-   value = models.FloatField()
-
-   class Meta:
-       constraints = [
-           models.UniqueConstraint(
-               fields=['timestamp', 'measurement'],
-               name='unique_measurement_timestamp'
-           )
-       ]
-       indexes = [
-           models.Index(fields=['measurement', 'timestamp'])
-       ]
-       ordering = ['-timestamp']
-
-   def __str__(self):
-       return f"{self.measurement}: {self.value} at {self.timestamp}"
+    def __str__(self):
+        return f"Batch {self.batch_number} of Import {self.data_import.id}"
    
+class TimeSeriesData(models.Model):
+    """Time series data storage"""
+    timestamp = models.DateTimeField()
+    measurement = models.ForeignKey(
+        'Measurement',
+        on_delete=models.CASCADE,
+        related_name='timeseries',
+        help_text="Measurement point this data belongs to"
+    )
+    dataset = models.ForeignKey(
+        Dataset,
+        on_delete=models.CASCADE,
+        related_name='timeseries_data',
+        help_text="Dataset this data belongs to"
+    )
+    value = models.FloatField(
+        help_text="Measurement value"
+    )
+    copied_from = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='copies',
+        help_text="Original data point if this is a copy"
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['timestamp', 'measurement', 'dataset'],
+                name='unique_dataset_measurement_timestamp'
+            )
+        ]
+        indexes = [
+            models.Index(fields=['dataset', 'measurement', 'timestamp']),
+            models.Index(fields=['value']),
+            models.Index(fields=['timestamp']),
+            models.Index(fields=['timestamp', 'value']),  # New index
+        ]
+        ordering = ['-timestamp']
+        verbose_name = "Time Series Data Point"
+        verbose_name_plural = "Time Series Data Points"
+
+    def __str__(self):
+        return f"{self.measurement}: {self.value} at {self.timestamp}"
+    
+class DataCopyGrant(models.Model):
+    """Tracks permissions for data copying between users"""
+    from_user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='granted_copies',
+        help_text="User granting access to their data"
+    )
+    to_user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='received_copies',
+        help_text="User receiving access to data"
+    )
+    measurement = models.ForeignKey(
+        Measurement,
+        on_delete=models.CASCADE,
+        help_text="Measurement point being shared"
+    )
+    granted_at = models.DateTimeField(auto_now_add=True)
+    start_time = models.DateTimeField(
+        help_text="When access begins"
+    )
+    end_time = models.DateTimeField(
+        help_text="When access ends"
+    )
+    granted_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='copy_grants_given',
+        help_text="User who created this grant"
+    )
+    revoked_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When access was revoked, if applicable"
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['from_user', 'to_user', 'measurement'],
+                condition=models.Q(revoked_at__isnull=True),
+                name='unique_active_grant'
+            )
+        ]
+        verbose_name = "Data Copy Grant"
+        verbose_name_plural = "Data Copy Grants"
+
+    def __str__(self):
+        return f"{self.from_user.username} -> {self.to_user.username}: {self.measurement}"
+
+    def clean(self):
+        super().clean()
+        if self.start_time and self.end_time and self.end_time < self.start_time:
+            raise ValidationError({
+                'end_time': 'End time cannot be before start date'
+            })
+        if self.measurement.location.project.owner != self.from_user:
+            raise ValidationError({
+                'from_user': 'Must be the measurement owner'
+            })
+        if self.from_user == self.to_user:
+            raise ValidationError({
+                'to_user': 'Cannot grant copy permission to yourself'
+            })

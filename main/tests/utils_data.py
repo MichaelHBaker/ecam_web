@@ -21,11 +21,11 @@ def create_csv_file(file_path, data, delimiter=',', encoding='utf-8'):
 def create_test_user():
    """Create a test user for authentication"""
    user, created = User.objects.get_or_create(
-       username='testuser',
-       email='test@example.com'
+       username='mbaker',
+       email='mbaker@sbwconsulting.com'
    )
    if created:
-       user.set_password('testpass123')
+       user.set_password('RangeBreak99.')
        user.save()
    return user
 
@@ -268,14 +268,15 @@ def create_model_table_data():
 
    projects = {}
    for key, details in projects_data.items():
-       projects[key], _ = Project.objects.get_or_create(
-           name=details['name'],
-           project_type=details['project_type'],
-           defaults={
-               'start_date': details.get('start_date'),
-               'end_date': details.get('end_date')
-           }
-       )
+        projects[key], _ = Project.objects.get_or_create(
+            name=details['name'],
+            project_type=details['project_type'],
+            defaults={
+                'start_date': details.get('start_date'),
+                'end_date': details.get('end_date'),
+                'owner': test_user  # ✅ Ensure the project has an owner
+            }
+        )
 
    # Create Locations with get_or_create
    locations_data = {
@@ -356,22 +357,32 @@ def create_model_table_data():
            'middleware_type': 'niagara',
            'url_base': 'https://test.niagara.com',
            'auth_type': 'basic',
-           'is_active': True
+           'is_active': True,
+           'project_key': 'audit' 
        },
        'file': {
            'name': "CSV Import",
            'source_type': 'file',
-           'is_active': True
+           'is_active': True,
+           'project_key': 'audit'
        }
    }
 
    sources = {}
    for key, details in sources_data.items():
-       sources[key], _ = DataSource.objects.get_or_create(
-           name=details['name'],
-           source_type=details['source_type'],
-           defaults={k: v for k, v in details.items() if k not in ['name', 'source_type']}
-       )
+        project = projects[details['project_key']]
+        sources[key], _ = DataSource.objects.get_or_create(
+            name=details['name'],
+            source_type=details['source_type'],
+            project=project,  # Add this line
+            defaults={
+                'middleware_type': details.get('middleware_type', ''),
+                'url_base': details.get('url_base', ''),
+                'auth_type': details.get('auth_type', ''),
+                'is_active': details.get('is_active', True),
+                'created_by': test_user
+            }
+        )
 
    # Create DataSourceLocation links
    for location in locations.values():
@@ -384,7 +395,6 @@ def create_model_table_data():
    dataset, _ = Dataset.objects.get_or_create(
        data_source=sources['niagara'],
        name="Building Pressure Data",
-       source_timezone='UTC'
    )
 
    source_column, _ = SourceColumn.objects.get_or_create(
@@ -406,13 +416,14 @@ def create_model_table_data():
    # Create or update time series data
    now = datetime.datetime.now(datetime.timezone.utc)
    for i in range(24):  # 24 hours of data
-       TimeSeriesData.objects.get_or_create(
-           timestamp=now - datetime.timedelta(hours=i),
-           measurement=measurements['pressure'],
-           defaults={
-               'value': round(random.uniform(-0.1, 0.1), 3)
-           }
-       )
+        TimeSeriesData.objects.get_or_create(
+            timestamp=now - datetime.timedelta(hours=i),
+            measurement=measurements['pressure'],
+            dataset=dataset,  # ✅ Ensure dataset_id is assigned
+            defaults={
+                'value': round(random.uniform(-0.1, 0.1), 3)
+            }
+        )
 
    return "Test data created successfully"
 

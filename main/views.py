@@ -7,9 +7,10 @@ from django.contrib.auth import authenticate, login
 from django.template.loader import render_to_string
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
-from django.views import View
+from django.utils.timezone import get_fixed_timezone 
 from django.views.decorators.http import require_http_methods
 
+from zoneinfo import available_timezones
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
@@ -20,7 +21,7 @@ from rest_framework.permissions import IsAuthenticated
 from .models import (
     Project, Location, Measurement, MeasurementCategory,
     MeasurementType, MeasurementUnit, DataImport, DataSource,
-    Dataset, DataSourceLocation
+    Dataset, DataSourceLocation, ProjectAccess, DataCopyGrant
 )
 from .serializers import (
     ProjectSerializer, LocationSerializer, MeasurementSerializer,
@@ -28,8 +29,9 @@ from .serializers import (
     MeasurementUnitSerializer, ModelFieldsSerializer,
     DataSourceSerializer, DataSourceLocationSerializer,
     DatasetSerializer, SourceColumnSerializer, DataImportSerializer,
-    ImportBatchSerializer
+    ImportBatchSerializer, ProjectAccessSerializer, DataCopyGrantSerializer
 )
+
 from openpyxl import Workbook
 from openpyxl.worksheet.datavalidation import DataValidation
 from openpyxl.utils import get_column_letter
@@ -38,11 +40,7 @@ import chardet
 import csv
 from io import StringIO
 import os
-import pytz
 
-class ChatPageView(View):
-    def get(self, request):
-        return render(request, 'main/chat.html')
 
 class TreeItemMixin:
     """
@@ -102,12 +100,11 @@ class TreeItemMixin:
 
             # Special handling for source_timezone field
             if field.name == 'source_timezone':
-                import pytz
                 field_info.update({
                     'type': 'choice',
                     'choices': [
                         {'id': tz, 'display_name': tz}
-                        for tz in pytz.all_timezones
+                        for tz in sorted(available_timezones())
                     ],
                 })
 
@@ -259,6 +256,19 @@ class TreeItemMixin:
         """
         instance.delete()
 
+class ProjectAccessViewSet(viewsets.ModelViewSet):
+    queryset = ProjectAccess.objects.all()
+    serializer_class = ProjectAccessSerializer
+    authentication_classes = [SessionAuthentication, BasicAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """
+        Only return project access records for projects the user owns.
+        """
+        return ProjectAccess.objects.filter(project__owner=self.request.user)
+
+
 class ProjectViewSet(TreeItemMixin, viewsets.ModelViewSet):
     serializer_class = ProjectSerializer
     level_type = 'project'
@@ -270,6 +280,7 @@ class ProjectViewSet(TreeItemMixin, viewsets.ModelViewSet):
         """
         queryset = Project.objects.prefetch_related(
             'locations',
+            'user_access',  # New: Include project access
             Prefetch(
                 'locations__measurements',
                 queryset=Measurement.objects.select_related(
@@ -281,200 +292,59 @@ class ProjectViewSet(TreeItemMixin, viewsets.ModelViewSet):
             )
         )
 
-        # Filter by project type if provided
-        project_type = self.request.query_params.get('project_type')
-        if project_type:
-            queryset = queryset.filter(project_type=project_type)
-
-        # Filter by name if provided
-        name = self.request.query_params.get('name')
-        if name:
-            queryset = queryset.filter(name__icontains=name)
-
-        # Filter by date range if provided
-        start_date = self.request.query_params.get('start_date')
-        end_date = self.request.query_params.get('end_date')
-        if start_date:
-            queryset = queryset.filter(start_date__gte=start_date)
-        if end_date:
-            queryset = queryset.filter(end_date__lte=end_date)
-
         return queryset
 
-    def perform_create(self, serializer):
-        """
-        Create project with validation.
-        """
-        try:
-            instance = serializer.save()
-            return self.get_queryset().get(pk=instance.pk)
-        except Exception as e:
-            raise ValidationError(str(e))
-
-    def perform_update(self, serializer):
-        """
-        Update project with validation.
-        """
-        try:
-            instance = serializer.save()
-            instance.refresh_from_db()
-            return instance
-        except Exception as e:
-            raise ValidationError(str(e))
-
     @action(detail=True, methods=['get'])
-    def locations(self, request, pk=None):
+    def access(self, request, pk=None):
         """
-        Get locations for a specific project.
+        Get user access for a project.
         """
         project = self.get_object()
-        locations = project.locations.prefetch_related(
-            Prefetch(
-                'measurements',
-                queryset=Measurement.objects.select_related(
-                    'type',
-                    'unit',
-                    'unit__type',
-                    'unit__type__category'
-                )
-            )
-        ).all()
-
-        serializer = LocationSerializer(locations, many=True)
+        access_records = ProjectAccess.objects.filter(project=project)
+        serializer = ProjectAccessSerializer(access_records, many=True)
         return Response(serializer.data)
 
-    @action(detail=True, methods=['get'])
-    def measurements(self, request, pk=None):
+    @action(detail=True, methods=['post'])
+    def grant_access(self, request, pk=None):
         """
-        Get all measurements across all locations in the project.
-        """
-        project = self.get_object()
-        measurements = Measurement.objects.filter(
-            location__project=project
-        ).select_related(
-            'type',
-            'unit',
-            'unit__type',
-            'unit__type__category',
-            'location'
-        )
-
-        # Filter by category if provided
-        category_id = request.query_params.get('category')
-        if category_id:
-            measurements = measurements.filter(type__category_id=category_id)
-
-        # Filter by measurement type if provided
-        type_id = request.query_params.get('type')
-        if type_id:
-            measurements = measurements.filter(type_id=type_id)
-
-        # Filter by location if provided
-        location_id = request.query_params.get('location')
-        if location_id:
-            measurements = measurements.filter(location_id=location_id)
-
-        serializer = MeasurementSerializer(measurements, many=True)
-        return Response(serializer.data)
-
-    @action(detail=True, methods=['get'])
-    def stats(self, request, pk=None):
-        """
-        Get comprehensive statistics about the project.
+        Grant user access to a project.
         """
         project = self.get_object()
-        
-        # Base statistics
-        stats = {
-            'location_count': project.locations.count(),
-            'measurement_count': Measurement.objects.filter(
-                location__project=project
-            ).count(),
-            'locations': [],
-            'measurement_categories': {},
-            'date_range': {
-                'start': project.start_date,
-                'end': project.end_date
-            },
-            'project_type': project.get_project_type_display()
-        }
+        user_id = request.data.get('user_id')
+        granted_by = request.user
 
-        # Location-specific stats
-        for location in project.locations.all():
-            location_stats = {
-                'id': location.id,
-                'name': location.name,
-                'measurement_count': location.measurements.count(),
-                'categories': {}
-            }
+        if not user_id:
+            return Response({'error': 'User ID is required'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Get measurement counts by category for this location
-            measurements = location.measurements.select_related(
-                'type__category'
-            ).all()
-            
-            for measurement in measurements:
-                category = measurement.type.category
-                if category.name not in location_stats['categories']:
-                    location_stats['categories'][category.name] = {
-                        'count': 0,
-                        'types': set()
-                    }
-                if category.name not in stats['measurement_categories']:
-                    stats['measurement_categories'][category.name] = {
-                        'count': 0,
-                        'types': set()
-                    }
-                
-                location_stats['categories'][category.name]['count'] += 1
-                location_stats['categories'][category.name]['types'].add(
-                    measurement.type.name
-                )
-                stats['measurement_categories'][category.name]['count'] += 1
-                stats['measurement_categories'][category.name]['types'].add(
-                    measurement.type.name
-                )
+        try:
+            user = User.objects.get(id=user_id)
+            project.grant_access(user, granted_by)
+            return Response({'status': 'Access granted'}, status=status.HTTP_201_CREATED)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Convert sets to lists for JSON serialization
-            for category in location_stats['categories'].values():
-                category['types'] = list(category['types'])
-            
-            stats['locations'].append(location_stats)
-
-        # Convert sets to lists in project-level categories
-        for category in stats['measurement_categories'].values():
-            category['types'] = list(category['types'])
-
-        return Response(stats)
-
-    @action(detail=True, methods=['get'])
-    def timeseries_summary(self, request, pk=None):
+    @action(detail=True, methods=['post'])
+    def revoke_access(self, request, pk=None):
         """
-        Get a summary of time series data availability across all measurements.
+        Revoke user access to a project.
         """
         project = self.get_object()
-        
-        summary = []
-        measurements = Measurement.objects.filter(
-            location__project=project
-        ).prefetch_related('timeseries').select_related('location')
-        
-        for measurement in measurements:
-            timeseries = measurement.timeseries.order_by('timestamp')
-            first = timeseries.first()
-            last = timeseries.last()
-            
-            if first and last:
-                summary.append({
-                    'measurement_id': measurement.id,
-                    'name': measurement.name,
-                    'location': measurement.location.name,
-                    'first_timestamp': first.timestamp,
-                    'last_timestamp': last.timestamp,
-                    'point_count': timeseries.count()
-                })
-        
-        return Response(summary)
+        user_id = request.data.get('user_id')
+
+        if not user_id:
+            return Response({'error': 'User ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(id=user_id)
+            project.revoke_access(user)
+            return Response({'status': 'Access revoked'}, status=status.HTTP_200_OK)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
 
 class LocationViewSet(TreeItemMixin, viewsets.ModelViewSet):
     serializer_class = LocationSerializer
@@ -629,6 +499,48 @@ class LocationViewSet(TreeItemMixin, viewsets.ModelViewSet):
                 })
         
         return Response(summary)
+
+class DataCopyGrantViewSet(viewsets.ModelViewSet):
+    queryset = DataCopyGrant.objects.all()
+    serializer_class = DataCopyGrantSerializer
+    authentication_classes = [SessionAuthentication, BasicAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """
+        Only return grants where the user is involved.
+        """
+        user = self.request.user
+        return DataCopyGrant.objects.filter(models.Q(from_user=user) | models.Q(to_user=user))
+
+class DataImportViewSet(viewsets.ModelViewSet):
+    serializer_class = DataImportSerializer
+    queryset = DataImport.objects.all()
+
+    def get_queryset(self):
+        """
+        Restrict access to the project owner or users with granted access.
+        """
+        user = self.request.user
+        return DataImport.objects.filter(
+            models.Q(dataset__data_source__project__owner=user) |
+            models.Q(dataset__data_source__project__user_access__user=user, dataset__data_source__project__user_access__revoked_at__isnull=True)
+        )
+
+
+class DatasetViewSet(viewsets.ModelViewSet):
+    serializer_class = DatasetSerializer
+    queryset = Dataset.objects.all()
+
+    def get_queryset(self):
+        """
+        Restrict dataset access to the project owner or users with granted access.
+        """
+        user = self.request.user
+        return Dataset.objects.filter(
+            models.Q(data_source__project__owner=user) |
+            models.Q(data_source__project__user_access__user=user, data_source__project__user_access__revoked_at__isnull=True)
+        )
 
 class MeasurementCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = MeasurementCategorySerializer
@@ -866,14 +778,9 @@ class MeasurementViewSet(TreeItemMixin, viewsets.ModelViewSet):
 
             # Validate timezone
             timezone = serializer.validated_data.get('source_timezone')
-            if timezone:
-                try:
-                    pytz.timezone(timezone)
-                except pytz.exceptions.UnknownTimeZoneError:
-                    raise ValidationError({
-                        'source_timezone': f'Invalid timezone: {timezone}'
-                    })
-
+            if timezone and timezone not in available_timezones():
+                raise ValidationError({'source_timezone': f'Invalid timezone: {timezone}'})
+           
             instance = serializer.save()
             
             # Refresh to get all related fields
@@ -912,11 +819,9 @@ class MeasurementViewSet(TreeItemMixin, viewsets.ModelViewSet):
             timezone = serializer.validated_data.get('source_timezone')
             if timezone:
                 try:
-                    pytz.timezone(timezone)
-                except pytz.exceptions.UnknownTimeZoneError:
-                    raise ValidationError({
-                        'source_timezone': f'Invalid timezone: {timezone}'
-                    })
+                    get_fixed_timezone(timezone)
+                except Exception:
+                    raise ValidationError({'source_timezone': f'Invalid timezone: {timezone}'})
 
             instance = serializer.save()
             
@@ -1005,9 +910,10 @@ class MeasurementViewSet(TreeItemMixin, viewsets.ModelViewSet):
                 {'value': choice[0], 'display': choice[1]}
                 for choice in MeasurementType.MULTIPLIER_CHOICES
             ],
+
             'timezones': [
                 {'value': tz, 'display': tz}
-                for tz in pytz.all_timezones
+                for tz in sorted(available_timezones())
             ]
         }
         
@@ -1078,7 +984,7 @@ class ModelFieldsViewSet(viewsets.ViewSet):
                         'required': True,
                         'choices': [
                             {'id': c[0], 'display_name': c[1]}
-                            for c in Project.PROJECT_TYPES
+                            for c in Project.ProjectType
                         ]
                     },
                     {
@@ -1182,7 +1088,7 @@ class ModelFieldsViewSet(viewsets.ViewSet):
                         'required': True,
                         'choices': [
                             {'id': tz, 'display_name': tz}
-                            for tz in pytz.all_timezones
+                            for tz in sorted(available_timezones())
                         ],
                         'default': 'UTC'
                     }
@@ -1320,7 +1226,7 @@ def dashboard(request):
             'model_fields': model_fields,
             'measurement_types': MeasurementType.objects.select_related('category').all(),
             'multiplier_choices': dict(MeasurementType.MULTIPLIER_CHOICES),
-            'project_types': dict(Project.PROJECT_TYPES)
+            'project_types': dict(Project.ProjectType.choices)
         }
 
         return render(request, 'main/dashboard.html', context)
@@ -1591,13 +1497,31 @@ def get_preview_content(file_like_object, max_size=5000):
 @login_required
 @require_http_methods(["POST"])
 def create_data_import(request):
+    """Create a new data import from a file upload"""
     try:
+        # Validate inputs
         location_id = request.POST.get('location_id')
         if not location_id:
             return JsonResponse({'error': 'No location ID provided'}, status=400)
 
-        location = Location.objects.get(id=location_id)
+        # Get location and verify access
+        try:
+            location = Location.objects.select_related('project').get(id=location_id)
+            project = location.project
+            
+            # Verify user has access to project
+            if not (request.user == project.owner or 
+                    ProjectAccess.objects.filter(
+                        project=project,
+                        user=request.user,
+                        revoked_at__isnull=True
+                    ).exists()):
+                return JsonResponse({'error': 'No access to this location'}, status=403)
+                
+        except Location.DoesNotExist:
+            return JsonResponse({'error': 'Invalid location ID'}, status=400)
 
+        # Validate file
         if 'file' not in request.FILES:
             return JsonResponse({'error': 'No file provided'}, status=400)
         
@@ -1606,47 +1530,73 @@ def create_data_import(request):
             return JsonResponse({'error': 'Only CSV files are supported'}, status=400)
 
         # Create data source
-        data_source = DataSource.objects.create(
-            name=f'File Upload - {file.name}',
-            source_type='file',
-            description=f'File upload for location {location.name}'
-        )
+        try:
+            data_source = DataSource.objects.create(
+                name=f'File Upload - {file.name}',
+                source_type='file',
+                description=f'File upload for location {location.name}',
+                project=project,
+                created_by=request.user
+            )
+        except Exception as e:
+            return JsonResponse({'error': f'Failed to create data source: {str(e)}'}, status=500)
 
         # Link data source to location
-        DataSourceLocation.objects.create(
-            data_source=data_source,
-            location=location
-        )
+        try:
+            DataSourceLocation.objects.create(
+                data_source=data_source,
+                location=location
+            )
+        except Exception as e:
+            data_source.delete()  # Cleanup on failure
+            return JsonResponse({'error': f'Failed to link data source to location: {str(e)}'}, status=500)
 
         # Create dataset
-        dataset = Dataset.objects.create(
-            data_source=data_source,
-            name=f'Dataset - {file.name}',
-            source_timezone='UTC'
-        )
+        try:
+            dataset = Dataset.objects.create(
+                data_source=data_source,
+                name=f'Dataset - {file.name}',
+                created_by=request.user
+            )
+        except Exception as e:
+            data_source.delete()  # Cleanup on failure
+            return JsonResponse({'error': f'Failed to create dataset: {str(e)}'}, status=500)
 
         # Create import record
-        data_import = DataImport.objects.create(
-            dataset=dataset,
-            status='analyzing',
-            created_by=request.user
-        )
+        try:
+            data_import = DataImport.objects.create(
+                dataset=dataset,
+                status='analyzing',
+                created_by=request.user
+            )
+        except Exception as e:
+            dataset.delete()  # Cleanup on failure
+            return JsonResponse({'error': f'Failed to create import record: {str(e)}'}, status=500)
 
         # Generate preview
-        preview_content, was_truncated = get_preview_content(file)
+        try:
+            preview_content, was_truncated = get_preview_content(file)
+        except ValueError as e:
+            # Clean up created objects on preview failure
+            data_import.delete()
+            dataset.delete()
+            data_source.delete()
+            return JsonResponse({'error': f'Failed to generate preview: {str(e)}'}, status=500)
 
         return JsonResponse({
             'import_id': data_import.id,
+            'dataset_id': dataset.id,
             'preview_content': preview_content,
             'preview_truncated': was_truncated,
             'status': 'success'
         })
 
-    except Location.DoesNotExist:
-        return JsonResponse({'error': 'Invalid location ID'}, status=400)
     except Exception as e:
         print(f"Error in create_data_import: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=500)       
+        return JsonResponse({
+            'error': str(e),
+            'status': 'error'
+        }, status=500)       
 
 
 @login_required

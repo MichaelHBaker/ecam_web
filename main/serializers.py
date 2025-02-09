@@ -1,15 +1,36 @@
 # serializers.py
-# serializers.py
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 from django.contrib.auth.models import User
-import pytz
 
 from .models import (
-    Project, Location, Measurement, MeasurementCategory,
+    ProjectAccess, Project, Location, Measurement, MeasurementCategory,
     MeasurementType, MeasurementUnit, DataSource, DataSourceLocation,
-    Dataset, SourceColumn, DataImport, ImportBatch
+    Dataset, SourceColumn, DataImport, DataCopyGrant, ImportBatch
 )
+
+class ProjectAccessSerializer(serializers.ModelSerializer):
+    project = serializers.PrimaryKeyRelatedField(queryset=Project.objects.all())
+    user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
+    granted_by = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=False)
+    
+    class Meta:
+        model = ProjectAccess
+        fields = ['id', 'project', 'user', 'granted_by', 'granted_at', 'revoked_at']
+        read_only_fields = ['granted_at', 'revoked_at']
+
+    def validate(self, data):
+        """Ensure the user is not the project owner and access is not already granted."""
+        project = data.get('project')
+        user = data.get('user')
+
+        if project.owner == user:
+            raise serializers.ValidationError({'user': 'Cannot grant access to project owner'})
+
+        if ProjectAccess.objects.filter(project=project, user=user, revoked_at__isnull=True).exists():
+            raise serializers.ValidationError({'user': 'User already has active access to this project'})
+
+        return data
 
 class MeasurementUnitSerializer(serializers.ModelSerializer):
     class Meta:
@@ -68,22 +89,22 @@ class MeasurementSerializer(serializers.ModelSerializer):
     def validate(self, data):
         if not data.get('name'):
             raise serializers.ValidationError({'name': 'Name is required'})
-        
+
         if not data.get('unit'):
             raise serializers.ValidationError({'unit': 'Unit is required'})
-            
+
         if not data.get('location'):
             raise serializers.ValidationError({'location': 'Location is required'})
-            
-        # Validate multiplier if present
+
         unit = data.get('unit')
         if unit and 'multiplier' in data and data['multiplier']:
             if not unit.type.supports_multipliers:
                 raise serializers.ValidationError({
                     'multiplier': f'Type {unit.type.name} does not support multipliers'
                 })
-            
+
         return data
+
 
 class LocationSerializer(serializers.ModelSerializer):
     project = serializers.PrimaryKeyRelatedField(queryset=Project.objects.all())
@@ -104,25 +125,27 @@ class LocationSerializer(serializers.ModelSerializer):
 class ProjectSerializer(serializers.ModelSerializer):
     locations = LocationSerializer(many=True, read_only=True)
     project_type_display = serializers.CharField(source='get_project_type_display', read_only=True)
+    access = ProjectAccessSerializer(many=True, read_only=True, source='user_access')
 
     def validate(self, data):
         if not data.get('name'):
             raise serializers.ValidationError({'name': 'Name is required'})
-            
+
         if not data.get('project_type'):
             raise serializers.ValidationError({'project_type': 'Project type is required'})
-            
+
         if data.get('end_date') and data.get('start_date') and data['end_date'] < data['start_date']:
-            raise serializers.ValidationError({
-                'end_date': 'End date must be after start date'
-            })
-            
+            raise serializers.ValidationError({'end_date': 'End date must be after start date'})
+
         return data
 
     class Meta:
         model = Project
-        fields = ['id', 'name', 'project_type', 'project_type_display', 
-                 'start_date', 'end_date', 'locations']
+        fields = [
+            'id', 'name', 'project_type', 'project_type_display', 
+            'start_date', 'end_date', 'locations', 'access'
+        ]
+
 
 class ModelFieldsSerializer(serializers.Serializer):
     def get_fields(self):
@@ -154,7 +177,7 @@ class ModelFieldsSerializer(serializers.Serializer):
                 'fields': [
                     {'name': 'name', 'type': 'string', 'required': True},
                     {'name': 'project_type', 'type': 'choice', 'required': True, 
-                     'choices': [{'id': c[0], 'display_name': c[1]} for c in Project.PROJECT_TYPES]},
+                     'choices': [{'id': c[0], 'display_name': c[1]} for c in Project.ProjectType]},
                 ],
                 'child_type': 'location'
             },
@@ -204,6 +227,13 @@ class DataSourceLocationSerializer(serializers.ModelSerializer):
             )
         ]
 
+    def validate(self, data):
+        """Ensure data source links to a location in the same project."""
+        if data['data_source'].project != data['location'].project:
+            raise serializers.ValidationError({'location': 'Data source must be in the same project as the location.'})
+        return data
+
+
 class SourceColumnSerializer(serializers.ModelSerializer):
     class Meta:
         model = SourceColumn
@@ -214,21 +244,20 @@ class SourceColumnSerializer(serializers.ModelSerializer):
 
 class DatasetSerializer(serializers.ModelSerializer):
     columns = SourceColumnSerializer(many=True, read_only=True)
-    
+
     class Meta:
         model = Dataset
         fields = [
             'id', 'data_source', 'name', 'description',
-            'source_timezone', 'import_config', 'created_at',
-            'updated_at', 'columns'
+            'import_config', 'created_at', 'updated_at', 'columns'
         ]
 
-    def validate_source_timezone(self, value):
-        try:
-            pytz.timezone(value)
-        except pytz.exceptions.UnknownTimeZoneError:
-            raise serializers.ValidationError("Invalid timezone")
-        return value
+    def validate(self, data):
+        """Ensure dataset belongs to an accessible project."""
+        if data['data_source'].project.owner != self.context['request'].user:
+            raise serializers.ValidationError({'data_source': 'You do not have access to this project.'})
+        return data
+
 
 class DataImportSerializer(serializers.ModelSerializer):
     dataset = DatasetSerializer(read_only=True)
@@ -264,7 +293,8 @@ class DataImportSerializer(serializers.ModelSerializer):
             'progress_percentage'
         ]
 
-    def validate_status(self, value):
+    def validate(self, data):
+        """Ensure valid transitions between import statuses."""
         valid_transitions = {
             'pending': ['analyzing', 'failed'],
             'analyzing': ['configuring', 'failed'],
@@ -277,11 +307,39 @@ class DataImportSerializer(serializers.ModelSerializer):
         }
 
         instance = getattr(self, 'instance', None)
-        if instance and value not in valid_transitions.get(instance.status, []):
+        if instance and data['status'] not in valid_transitions.get(instance.status, []):
             raise serializers.ValidationError(
-                f"Invalid status transition from {instance.status} to {value}"
+                f"Invalid status transition from {instance.status} to {data['status']}"
             )
-        return value
+        return data
+
+
+class DataCopyGrantSerializer(serializers.ModelSerializer):
+    from_user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
+    to_user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all())
+    measurement = serializers.PrimaryKeyRelatedField(queryset=Measurement.objects.all())
+    granted_by = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=False)
+
+    class Meta:
+        model = DataCopyGrant
+        fields = [
+            'id', 'from_user', 'to_user', 'measurement',
+            'granted_at', 'start_time', 'end_time', 'granted_by', 'revoked_at'
+        ]
+        read_only_fields = ['granted_at', 'revoked_at']
+
+    def validate(self, data):
+        """Ensure valid permissions for granting data access."""
+        if data['from_user'] == data['to_user']:
+            raise serializers.ValidationError({'to_user': 'Cannot grant copy permission to yourself'})
+
+        if data['measurement'].location.project.owner != data['from_user']:
+            raise serializers.ValidationError({'from_user': 'Must be the measurement owner'})
+
+        if data['end_time'] and data['start_time'] and data['end_time'] < data['start_time']:
+            raise serializers.ValidationError({'end_time': 'End time cannot be before start time'})
+
+        return data
 
 class ImportBatchSerializer(serializers.ModelSerializer):
     class Meta:

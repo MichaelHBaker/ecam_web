@@ -456,11 +456,27 @@ export const handleFileSelect = (locationId) => {
 };
 
 export const handleFileChange = async (event, locationId) => {
+    console.log('handleFileChange CALLED', { 
+        event, 
+        locationId, 
+        target: event.target, 
+        files: event.target.files,
+        targetId: event.target.id
+    });
+    
     const instanceId = getModalInstanceId(locationId);
-    if (!instanceId) return;
+    console.log('Instance ID:', instanceId);
+
+    if (!instanceId) {
+        console.error('No instance ID found for location:', locationId);
+        return;
+    }
 
     const file = event.target.files[0];
-    if (!file) return;
+    if (!file) {
+        console.error('No file selected');
+        return;
+    }
 
     const fileDisplay = document.getElementById(`id_file_display-${locationId}`);
     if (fileDisplay) {
@@ -491,7 +507,10 @@ export const handleFileChange = async (event, locationId) => {
         await loadCodeMirror();
         const cmContainer = document.getElementById(`id_codemirror_container-${locationId}`);
         if (cmContainer) {
+            console.log('CodeMirror container found, setting display to block');
             cmContainer.style.display = 'block';
+        } else {
+            console.error('CodeMirror container not found for location:', locationId);
         }
 
         if (!codeMirrorInstances[instanceId] && response.preview_content) {
@@ -515,15 +534,38 @@ export const handleFileChange = async (event, locationId) => {
                         
                 console.log('Initializing column selection');
                 initializeColumnSelection(locationId);
-                
-                // Test if we can access the editor
-                console.log('Can access editor after init:', codeMirrorInstances[instanceId]);
             }
         }
 
         if (codeMirrorInstances[instanceId] && response.preview_content) {
             codeMirrorInstances[instanceId].setValue(response.preview_content);
             codeMirrorInstances[instanceId].refresh();
+            
+            const importControls = document.getElementById(`id_import_controls-${locationId}`);
+            console.log('Import controls:', {
+                element: importControls,
+                currentDisplay: importControls?.style.display,
+                computedStyle: importControls ? window.getComputedStyle(importControls).display : 'N/A'
+            });
+            
+            if (importControls) {
+                console.log('Setting import controls display to block');
+                importControls.style.display = 'block';
+                importControls.classList.remove('w3-hide');
+                importControls.classList.add('w3-show');
+                
+                // Force visibility with inline styles
+                importControls.style.visibility = 'visible';
+                importControls.style.opacity = '1';
+                
+                console.log('Import controls display after setting:', {
+                    styleDisplay: importControls.style.display,
+                    classList: Array.from(importControls.classList),
+                    computedStyle: window.getComputedStyle(importControls).display
+                });
+            } else {
+                console.error('Import controls element not found for location:', locationId);
+            }
             
             if (response.preview_truncated) {
                 const notice = document.createElement('div');
@@ -532,7 +574,7 @@ export const handleFileChange = async (event, locationId) => {
                 cmContainer.appendChild(notice);
             }
         }
-
+        
         const nextButton = document.querySelector(`button[onclick*="processFile('${locationId}')"]`);
         if (nextButton) {
             nextButton.disabled = false;

@@ -133,16 +133,61 @@
                <i class="bi bi-file-earmark"></i> No file selected
            </div>
 
-           <!-- CodeMirror Container -->
-           <div id="id_codemirror_container-{{ item.id }}" 
+            <!-- CodeMirror Container -->
+            <div id="id_codemirror_container-{{ item.id }}" 
                 class="w3-container w3-border w3-round" 
                 style="display: none; height: calc(100% - 200px);">
-               <!-- The container will adjust with modal size -->
-               <div class="w3-block" style="height: 100%; overflow: auto;">
-                   <textarea id="id_codemirror_editor-{{ item.id }}" 
+                <!-- Import Status and Define Data controls - now moved BEFORE the CodeMirror container -->
+                <div id="id_import_controls-{{ item.id }}" style="display: none;">
+                    <div id="id_import_status-{{ item.id }}" class="w3-bar w3-padding-small">
+                        <span>Required for Import:</span>
+                        <span id="id_tz_status-{{ item.id }}" class="w3-margin-left" title="Time Zone">
+                            TZ [<i class="bi bi-x"></i>]
+                        </span>
+                        <span id="id_start_status-{{ item.id }}" class="w3-margin-left" title="Data Start">
+                            Start [<i class="bi bi-x"></i>]
+                        </span>
+                        <span id="id_time_status-{{ item.id }}" class="w3-margin-left" title="Time Components">
+                            Time [<i class="bi bi-x"></i>]
+                        </span>
+                        <span id="id_meas_status-{{ item.id }}" class="w3-margin-left" title="Measurements">
+                            Meas [<i class="bi bi-x"></i>]
+                        </span>
+                    </div>
+
+                    <div class="w3-bar w3-padding-small">
+                        <span style="display: inline-block; margin-right: 4px;">Define Data</span>
+                        <button class="w3-button" style="padding: 0 4px; display: inline-block;">
+                            <i class="bi bi-three-dots-vertical"></i>
+                        </button>
+                        <div class="w3-dropdown-content w3-bar-block w3-border define-data-dropdown">                            <a href="#" class="w3-bar-item w3-button" onclick="crud.showSourceStats('{{ item.id }}'); return false;">
+                                <i class="bi bi-graph-up"></i> Source Stats
+                            </a>
+                            <a href="#" class="w3-bar-item w3-button" onclick="crud.defineTimeZone('{{ item.id }}'); return false;">
+                                <i class="bi bi-clock"></i> Time Zone
+                            </a>
+                            <a href="#" class="w3-bar-item w3-button" onclick="crud.defineDataStart('{{ item.id }}'); return false;">
+                                <i class="bi bi-arrow-right-circle"></i> Data Start
+                            </a>
+                            <a href="#" class="w3-bar-item w3-button" onclick="crud.defineTimestamp('{{ item.id }}'); return false;">
+                                <i class="bi bi-calendar"></i> Time Stamp
+                            </a>
+                            <a href="#" class="w3-bar-item w3-button" onclick="crud.defineMeasurements('{{ item.id }}'); return false;">
+                                <i class="bi bi-graph-up"></i> Measurements
+                            </a>
+                        </div>
+                        <span class="w3-tooltip" style="margin-left: 4px;">
+                            <i class="bi bi-question-circle"></i>
+                            <span class="w3-text w3-tag">Select text if helpful for action</span>
+                        </span>
+                    </div>
+                </div>
+
+                <div class="w3-block" style="height: 100%; overflow: auto;">
+                    <textarea id="id_codemirror_editor-{{ item.id }}" 
                             style="display: none;"></textarea>
-               </div>
-           </div>
+                </div>
+            </div>
 
            <!-- Action Buttons - using w3-bar -->
            <div class="w3-bar w3-padding-16">

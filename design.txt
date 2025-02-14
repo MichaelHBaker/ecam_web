@@ -1,21 +1,100 @@
+project creation
+    create Shared location
+
+
+
 Next step
     Constrain on unique name is not allowing for multiple datasets from same source
         also need to clear data sources if they are not imported.
     project security groups, creator is owner, add and invite user to the 3dot on project
         when owner is deleted all data is deleted
     project action menu needs add user
-    
-    There should be a floating menu with data start etc, always shown. If no selection you get a message to select something. A click outside the selection clears the selection
-    source
-        file
-            Write Excel Template
-            Open Existing
+    measurement and location need copy to, but are greyed out unless done by project owner
 
-    2 line form above the editor with action button and text
-        Select text then assign ==> data start data type
-                                                category
-                                                type
-                                                unit
+add measurements
+    source
+        for all sources
+            load 1000 lines to editor
+            ask for dataset name # need to create a unique name before starting the definition, a drop down of existing names if any
+        if source=file
+            delimiter {, tab, fixed}
+            line where data starts
+            ...
+
+add measurements
+    source selection
+        for all sources
+            load preview (1000 lines) to editor
+            dataset name handling
+                show existing names in dropdown
+                validate new names
+                store name choice
+        
+        if source = file
+            file format detection
+                delimiter type {comma, tab, fixed width}
+                    auto-detect
+                    manual override
+                encoding detection
+                    auto-detect
+                    manual override
+            
+            data structure definition
+                data start line
+                    mark in editor gutter
+                    validate (must be after header if exists)
+                header definition
+                    single/multiple header rows
+                    mark in editor gutter
+                    extract field names
+                
+                column definition
+                    timestamp components
+                        identify timestamp column(s)
+                        specify format
+                        handle multiple columns (date/time split)
+                    measurement columns
+                        identify value columns
+                        specify data type
+                        handle units
+                
+            timezone handling
+                source timezone selection
+                storage timezone (UTC)
+                
+            validation rules
+                required columns
+                data type validation
+                value range checks
+                
+        if source = api
+            [api specific configuration...]
+            
+        if source = database
+            [database specific configuration...]
+    
+    measurement mapping
+        for each value column
+            measurement selection
+                choose existing measurement
+                create new measurement
+            unit validation
+                ensure compatible units
+                configure conversions if needed
+            
+    preview & validation
+        show sample of processed data
+        highlight any validation issues
+        allow corrections
+        
+    configuration storage
+        save in dataset.import_config
+        include all source-specific settings
+        store column mappings
+
+
+
+
 
 issue
     how to handle TMY data or any date that is typical and has a partial datetime value    

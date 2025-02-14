@@ -409,7 +409,7 @@ class DataSource(models.Model):
     class Meta:
         constraints = [
             models.UniqueConstraint(
-                fields=['project', 'name'],
+                fields=['project', 'name'], 
                 name='unique_data_source_name_per_project'
             )
         ]

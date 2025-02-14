@@ -155,32 +155,37 @@
                         </span>
                     </div>
 
+                    <!-- Define Data Section -->
                     <div class="w3-bar w3-padding-small">
-                        <span style="display: inline-block; margin-right: 4px;">Define Data</span>
-                        <button class="w3-button" style="padding: 0 4px; display: inline-block;">
-                            <i class="bi bi-three-dots-vertical"></i>
-                        </button>
-                        <div class="w3-dropdown-content w3-bar-block w3-border define-data-dropdown">                            <a href="#" class="w3-bar-item w3-button" onclick="crud.showSourceStats('{{ item.id }}'); return false;">
-                                <i class="bi bi-graph-up"></i> Source Stats
-                            </a>
-                            <a href="#" class="w3-bar-item w3-button" onclick="crud.defineTimeZone('{{ item.id }}'); return false;">
-                                <i class="bi bi-clock"></i> Time Zone
-                            </a>
-                            <a href="#" class="w3-bar-item w3-button" onclick="crud.defineDataStart('{{ item.id }}'); return false;">
-                                <i class="bi bi-arrow-right-circle"></i> Data Start
-                            </a>
-                            <a href="#" class="w3-bar-item w3-button" onclick="crud.defineTimestamp('{{ item.id }}'); return false;">
-                                <i class="bi bi-calendar"></i> Time Stamp
-                            </a>
-                            <a href="#" class="w3-bar-item w3-button" onclick="crud.defineMeasurements('{{ item.id }}'); return false;">
-                                <i class="bi bi-graph-up"></i> Measurements
-                            </a>
+                        <div class="w3-dropdown-hover">
+                            <span style="display: inline-block; margin-right: 4px;">Define Data</span>
+                            <button class="w3-button" style="padding: 0 4px;">
+                                <i class="bi bi-three-dots-vertical"></i>
+                            </button>
+                            <div class="w3-dropdown-content w3-bar-block w3-border w3-card">
+                                <a href="#" class="w3-bar-item w3-button" onclick="crud.showSourceStats('{{ item.id }}'); return false;">
+                                    <i class="bi bi-graph-up"></i> Source Stats
+                                </a>
+                                <a href="#" class="w3-bar-item w3-button" onclick="crud.defineTimeZone('{{ item.id }}'); return false;">
+                                    <i class="bi bi-clock"></i> Time Zone
+                                </a>
+                                <a href="#" class="w3-bar-item w3-button" onclick="crud.defineDataStart('{{ item.id }}'); return false;">
+                                    <i class="bi bi-arrow-right-circle"></i> Data Start
+                                </a>
+                                <a href="#" class="w3-bar-item w3-button" onclick="crud.defineTimestamp('{{ item.id }}'); return false;">
+                                    <i class="bi bi-calendar"></i> Time Stamp
+                                </a>
+                                <a href="#" class="w3-bar-item w3-button" onclick="crud.defineMeasurements('{{ item.id }}'); return false;">
+                                    <i class="bi bi-graph-up"></i> Measurements
+                                </a>
+                            </div>
                         </div>
                         <span class="w3-tooltip" style="margin-left: 4px;">
                             <i class="bi bi-question-circle"></i>
                             <span class="w3-text w3-tag">Select text if helpful for action</span>
                         </span>
-                    </div>
+                    </div>                
+
                 </div>
 
                 <div class="w3-block" style="height: 100%; overflow: auto;">

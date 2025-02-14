@@ -101,17 +101,110 @@
        
     }
 
-    .define-data-dropdown {
+    /* Dropdown positioning */
+    .w3-dropdown-hover {
+        position: relative;
+        display: inline-block;
+    }
+    
+    .w3-dropdown-content {
+        display: none;
         position: absolute;
-        left: 0;
-        top: 100%;
-        transform: translateX(0);
+        background-color: #fff;
         min-width: 250px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         z-index: 1000;
     }
     
-    .define-data-dropdown.w3-show {
-        display: block !important;
+    /* Show dropdown on hover */
+    .w3-dropdown-hover:hover .w3-dropdown-content {
+        display: block;
+    }
+    
+    /* Dropdown items */
+    .w3-dropdown-content .w3-bar-item {
+        width: 100%;
+        text-align: left;
+        padding: 8px 16px;
+    }
+    
+    .w3-dropdown-content .w3-bar-item i {
+        margin-right: 8px;
+    }
+    
+    /* Ensure dropdowns appear above other content */
+    .w3-modal {
+        z-index: 1000;
+    }
+    
+    .w3-dropdown-content {
+        z-index: 1001;
+    }
+
+    /* CodeMirror Gutter Customization */
+    .CodeMirror-gutters {
+        border-right: 1px solid #ddd;
+        z-index: 5;
+        display: flex;  /* Added */
+    }
+    
+    .CodeMirror-linenumbers {
+        border-right: 1px solid #eee;  /* Added separator */
+    }
+    
+    .CodeMirror-gutter {
+        min-width: 35px;  /* Base width for gutters */
+    }
+    
+    .CodeMirror-linenumber {
+        color: #999;
+        padding: 0 3px 0 5px;
+        cursor: default;  /* Changed */
+    }
+    
+    .CodeMirror-linedata {
+        color: #2196F3;
+        text-align: right;
+        font-size: 12px;
+        padding: 0 5px;
+        cursor: pointer;
+    }
+
+    /* Line Type Menu Styling */
+    .line-type-menu {
+        position: fixed;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        z-index: 1100;
+        min-width: 150px;
+        font-size: 13px;
+    }
+    
+    .line-type-menu .w3-bar-block {
+        padding: 4px 0;
+    }
+    
+    .line-type-menu .w3-bar-item {
+        padding: 8px 16px;
+        transition: background-color 0.2s;
+    }
+    
+    .line-type-menu .w3-bar-item i {
+        margin-right: 8px;
+        width: 16px;
+        text-align: center;
+    }
+    
+    .line-type-menu .w3-bar-item:hover {
+        background-color: #f5f5f5;
+    }
+    
+    .line-type-menu .w3-border-top {
+        border-top: 1px solid #ddd;
+        margin-top: 4px;
+        padding-top: 4px;
     }
 </style>
 {% endblock %}

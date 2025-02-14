@@ -1531,19 +1531,21 @@ def create_data_import(request):
 
         # Create data source
         try:
-            data_source = DataSource.objects.create(
+            data_source, created = DataSource.objects.get_or_create(
                 name=f'File Upload - {file.name}',
-                source_type='file',
-                description=f'File upload for location {location.name}',
                 project=project,
-                created_by=request.user
+                defaults={
+                    'source_type': 'file',
+                    'description': f'File upload for location {location.name}',
+                    'created_by': request.user
+                }
             )
         except Exception as e:
             return JsonResponse({'error': f'Failed to create data source: {str(e)}'}, status=500)
 
         # Link data source to location
         try:
-            DataSourceLocation.objects.create(
+            DataSourceLocation.objects.get_or_create(
                 data_source=data_source,
                 location=location
             )

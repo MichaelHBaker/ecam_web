@@ -93,7 +93,71 @@ add measurements
         store column mappings
 
 
+Yes, there are several logical groups for organizing the variables, objects, and functions in this file:
 
+State and Event Handlers: This group includes variables and functions related to managing the overall state of the application and handling user interactions.
+
+columnSelectionMenus: Stores state for column selection menus.
+codeMirrorInstances: Stores instances of CodeMirror editors.
+codeMirrorLoaded: Tracks whether CodeMirror has been loaded.
+initializeColumnSelectionHandlers: Sets up event listeners for column selection.
+hideColumnSelectionMenus: Hides column selection menus.
+showColumnActionMenu: Displays the column action menu.
+showColumnDropdownMenu: Displays the column dropdown menu.
+initializeColumnSelection: Initializes column selection for a location.
+API and Data Fetching: This group includes functions for interacting with the backend API and fetching data.
+
+CSRF_TOKEN: Stores the CSRF token for API requests.
+apiFetch: A generalized function for making API requests.
+Source Management: This group includes objects and functions for managing different types of data sources (file, API, database).
+
+SourceManager: Parent object for managing all source types.
+FileManager: Handles file uploads and processing.
+ApiManager: Handles API connections and data fetching.
+DatabaseManager: Handles database connections and queries.
+Data Processing and Validation: This group includes objects and functions for processing and validating data.
+
+DatasetManager: Manages dataset creation and updates.
+PreviewManager: Handles the data preview using CodeMirror.
+ImportConfigManager: Manages import configuration.
+ValidationManager: Validates data and configuration.
+Data Definition: This group includes objects for defining data structure and types.
+
+LineDefinitionManager: Defines line types (data start, headers, etc.).
+ColumnDefinitionManager: Defines column properties and mappings.
+DataTypeManager: Detects and manages data types.
+Mapping and Transformations: This group includes objects and functions for mapping columns to measurements and applying transformations.
+
+MappingManager: Handles column-to-measurement mapping and data transformations.
+Measurement Handling: This group includes functions for handling measurement units and related UI.
+
+getUnitDisplayInfo: Retrieves display information for a unit.
+validateMeasurementForm: Validates measurement form data.
+clearFormErrors: Clears form errors.
+showFormError: Displays form errors.
+handleUnitChange: Handles changes in unit selection.
+attachUnitChangeHandler: Attaches a change handler to a unit selection element.
+removeUnitChangeHandler: Removes the change handler from a unit selection element.
+setupMeasurementHandlers: Sets up handlers for measurement-related UI.
+cleanupMeasurementHandlers: Cleans up measurement handlers.
+CRUD Operations: This group includes functions for performing CRUD (Create, Read, Update, Delete) operations on items.
+
+addItem: Adds a new item.
+updateItem: Updates an existing item.
+deleteItem: Deletes an item.
+editItem: Enables editing of an item.
+cancelEdit: Cancels editing of an item.
+resetFields: Resets fields to their original state.
+Modal Management: This group includes functions for managing modals.
+
+showMeasurementModal: Displays a modal for measurement configuration.
+hideMeasurementModal: Hides the measurement modal.
+Utility Functions: This group includes general utility functions.
+
+getFieldId: Generates consistent IDs for form fields.
+createField: Creates a form field element.
+createEditControls: Creates edit controls for forms.
+collectFormData: Collects and validates form data.
 
 
 issue

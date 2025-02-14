@@ -115,18 +115,24 @@ export const apiFetch = async (endpoint, options = {}, basePath = '/api') => {
 };
 
 // Central State Management
-const StateManager = {
+export const StateManager = {
     _state: {},
     _codeMirrorInstances: {},
     _columnSelectionMenus: {},
     _codeMirrorLoaded: false,
     
     get(locationId, key) {
+        if (!locationId) {
+            throw new Error('Location ID is required for state management');
+        }
         const state = this._state[locationId] || {};
         return key ? state[key] : state;
     },
     
     set(locationId, updates) {
+        if (!locationId) {
+            throw new Error('Location ID is required for state management');
+        }
         this._state[locationId] = {
             ...this._state[locationId],
             ...updates
@@ -134,6 +140,9 @@ const StateManager = {
     },
     
     clear(locationId) {
+        if (!locationId) {
+            throw new Error('Location ID is required for state management');
+        }
         delete this._state[locationId];
         delete this._codeMirrorInstances[locationId];
         delete this._columnSelectionMenus[locationId];
@@ -141,10 +150,16 @@ const StateManager = {
 
     // CodeMirror specific methods
     setCodeMirrorInstance(locationId, instance) {
+        if (!locationId) {
+            throw new Error('Location ID is required for CodeMirror instance management');
+        }
         this._codeMirrorInstances[locationId] = instance;
     },
 
     getCodeMirrorInstance(locationId) {
+        if (!locationId) {
+            throw new Error('Location ID is required for CodeMirror instance management');
+        }
         return this._codeMirrorInstances[locationId];
     },
 
@@ -158,6 +173,9 @@ const StateManager = {
 
     // Column selection methods
     setColumnMenu(locationId, menuType, menu) {
+        if (!locationId) {
+            throw new Error('Location ID is required for column menu management');
+        }
         if (!this._columnSelectionMenus[locationId]) {
             this._columnSelectionMenus[locationId] = {};
         }
@@ -165,13 +183,56 @@ const StateManager = {
     },
 
     getColumnMenus(locationId) {
+        if (!locationId) {
+            throw new Error('Location ID is required for column menu management');
+        }
         return this._columnSelectionMenus[locationId] || {};
     },
 
     clearColumnMenus(locationId) {
+        if (!locationId) {
+            throw new Error('Location ID is required for column menu management');
+        }
         delete this._columnSelectionMenus[locationId];
+    },
+
+    // Helper methods for state validation
+    hasRequiredState(locationId, requiredKeys) {
+        if (!locationId) return false;
+        const state = this.get(locationId);
+        return requiredKeys.every(key => state && state[key] !== undefined);
+    },
+
+    // Initialize state for a new location
+    initializeState(locationId) {
+        if (!locationId) {
+            throw new Error('Location ID is required for state initialization');
+        }
+        
+        if (!this._state[locationId]) {
+            this._state[locationId] = {
+                sourceInfo: {
+                    type: null,
+                    status: 'initializing',
+                    streamInfo: {
+                        totalSize: null,
+                        processedSize: 0,
+                        sampleSize: 1000,
+                        hasMore: true,
+                        position: 0
+                    }
+                },
+                importConfig: null,
+                typeInfo: null,
+                mappingInfo: null,
+                preview: null,
+                dataset: null
+            };
+        }
+        return this._state[locationId];
     }
 };
+
 
 // Source Management - Parent manager for all source types
 const SourceManager = {
@@ -387,8 +448,8 @@ const SourceManager = {
     }
 };
 
-// File-specific source manager
-const FileManager = {
+// File Manager Implementation
+export const FileManager = {
     async loadSample(locationId) {
         const fileInput = document.getElementById(`id_file_input-${locationId}`);
         if (!fileInput?.files?.[0]) {
@@ -405,7 +466,7 @@ const FileManager = {
         formData.append('location_id', String(locationId));
         formData.append('sample_size', '1000');  // Initial sample size
 
-        SourceManager.updateSourceStatus(locationId, 'loading');
+        this.updateDisplay(locationId, 'loading');
 
         try {
             const response = await apiFetch('/data-imports/', {
@@ -429,6 +490,7 @@ const FileManager = {
             StateManager.set(locationId, {
                 sourceInfo: {
                     ...StateManager.get(locationId, 'sourceInfo'),
+                    type: 'file',
                     fileInfo: {
                         name: file.name,
                         size: file.size,
@@ -444,41 +506,43 @@ const FileManager = {
             const fileProperties = this.detectFileProperties(response.preview_content);
             await ImportConfigManager.applyStructureConfig(locationId, fileProperties);
 
-            SourceManager.updateSourceStatus(locationId, 'success');
+            this.updateDisplay(locationId, 'success');
             return response;
 
         } catch (error) {
-            SourceManager.updateSourceStatus(locationId, 'error', error.message);
+            this.updateDisplay(locationId, 'error', error.message);
             throw error;
         }
     },
 
-    async readMoreContent(locationId, startByte, size) {
+    updateDisplay(locationId, status, message = '') {
         const sourceInfo = StateManager.get(locationId, 'sourceInfo');
-        if (!sourceInfo?.importId) return null;
+        const fileInfo = sourceInfo?.fileInfo;
 
-        try {
-            const response = await apiFetch(`/data-imports/${sourceInfo.importId}/content/`, {
-                method: 'POST',
-                body: JSON.stringify({
-                    start: startByte,
-                    size: size
-                })
-            });
+        const displayConfig = {
+            success: {
+                icon: 'bi-file-earmark-check',
+                class: 'w3-pale-green w3-border-green',
+                text: fileInfo ? fileInfo.name : 'File uploaded successfully'
+            },
+            loading: {
+                icon: 'bi-arrow-clockwise',
+                class: 'w3-pale-yellow w3-border-yellow',
+                text: fileInfo ? `Loading ${fileInfo.name}...` : 'Loading file...'
+            },
+            error: {
+                icon: 'bi-exclamation-triangle',
+                class: 'w3-pale-red w3-border-red',
+                text: message || (fileInfo ? `Error processing ${fileInfo.name}` : 'Error processing file')
+            }
+        };
 
-            // Update progress through SourceManager
-            SourceManager.updateProgress(
-                locationId,
-                startByte + response.content.length,
-                sourceInfo.fileInfo.size
-            );
+        const indicator = document.getElementById(`id_source_indicator-${locationId}`);
+        if (!indicator) return;
 
-            return response;
-
-        } catch (error) {
-            console.error('Error reading more content:', error);
-            throw error;
-        }
+        const config = displayConfig[status] || displayConfig.error;
+        indicator.innerHTML = `<i class="bi ${config.icon}"></i> ${config.text}`;
+        indicator.className = `w3-panel w3-leftbar ${config.class}`;
     },
 
     detectFileFormat(filename, content) {
@@ -522,9 +586,9 @@ const FileManager = {
         
         const bestMatch = counts.reduce((best, current) => 
             current.consistency > best.consistency ? current : best
-        );
+        , { delimiter: ',', consistency: 0 });
 
-        return bestMatch.consistency > 0.8 ? bestMatch.delimiter : null;
+        return bestMatch.consistency > 0.8 ? bestMatch.delimiter : ',';
     },
 
     checkDelimiterConsistency(lines, delimiter) {
@@ -568,52 +632,41 @@ const FileManager = {
                 return i;
             }
         }
-        return null;
+        return 0;
     },
 
-    updateDisplay(locationId, status, message = '') {
+    async readMoreContent(locationId, startByte, size) {
         const sourceInfo = StateManager.get(locationId, 'sourceInfo');
-        const fileInfo = sourceInfo?.fileInfo;
-        if (!fileInfo) return;
+        if (!sourceInfo?.importId) return null;
 
-        const displayConfig = {
-            success: {
-                icon: 'bi-file-earmark-check',
-                class: 'w3-pale-green w3-border-green',
-                text: fileInfo.name
-            },
-            loading: {
-                icon: 'bi-arrow-clockwise',
-                class: 'w3-pale-yellow w3-border-yellow',
-                text: `Loading ${fileInfo.name}...`
-            },
-            error: {
-                icon: 'bi-exclamation-triangle',
-                class: 'w3-pale-red w3-border-red',
-                text: message || `Error processing ${fileInfo.name}`
-            },
-            processing: {
-                icon: 'bi-gear-wide-connected',
-                class: 'w3-pale-blue w3-border-blue',
-                text: `Processing ${fileInfo.name}`
-            }
-        };
+        try {
+            const response = await apiFetch(`/data-imports/${sourceInfo.importId}/content/`, {
+                method: 'POST',
+                body: JSON.stringify({
+                    start: startByte,
+                    size: size
+                })
+            });
 
-        const indicator = document.getElementById(`id_source_indicator-${locationId}`);
-        if (!indicator) return;
+            // Update progress through SourceManager
+            SourceManager.updateProgress(
+                locationId,
+                startByte + response.content.length,
+                sourceInfo.fileInfo.size
+            );
 
-        const config = displayConfig[status];
-        indicator.innerHTML = `<i class="bi ${config.icon}"></i> ${config.text}`;
-        indicator.className = `w3-panel w3-leftbar ${config.class}`;
-    },
+            return response;
 
-    triggerFileSelect(locationId) {
-        const fileInput = document.getElementById(`id_file_input-${locationId}`);
-        if (fileInput) {
-            fileInput.click();
+        } catch (error) {
+            console.error('Error reading more content:', error);
+            throw error;
         }
     }
 };
+
+
+
+
 
 // API-specific source manager
 const ApiManager = {
@@ -1351,7 +1404,6 @@ const DatasetManager = {
     }
 };
 
-// Preview Management
 const PreviewManager = {
     async initialize(locationId, content) {
         await this.loadCodeMirror();
@@ -1374,6 +1426,10 @@ const PreviewManager = {
         });
 
         return this.setupCodeMirror(locationId, content);
+    },
+
+    generateInstanceId(locationId) {
+        return `${locationId}-${Date.now()}`;
     },
 
     async loadCodeMirror() {
@@ -1607,6 +1663,16 @@ const PreviewManager = {
         });
     },
 
+    addNotice(locationId, notice) {
+        const cmContainer = document.getElementById(`id_codemirror_container-${locationId}`);
+        if (!cmContainer) return;
+
+        const noticeDiv = document.createElement('div');
+        noticeDiv.className = `w3-panel w3-pale-${notice.type === 'error' ? 'red' : 'yellow'} w3-leftbar w3-border-${notice.type === 'error' ? 'red' : 'yellow'}`;
+        noticeDiv.innerHTML = `<i class="bi bi-${notice.type === 'error' ? 'exclamation-triangle' : 'info-circle'}"></i> ${notice.message}`;
+        cmContainer.appendChild(noticeDiv);
+    },
+
     cleanup(locationId) {
         const cm = StateManager.getCodeMirrorInstance(locationId);
         if (cm) {
@@ -1617,7 +1683,7 @@ const PreviewManager = {
 };
 
 // Import Configuration Management
-const ImportConfigManager = {
+export const ImportConfigManager = {
     async initialize(locationId) {
         // Initialize base configuration
         StateManager.set(locationId, {
@@ -1652,6 +1718,9 @@ const ImportConfigManager = {
                     transformations: []
                 },
 
+                // Mapping configuration
+                mappings: {},
+
                 // Import status tracking
                 status: {
                     sourceReady: false,
@@ -1666,6 +1735,29 @@ const ImportConfigManager = {
 
     getConfig(locationId) {
         return StateManager.get(locationId, 'importConfig');
+    },
+
+    computeStatus(config) {
+        return {
+            sourceReady: Boolean(
+                config.source.type && 
+                config.source.format && 
+                Object.keys(config.source.config).length > 0
+            ),
+            structureDefined: Boolean(
+                config.structure.dataStartLine !== null &&
+                (config.source.format !== 'delimited' || config.structure.delimiter)
+            ),
+            timeConfigured: Boolean(
+                config.time.format &&
+                config.time.columns.length > 0
+            ),
+            mappingComplete: Boolean(
+                config.mappings &&
+                Object.keys(config.mappings).length > 0
+            ),
+            validationPassed: config.status?.validationPassed || false
+        };
     },
 
     updateConfig(locationId, updates, section = null) {
@@ -1694,29 +1786,6 @@ const ImportConfigManager = {
         StateManager.set(locationId, { importConfig: newConfig });
         this.updateStatusDisplay(locationId);
         return newConfig;
-    },
-
-    computeStatus(config) {
-        return {
-            sourceReady: Boolean(
-                config.source.type && 
-                config.source.format && 
-                Object.keys(config.source.config).length > 0
-            ),
-            structureDefined: Boolean(
-                config.structure.dataStartLine !== null &&
-                (config.source.format !== 'delimited' || config.structure.delimiter)
-            ),
-            timeConfigured: Boolean(
-                config.time.format &&
-                config.time.columns.length > 0
-            ),
-            mappingComplete: Boolean(
-                MappingManager.getMappings(locationId)?.columnMappings &&
-                Object.keys(MappingManager.getMappings(locationId).columnMappings).length > 0
-            ),
-            validationPassed: false  // Set by ValidationManager
-        };
     },
 
     updateStatusDisplay(locationId) {
@@ -1755,27 +1824,22 @@ const ImportConfigManager = {
         nextButton.disabled = !canProceed;
     },
 
-    // Integration with source managers
     async applySourceConfig(locationId, sourceConfig) {
         return this.updateConfig(locationId, sourceConfig, 'source');
     },
 
-    // Integration with definition managers
     async applyStructureConfig(locationId, structureConfig) {
         return this.updateConfig(locationId, structureConfig, 'structure');
     },
 
-    // Integration with time handling
     async applyTimeConfig(locationId, timeConfig) {
         return this.updateConfig(locationId, timeConfig, 'time');
     },
 
-    // Integration with processing configuration
     async applyProcessingConfig(locationId, processingConfig) {
         return this.updateConfig(locationId, processingConfig, 'processing');
     },
 
-    // Export configuration for processing
     getProcessingConfig(locationId) {
         const config = this.getConfig(locationId);
         if (!config) return null;
@@ -1789,11 +1853,10 @@ const ImportConfigManager = {
             structure: config.structure,
             time: config.time,
             processing: config.processing,
-            mappings: MappingManager.getMappings(locationId)
+            mappings: config.mappings
         };
     },
 
-    // Validation integration
     async validate(locationId) {
         const config = this.getConfig(locationId);
         if (!config) return { isValid: false, errors: ['No configuration found'] };
@@ -3541,14 +3604,27 @@ export const handleFileChange = async (event, locationId) => {
     if (!file) return;
 
     try {
+        // Initialize state for this location
+        StateManager.set(locationId, {
+            sourceInfo: {
+                type: 'file',
+                status: 'initializing'
+            }
+        });
+
+        // Initialize all required managers
+        await ImportConfigManager.initialize(locationId);
+        await DataTypeManager.initialize(locationId);
+        await MappingManager.initialize(locationId);
+        
         // Update display to loading
-        FileManager.updateFileDisplay(locationId, file, 'loading');
+        FileManager.updateDisplay(locationId, 'loading');
 
         // Handle file upload
         const response = await FileManager.handleUpload(file, locationId);
 
         // Update display to success
-        FileManager.updateFileDisplay(locationId, file, 'success');
+        FileManager.updateDisplay(locationId, 'success');
 
         // Initialize dataset name input
         await DatasetManager.initialize(locationId);
@@ -3557,14 +3633,13 @@ export const handleFileChange = async (event, locationId) => {
         const editor = await PreviewManager.initialize(locationId, response.preview_content);
         
         if (editor && response.preview_content) {
-            // Initialize managers
-            ImportConfigManager.initialize(locationId);
+            // Initialize other managers
             LineDefinitionManager.initialize(locationId);
             ColumnDefinitionManager.initialize(locationId);
             
             // Detect and update file properties
             const fileProperties = FileManager.detectFileProperties(response.preview_content);
-            ImportConfigManager.updateConfig(locationId, fileProperties);
+            await ImportConfigManager.applyStructureConfig(locationId, fileProperties);
 
             // Show import controls
             const importControls = document.getElementById(`id_import_controls-${locationId}`);
@@ -3587,7 +3662,7 @@ export const handleFileChange = async (event, locationId) => {
 
     } catch (error) {
         console.error('Error in handleFileChange:', error);
-        FileManager.updateFileDisplay(locationId, file, 'error', error.message);
+        FileManager.updateDisplay(locationId, 'error', error.message);
     }
 };
 

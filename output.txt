@@ -1,3 +1,0 @@
-Dependencies changed or test files missing. Regenerating...
-Found 57 test(s).
-System check identified no issues (0 silenced).

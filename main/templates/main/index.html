@@ -1,104 +1,190 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>File Upload and Excel Operations</title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
-        form { margin-bottom: 20px; }
-        input, button { margin: 10px 0; }
-        #result { margin-top: 20px; font-weight: bold; }
-        #file-validation { color: green; font-weight: bold; }
-    </style>
-</head>
-<body>
+{% extends 'base.html' %}
+{% load static %}
 
+{% block title %}File Upload and Excel Operations{% endblock %}
 
-    <form method="post" class="w3-container">
+{% block extra_css %}
+<style>
+    body { 
+        font-family: Arial, sans-serif; 
+        max-width: 800px; 
+        margin: 0 auto; 
+        padding: 20px; 
+    }
+    .validation-message {
+        margin-left: 10px;
+        font-weight: bold;
+        transition: color 0.3s;
+    }
+    .file-upload-section {
+        margin: 20px 0;
+        padding: 20px;
+        border: 2px dashed #ccc;
+        border-radius: 5px;
+        transition: all 0.3s;
+    }
+    .file-upload-section.dragover {
+        border-color: #2196F3;
+        background-color: #E3F2FD;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+    <h1>File Upload and Excel Operations</h1>
+    
+    <!-- Login Form -->
+    <form method="post" class="w3-container" data-form-type="login">
         {% csrf_token %}
         <p>
             <label>Username:</label>
-            <input class="w3-input" type="text" name="username">
+            <input class="w3-input" type="text" name="username" required>
         </p>
         <p>
             <label>Password:</label>
-            <input class="w3-input" type="password" name="password">
+            <input class="w3-input" type="password" name="password" required>
         </p>
         <button type="submit" class="w3-button w3-blue">Login</button>
     </form>
 
-
-    <h1>File Upload and Excel Operations</h1>
-    
-    <form id="excelForm" enctype="multipart/form-data">
+    <!-- File Upload Form -->
+    <form id="excelForm" class="w3-container file-upload-section" data-form-type="excel">
         {% csrf_token %}
-        <div>
-            <label for="csvFile">Select a CSV file:</label>
-            <input type="file" id="csvFile" name="csv_file" accept=".csv" required>
-            <span id="file-validation"></span>
+        <div class="w3-row-padding">
+            <div class="w3-half">
+                <label for="csvFile">Select a CSV file:</label>
+                <input type="file" id="csvFile" name="csv_file" accept=".csv" 
+                       class="w3-input" required data-validation="csv">
+                <span class="validation-message" data-for="csvFile"></span>
+            </div>
+            <div class="w3-half">
+                <label for="folderPath">Select Folder:</label>
+                <input type="file" id="folderPath" name="folder_path" 
+                       webkitdirectory directory multiple class="w3-input">
+            </div>
         </div>
-        <div>
-            <label for="folderPath">Select Folder:</label>
-            <input type="file" id="folderPath" name="folder_path" webkitdirectory directory multiple>
+        <div class="w3-row-padding">
+            <div class="w3-half">
+                <label for="workbookName">Workbook Name:</label>
+                <input type="text" id="workbookName" name="workbook_name" 
+                       class="w3-input" required>
+            </div>
+            <div class="w3-half">
+                <label for="sheetName">Sheet Name:</label>
+                <input type="text" id="sheetName" name="sheet_name" 
+                       class="w3-input" required>
+            </div>
         </div>
-        <div>
-            <label for="workbookName">Workbook Name:</label>
-            <input type="text" id="workbookName" name="workbook_name" required>
+        <div class="w3-row-padding">
+            <div class="w3-col">
+                <button type="submit" class="w3-button w3-blue w3-margin-top">
+                    Create Excel Workbook
+                </button>
+            </div>
         </div>
-        <div>
-            <label for="sheetName">Sheet Name:</label>
-            <input type="text" id="sheetName" name="sheet_name" required>
-        </div>
-        <button type="submit">Create Excel Workbook</button>
     </form>
 
-    <div id="result"></div>
+    <div id="result" class="w3-panel"></div>
+{% endblock %}
 
-    <script>
-        document.getElementById('csvFile').addEventListener('change', function() {
-            var file = this.files[0];
-            var validationLabel = document.getElementById('file-validation');
+{% block extra_js %}
+<script type="module">
+    import { State } from "{% static 'main/js/state.js' %}";
+    import { DOM } from "{% static 'main/js/dom.js' %}";
+    import { Events } from "{% static 'main/js/events.js' %}";
+    import { API } from "{% static 'main/js/api.js' %}";
+    import { NotificationUI } from "{% static 'main/js/ui.js' %}";
+
+    // Initialize form state
+    State.set('form_state', {
+        csvValid: false,
+        folderSelected: false,
+        processing: false,
+        lastResult: null
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        // File validation
+        DOM.addDelegate(document, 'change', '[data-validation="csv"]', (event, element) => {
+            const file = element.files[0];
+            const validationElement = DOM.getElement(`[data-for="${element.id}"]`);
             
             if (file && file.name.endsWith('.csv')) {
-                validationLabel.innerHTML = "Valid CSV file selected";
-                validationLabel.style.color = 'green';
+                validationElement.textContent = "Valid CSV file selected";
+                validationElement.style.color = 'green';
+                State.update('form_state', { csvValid: true });
             } else {
-                validationLabel.innerHTML = "Selected file not valid CSV file";
-                validationLabel.style.color = 'red';
+                validationElement.textContent = "Selected file not valid CSV file";
+                validationElement.style.color = 'red';
+                State.update('form_state', { csvValid: false });
             }
         });
 
-        document.getElementById('excelForm').addEventListener('submit', function(e) {
-            e.preventDefault();
+        // Form submission
+        DOM.addDelegate(document, 'submit', '[data-form-type="excel"]', async (event, form) => {
+            event.preventDefault();
             
-            const formData = new FormData(this);
-            const folderInput = document.getElementById('folderPath');
-            
-            if (folderInput.files.length > 0) {
-                const folderPath = folderInput.files[0].webkitRelativePath.split('/')[0];
-                formData.set('folder_path', folderPath);
-            }
-
-            fetch('{% url "excel_upload" %}', {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}'
+            try {
+                State.update('form_state', { processing: true });
+                
+                const formData = new FormData(form);
+                const folderInput = DOM.getElement('folderPath');
+                
+                if (folderInput.files.length > 0) {
+                    const folderPath = folderInput.files[0].webkitRelativePath.split('/')[0];
+                    formData.set('folder_path', folderPath);
                 }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if(data.status === 'success') {
-                    document.getElementById('result').innerHTML = data.message;
+
+                const response = await API.upload('/excel/upload/', formData);
+                
+                if (response.status === 'success') {
+                    NotificationUI.show({
+                        message: response.message,
+                        type: 'success'
+                    });
+                    DOM.getElement('result').textContent = response.message;
                 } else {
-                    document.getElementById('result').innerHTML = 'Error: ' + (data.error || 'Unknown error occurred');
+                    throw new Error(response.error || 'Unknown error occurred');
                 }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                document.getElementById('result').innerHTML = 'An error occurred.';
-            });
+                
+            } catch (error) {
+                NotificationUI.show({
+                    message: `Error: ${error.message}`,
+                    type: 'error'
+                });
+                DOM.getElement('result').textContent = `Error: ${error.message}`;
+            } finally {
+                State.update('form_state', { processing: false });
+            }
         });
-    </script>
-</body>
-</html>
+
+        // Initialize drag and drop
+        const dropZone = DOM.getElement('.file-upload-section');
+        if (dropZone) {
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                });
+            });
+
+            dropZone.addEventListener('dragover', () => {
+                dropZone.classList.add('dragover');
+            });
+
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('dragover');
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                dropZone.classList.remove('dragover');
+                const csvInput = DOM.getElement('csvFile');
+                if (csvInput) {
+                    csvInput.files = e.dataTransfer.files;
+                    csvInput.dispatchEvent(new Event('change'));
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}

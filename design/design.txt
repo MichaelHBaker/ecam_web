@@ -1,3 +1,20 @@
+use case 
+    login
+    project action menu 
+        when page opens the project action menu dropsdouwn  
+        find a project 
+        add project 
+
+refactor
+    complete function update
+    can i delete templatetags
+    explore other classes that need revision
+    figure out imports not used
+    go over services
+    revisit the new api py
+    go over sources
+    examine urls 
+
 Immediate
     Get it working again
         dataset name -- combo input with droplist of current datasets, select one replaces, or enter new

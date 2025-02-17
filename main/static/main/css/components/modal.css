@@ -1,0 +1,29 @@
+/* modal.css */
+/* Only extends w3.css modal functionality */
+
+/* Custom modal sizing and scrolling */
+.w3-modal-content {
+    margin: 50px auto;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+}
+
+.modal-body-scroll {
+    max-height: calc(100vh - 250px);
+    overflow-y: auto;
+    padding: 16px;
+}
+
+/* Custom modal transitions */
+.w3-modal {
+    transition: opacity 0.3s ease;
+}
+
+.w3-modal-content {
+    transform: scale(0.7);
+    transition: transform 0.3s ease;
+}
+
+.w3-modal.show .w3-modal-content {
+    transform: scale(1);
+}

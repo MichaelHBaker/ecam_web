@@ -1,0 +1,47 @@
+/* dropdowns.css */
+/* Only custom dropdown extensions */
+
+/* Tree-specific action menu */
+.tree-actions {
+    display: none;
+    margin-left: auto;
+}
+
+.w3-bar-item:hover .tree-actions {
+    display: flex;
+    align-items: center;
+}
+
+.action-menu i {
+    margin-right: 8px;
+    width: 16px;
+    text-align: center;
+}
+
+/* Custom dropdown positioning */
+.tree-dropdown {
+    position: absolute;
+    right: 0;
+    transform: translateY(2px);
+}
+
+/* Extend w3-dropdown-content for tree needs */
+.w3-dropdown-content.tree-menu {
+    min-width: 200px;
+    transform: translateX(-90%);
+}
+
+/* Action button states */
+.tree-action-btn {
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.tree-action-btn:hover {
+    opacity: 1;
+}
+
+.tree-action-btn.disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}

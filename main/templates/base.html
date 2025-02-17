@@ -15,50 +15,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/default.min.css">
 
-    <!-- Global Form Styles -->
-    <style>
-        /* Global :valid input styles */
-        input:valid {
-            border: 2px solid green;
-            box-shadow: 0 0 5px green;
-        }
-
-        /* Global :invalid input styles */
-        input:invalid {
-            border: 2px solid red;
-            box-shadow: 0 0 5px red;
-        }
-
-        /* Global :focus input styles */
-        input:focus {
-            outline: none;
-            border: 2px solid blue;
-            box-shadow: 0 0 5px blue;
-        }
-
-        /* Optional rounded styles using W3.CSS */
-        input.w3-input {
-            border-radius: 5px; /* Rounded corners */
-        }
-
-        /* Essential CodeMirror styles - minimal overrides */
-        .CodeMirror {
-            height: 100% !important;
-            border: 1px solid #ccc;
-        }
-
-        /* Modal content scroll area */
-        .modal-content-scroll {
-            height: calc(100% - 200px);
-            overflow: auto;
-        }
-
-        /* Icon spacing in display containers */
-        .w3-display-container i {
-            margin-right: 8px;
-        }
-    </style>
-
+    <link rel="stylesheet" href="{% static 'main/css/main.css' %}">
+    
     {% block extra_css %}
     {% endblock %}
 </head>
@@ -68,9 +26,9 @@
     </header>
 
     <nav id="Base-nav-id" class="w3-bar">
-        <a href="{% url 'dashboard' %}" class="w3-bar-item w3-button">Home</a>
-        <a href="#" class="w3-bar-item w3-button">About</a>
-        <a href="#" class="w3-bar-item w3-button">Contact</a>
+        <a href="{% url 'dashboard' %}" class="w3-bar-item w3-button" data-action="navigate">Home</a>
+        <a href="#" class="w3-bar-item w3-button" data-action="navigate">About</a>
+        <a href="#" class="w3-bar-item w3-button" data-action="navigate">Contact</a>
     </nav>
 
     <div class="w3-container" style="margin-top:20px">
@@ -83,6 +41,32 @@
         <h5>Footer</h5>
         <p>Copyright © {{ year }}</p>
     </footer>
+
+    <!-- Initialize State -->
+    <script type="module">
+        import { State } from "{% static 'main/js/state.js' %}";
+        import { Events } from "{% static 'main/js/events.js' %}";
+        import { NotificationUI } from "{% static 'main/js/ui.js' %}";
+
+        // Initialize base state
+        State.set('app_state', {
+            initialized: true,
+            lastUpdate: new Date(),
+            currentPage: window.location.pathname
+        });
+
+        // Initialize events
+        Events.initialize();
+
+        // Global error handler
+        window.addEventListener('error', (event) => {
+            NotificationUI.show({
+                message: `Error: ${event.message}`,
+                type: 'error',
+                duration: 5000
+            });
+        });
+    </script>
 
     {% block extra_js %}
     {% endblock %}

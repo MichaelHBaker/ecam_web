@@ -1,0 +1,9 @@
+/* main.css */
+/* Import all component styles */
+
+@import 'base.css';
+@import 'components/tree.css';
+@import 'components/measurements.css';
+@import 'components/dropdowns.css';
+@import 'components/modals.css';
+@import 'components/filters.css'; 

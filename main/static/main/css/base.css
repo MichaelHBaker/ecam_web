@@ -1,0 +1,25 @@
+/* base.css */
+/* Only extends w3.css with custom utilities */
+
+/* Custom animations not in w3.css */
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.custom-spin {
+    animation: spin 1s linear infinite;
+}
+
+/* Additional status indicators */
+.status-indicator {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+}
+
+/* Custom loading indicator extending w3-spin */
+.loading-indicator i {
+    margin-right: 8px;
+}

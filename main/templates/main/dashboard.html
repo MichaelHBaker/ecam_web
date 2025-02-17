@@ -1,360 +1,136 @@
-{% extends 'base.html' %}
-{% load custom_tags %}
+{% extends "main/base.html" %}
 {% load static %}
 
-{% block title %}ECAM Web{% endblock %}
+{% block content %}
+<div class="dashboard-container">
+    <!-- Action Menu -->
+    <div class="action-menu w3-bar w3-padding">
+        <div class="w3-bar-item">
+            <input type="text" 
+                   class="w3-input w3-border" 
+                   placeholder="Filter projects..."
+                   data-action="filter-projects">
+        </div>
+        <button class="w3-bar-item w3-button" data-action="clear-filter">
+            <i class="bi bi-x-circle"></i> Clear
+        </button>
+        <button class="w3-bar-item w3-button w3-right" data-action="add-project">
+            <i class="bi bi-plus-circle"></i> New Project
+        </button>
+    </div>
 
-{% block extra_css %}
-<style>
-    /* Tree structure and dropdowns */
-    .w3-dropdown-content {
-        transform: translateX(-10%);
-    }
+    <!-- Main Tree Container -->
+    <div id="tree-container" class="tree-container">
+        <!-- Loading State -->
+        <div class="loading-state w3-hide">
+            <i class="bi bi-arrow-repeat spin"></i> Loading...
+        </div>
 
-    .tree-headings {
-        padding-left: 35px;
-    }
-    
-    .tree-heading-before {
-        padding-left: 6px;
-    }
+        <!-- Error State -->
+        <div class="error-state w3-hide">
+            <div class="error-message"></div>
+            <button class="w3-button w3-red" data-action="retry">Retry</button>
+        </div>
 
-    .caret::before {
-        content: "\25B6";
-        display: inline-block;
-        margin-right: 6px;
-    }
+        <!-- No Results State -->
+        <div class="no-results w3-hide">
+            <p>No projects found matching your filter.</p>
+        </div>
 
-    .caret-down::before {
-        transform: rotate(90deg);
-    }
+        <!-- Tree Content -->
+        <div class="tree-wrapper"></div>
+    </div>
 
-    .tree-item {
-        display: flex;
-        align-items: center;
-        padding: 4px 0;
-    }
-
-    .tree-item .tree-text {
-        flex-grow: 1;
-    }
-
-    .tree-item .item-actions {
-        display: none;
-        margin-left: 20px;
-        z-index: 1;
-    }
-
-    .tree-item:hover .item-actions {
-        display: inline-block;
-    }
-
-    .item-actions:hover .w3-dropdown-content {
-        display: block;
-    }
-
-    /* Measurement specific styles */
-    .measurement-fields {
-        display: inline-flex;
-        align-items: center;
-        gap: 4px;
-        flex-wrap: wrap;
-    }
-
-    .unit-select,
-    .multiplier-select,
-    .timezone-select {
-        padding: 4px 8px;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-    }
-
-    .unit-select { min-width: 120px; }
-    .multiplier-select { width: 100px; }
-    .timezone-select { width: 160px; }
-
-    .w3-container-tree {
-        width: fit-content !important;
-    }
-
-    .fields-container {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-    }
-    
-    .tree-item-name, 
-    .tree-item-field {
-        border: none;
-        background: transparent;
-        padding: 4px 8px;
-        font-size: 1rem;
-        color: inherit;
-        width: auto;
-    }
-    
-    .tree-item-name.editing,
-    .tree-item-field.editing {
-        border: 1px solid #ccc;
-        background-color: white;
-        padding: 4px;
-       
-    }
-
-    /* Dropdown positioning */
-    .w3-dropdown-hover {
-        position: relative;
-        display: inline-block;
-    }
-    
-    .w3-dropdown-content {
-        display: none;
-        position: absolute;
-        background-color: #fff;
-        min-width: 250px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        z-index: 1000;
-    }
-    
-    /* Show dropdown on hover */
-    .w3-dropdown-hover:hover .w3-dropdown-content {
-        display: block;
-    }
-    
-    /* Dropdown items */
-    .w3-dropdown-content .w3-bar-item {
-        width: 100%;
-        text-align: left;
-        padding: 8px 16px;
-    }
-    
-    .w3-dropdown-content .w3-bar-item i {
-        margin-right: 8px;
-    }
-    
-    /* Ensure dropdowns appear above other content */
-    .w3-modal {
-        z-index: 1000;
-    }
-    
-    .w3-dropdown-content {
-        z-index: 1001;
-    }
-
-    /* CodeMirror Gutter Customization */
-    .CodeMirror-gutters {
-        border-right: 1px solid #ddd;
-        z-index: 5;
-        display: flex;  /* Added */
-    }
-    
-    .CodeMirror-linenumbers {
-        border-right: 1px solid #eee;  /* Added separator */
-    }
-    
-    .CodeMirror-gutter {
-        min-width: 35px;  /* Base width for gutters */
-    }
-    
-    .CodeMirror-linenumber {
-        color: #999;
-        padding: 0 3px 0 5px;
-        cursor: default;  /* Changed */
-    }
-    
-    .CodeMirror-linedata {
-        color: #2196F3;
-        text-align: right;
-        font-size: 12px;
-        padding: 0 5px;
-        cursor: pointer;
-    }
-
-    /* Line Type Menu Styling */
-    .line-type-menu {
-        position: fixed;
-        background: white;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-        z-index: 1100;
-        min-width: 150px;
-        font-size: 13px;
-    }
-    
-    .line-type-menu .w3-bar-block {
-        padding: 4px 0;
-    }
-    
-    .line-type-menu .w3-bar-item {
-        padding: 8px 16px;
-        transition: background-color 0.2s;
-    }
-    
-    .line-type-menu .w3-bar-item i {
-        margin-right: 8px;
-        width: 16px;
-        text-align: center;
-    }
-    
-    .line-type-menu .w3-bar-item:hover {
-        background-color: #f5f5f5;
-    }
-    
-    .line-type-menu .w3-border-top {
-        border-top: 1px solid #ddd;
-        margin-top: 4px;
-        padding-top: 4px;
-    }
-</style>
+    <!-- Project Form Modal -->
+    <div id="project-modal" class="w3-modal">
+        <div class="w3-modal-content w3-card-4">
+            <header class="w3-container w3-theme">
+                <span class="w3-button w3-display-topright" data-action="close-modal">&times;</span>
+                <h2 id="modal-title">New Project</h2>
+            </header>
+            <form id="project-form" class="w3-container w3-padding">
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" name="name" class="w3-input w3-border" required>
+                </div>
+                <div class="form-group">
+                    <label>Project Type</label>
+                    <select name="project_type" class="w3-select w3-border" required>
+                        <option value="">Select a type...</option>
+                        {% for value, label in model_fields.project.fields.project_type.choices %}
+                            <option value="{{ value }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Start Date</label>
+                    <input type="date" name="start_date" class="w3-input w3-border">
+                </div>
+                <div class="form-group">
+                    <label>End Date</label>
+                    <input type="date" name="end_date" class="w3-input w3-border">
+                </div>
+                <div class="w3-padding-16">
+                    <button type="submit" class="w3-button w3-theme">Save</button>
+                    <button type="button" class="w3-button w3-gray" data-action="close-modal">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
-{% block content %}
-<!-- Project Section -->
-<div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
-    <button onclick="toggleOpenClose('id_project')" class="w3-bar-item w3-button section-button">
-        <i id="id_chevronIcon-id_project" class="bi bi-chevron-right"></i> Projects
-    </button>
-    <div class="w3-dropdown-hover">
-        <button class="w3-button">
-            <i class="bi bi-three-dots-vertical"></i>
-        </button>
-        <div class="w3-dropdown-content w3-bar-block w3-border">
-            <a href="#" 
-               class="w3-bar-item w3-button" 
-               onclick="if(document.getElementById('id_project').classList.contains('w3-hide')) 
-                          toggleOpenClose('id_project'); 
-                        crud.addItem('project', 
-                          [{% for field in model_fields.project.fields %}
-                            '{{ field.name }}'{% if not forloop.last %}, {% endif %}
-                           {% endfor %}]); 
-                        return false;">
-                <i class="bi bi-plus"></i> Add Project
-            </a>
-            <a href="{% url 'project' %}" class="w3-bar-item w3-button">
-                <i class="bi bi-box-arrow-up-right"></i> Full Page
-            </a>
-            <a href="#" onclick="exportproject()" class="w3-bar-item w3-button">
-                <i class="bi bi-file-earmark-arrow-down"></i> Export
-            </a>
-        </div>    
-    </div>
-</div>
-<div id="id_project" class="w3-container w3-container-tree w3-hide">
-    <span class="tree-headings">
-        Project
-        <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Location</span>
-        <i class="bi bi-chevron-right"></i><span class=tree-heading-before>Measurement</span>
-    </span>
-
-    {% for project in projects %}
-        {% render_tree_item project 'project' model_fields %}
-    {% endfor %}
-</div>
-
-<!-- Measurement Section -->
-<div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
-    <button onclick="toggleOpenClose('id_measurement')" class="w3-bar-item w3-button section-button">
-        <i id="id_chevronIcon-id_measurement" class="bi bi-chevron-right"></i> Measurements
-    </button>
-    <div class="w3-dropdown-hover">
-        <button class="w3-button">
-            <i class="bi bi-three-dots-vertical"></i>
-        </button>
-        <div class="w3-dropdown-content w3-bar-block w3-border">
-            <a href="{% url 'measurement' %}" class="w3-bar-item w3-button">
-                <i class="bi bi-box-arrow-up-right"></i> Full Page
-            </a>
-            <a href="#" onclick="exportmeasurement()" class="w3-bar-item w3-button">
-                <i class="bi bi-file-earmark-arrow-down"></i> Export
-            </a>
-        </div>
-    </div>
-</div>
-<div id="id_measurement" class="w3-container w3-hide">
-    <p>Content about Measurement.</p>
-</div>
-
-<!-- Data Section -->
-<div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
-    <button onclick="toggleOpenClose('id_data')" class="w3-bar-item w3-button section-button">
-        <i id="id_chevronIcon-id_data" class="bi bi-chevron-right"></i> Data
-    </button>
-    <div class="w3-dropdown-hover">
-        <button class="w3-button">
-            <i class="bi bi-three-dots-vertical"></i>
-        </button>
-        <div class="w3-dropdown-content w3-bar-block w3-border">
-            <a href="{% url 'data' %}" class="w3-bar-item w3-button">
-                <i class="bi bi-box-arrow-up-right"></i> Full Page
-            </a>
-            <a href="#" onclick="exportdata()" class="w3-bar-item w3-button">
-                <i class="bi bi-file-earmark-arrow-down"></i> Export
-            </a>
-        </div>
-    </div>
-</div>
-<div id="id_data" class="w3-container w3-hide">
-    <p>Content about Data.</p>
-</div>
-
-<!-- Models Section -->
-<div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
-    <button onclick="toggleOpenClose('id_model')" class="w3-bar-item w3-button section-button">
-        <i id="id_chevronIcon-id_model" class="bi bi-chevron-right"></i> Models
-    </button>
-    <div class="w3-dropdown-hover">
-        <button class="w3-button">
-            <i class="bi bi-three-dots-vertical"></i>
-        </button>
-        <div class="w3-dropdown-content w3-bar-block w3-border">
-            <a href="{% url 'model' %}" class="w3-bar-item w3-button">
-                <i class="bi bi-box-arrow-up-right"></i> Full Page
-            </a>
-            <a href="#" onclick="exportmodel()" class="w3-bar-item w3-button">
-                <i class="bi bi-file-earmark-arrow-down"></i> Export
-            </a>
-        </div>
-    </div>
-</div>
-<div id="id_model" class="w3-container w3-hide">
-    <p>Content about Models.</p>
-</div>
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'main/css/components/tree.css' %}">
+<link rel="stylesheet" href="{% static 'main/css/components/filters.css' %}">
 {% endblock %}
 
 {% block extra_js %}
-<!-- Module JavaScript -->
 <script type="module">
-    import * as CRUD from "{% static 'main/js/crud.js' %}"; 
-    window.crud = CRUD;
+    import { TreeManager } from '{% static "main/js/tree.js" %}';
+    import { DOM } from '{% static "main/js/dom.js" %}';
+    import { API } from '{% static "main/js/api.js" %}';
+    import { NotificationUI } from '{% static "main/js/ui.js" %}';
 
-    // Initialize MODEL_FIELDS and measurement handlers
-    CRUD.initializeModelFields().then(() => {
-        document.querySelectorAll('.measurement-fields').forEach(field => {
-            const type = field.closest('form').dataset.type;
-            const id = field.closest('form').dataset.id;
-            if (type && id) {
-                CRUD.setupMeasurementHandlers(type, id);
-            }
-        });
-    }).catch(error => {
-        console.error('Failed to initialize MODEL_FIELDS:', error);
-    });
-</script>
+    // Initialize tree manager
+    const treeManager = new TreeManager();
+    await treeManager.initialize('tree-container');
 
-<script>
-    function toggleOpenClose(id) {
-        var div = document.getElementById(id);
-        var icon = document.getElementById('id_chevronIcon-' + id);
-        if (div.classList.contains('w3-show')) {
-            div.classList.remove('w3-show');
-            div.classList.add('w3-hide');
-            icon.className = "bi bi-chevron-right";
-        } else {
-            div.classList.remove('w3-hide');
-            div.classList.add('w3-show');
-            icon.className = "bi bi-chevron-down";
+    // Handle project form submission
+    const projectForm = document.getElementById('project-form');
+    projectForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        
+        try {
+            const formData = new FormData(projectForm);
+            const response = await API.post('/api/projects/', Object.fromEntries(formData));
+            
+            // Close modal and refresh tree
+            DOM.getElement('#project-modal').style.display = 'none';
+            await treeManager.loadInitialState();
+            
+            NotificationUI.show({
+                message: 'Project created successfully',
+                type: 'success'
+            });
+            
+        } catch (error) {
+            NotificationUI.show({
+                message: `Error creating project: ${error.message}`,
+                type: 'error'
+            });
         }
-    }
+    });
+
+    // Handle modal actions
+    DOM.addDelegate(document, 'click', '[data-action="add-project"]', () => {
+        projectForm.reset();
+        DOM.getElement('#modal-title').textContent = 'New Project';
+        DOM.getElement('#project-modal').style.display = 'block';
+    });
+
+    DOM.addDelegate(document, 'click', '[data-action="close-modal"]', () => {
+        DOM.getElement('#project-modal').style.display = 'none';
+    });
 </script>
 {% endblock %}

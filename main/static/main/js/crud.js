@@ -1,18 +1,37 @@
 // crud.js
-// Core CRUD operations for tree items
+// Enhanced CRUD operations module with improved state management and error handling
 
 import { API } from './api.js';
 import { State } from './state.js';
-import { Forms } from './forms.js';
-import { TreeUI, StatusUI, NotificationUI } from './ui.js';
-import { Modal } from './modals.js';
+import { NotificationUI, TreeUI } from './ui.js';
+
+const CRUD_STATE_KEY = 'crud_state';
 
 /**
- * Handles CRUD operations for tree items
+ * CRUD Operation Manager for tree items
  */
 class TreeItemManager {
     constructor() {
         this.pendingOperations = new Map();
+        this.initialize();
+    }
+
+    /**
+     * Initialize CRUD state management
+     */
+    initialize() {
+        State.set(CRUD_STATE_KEY, {
+            activeOperations: new Set(),
+            lastOperation: null,
+            error: null
+        });
+
+        // Subscribe to API state changes
+        State.subscribe('api_state', (newState) => {
+            if (newState.error) {
+                this.handleError('API Error', newState.error);
+            }
+        });
     }
 
     /**
@@ -20,34 +39,32 @@ class TreeItemManager {
      * @param {string} type - Item type (project/location/measurement)
      * @param {Array} fields - Field configuration array
      * @param {string|null} parentId - Optional parent ID
+     * @returns {Promise<void>}
      */
     async addItem(type, fields, parentId = null) {
         try {
-            // Create temporary container with unique ID
+            this.startOperation('create', type);
+
+            // Create temporary container
             const tempId = `temp-${type}-${Date.now()}`;
-            const tempForm = await this._createTempForm(type, tempId, fields, parentId);
+            const tempForm = await this.createTempForm(type, tempId, fields, parentId);
             
-            // Find and update parent container
-            const parentContainer = this._getParentContainer(type, parentId);
+            // Find parent container
+            const parentContainer = this.getParentContainer(type, parentId);
             if (!parentContainer) {
                 throw new Error('Parent container not found');
             }
 
-            // Insert form in appropriate location
-            this._insertForm(tempForm, parentContainer, parentId);
-
-            // Set up form submission handling
-            this._setupFormSubmission(tempForm, type, tempId, fields, parentId);
+            // Insert form
+            this.insertForm(tempForm, parentContainer, parentId);
 
             // Focus first field
             tempForm.querySelector('input,select')?.focus();
 
+            this.completeOperation('create', type);
         } catch (error) {
-            console.error('Error in addItem:', error);
-            NotificationUI.show({
-                message: `Failed to create ${type}: ${error.message}`,
-                type: 'error'
-            });
+            this.handleError('Create Error', error);
+            this.completeOperation('create', type, error);
         }
     }
 
@@ -57,48 +74,42 @@ class TreeItemManager {
      * @param {string} type - Item type
      * @param {string} id - Item ID
      * @param {Array} fields - Field configuration array
+     * @returns {Promise<void>}
      */
     async updateItem(event, type, id, fields) {
         event.preventDefault();
-        Forms.clearErrors(type, id);
-
+        
         try {
-            // Validate form
-            if (!Forms.validate(type, id, fields)) {
-                return;
-            }
-
-            // Collect and validate data
-            const data = Forms.collectData(type, id, fields);
-            if (!data) {
+            this.startOperation('update', type);
+            
+            // Collect and validate form data
+            const form = event.target;
+            const data = this.collectFormData(form, fields);
+            if (!this.validateFormData(data, fields)) {
                 throw new Error('Invalid form data');
             }
 
             // Disable form during update
-            const form = event.target;
-            this._disableForm(form, true);
+            this.setFormDisabled(form, true);
 
             // Make API call
-            StatusUI.show(`Updating ${type}...`);
             const response = await API[`${type}s`].update(id, data);
 
-            // Update UI with response
-            await this._updateUIFromResponse(response, type, id);
-
+            // Update UI
+            await this.updateUIFromResponse(response, type, id);
+            
             NotificationUI.show({
                 message: `${type} updated successfully`,
                 type: 'success'
             });
 
+            this.completeOperation('update', type);
         } catch (error) {
-            console.error('Error in updateItem:', error);
-            Forms.showError(type, id, error.message);
-            
+            this.handleError('Update Error', error);
+            this.completeOperation('update', type, error);
         } finally {
-            // Re-enable form
             const form = document.getElementById(`${type}Form-${id}`);
-            this._disableForm(form, false);
-            StatusUI.hide();
+            this.setFormDisabled(form, false);
         }
     }
 
@@ -106,16 +117,15 @@ class TreeItemManager {
      * Deletes a tree item
      * @param {string} type - Item type
      * @param {string} id - Item ID
+     * @returns {Promise<void>}
      */
     async deleteItem(type, id) {
-        if (!confirm(`Are you sure you want to delete this ${type}? This action cannot be undone.`)) {
-            return;
-        }
-
-        const treeItem = document.getElementById(`id_form-${type}-${id}`)?.closest('.tree-item');
-        const container = document.getElementById(`id_${type}-${id}`);
-        
         try {
+            this.startOperation('delete', type);
+
+            const treeItem = document.getElementById(`id_form-${type}-${id}`)?.closest('.tree-item');
+            const container = document.getElementById(`id_${type}-${id}`);
+            
             // Start fade animation
             [treeItem, container].forEach(el => {
                 if (el) {
@@ -136,10 +146,9 @@ class TreeItemManager {
                 type: 'success'
             });
 
+            this.completeOperation('delete', type);
         } catch (error) {
-            console.error('Error in deleteItem:', error);
-            
-            // Restore elements
+            // Restore elements on error
             [treeItem, container].forEach(el => {
                 if (el) {
                     el.style.opacity = '1';
@@ -147,10 +156,8 @@ class TreeItemManager {
                 }
             });
 
-            NotificationUI.show({
-                message: `Failed to delete ${type}: ${error.message}`,
-                type: 'error'
-            });
+            this.handleError('Delete Error', error);
+            this.completeOperation('delete', type, error);
         }
     }
 
@@ -159,13 +166,16 @@ class TreeItemManager {
      * @param {string} type - Item type
      * @param {string} id - Item ID
      * @param {Array} fields - Field configuration array
+     * @returns {Promise<void>}
      */
     async editItem(type, id, fields) {
         try {
+            this.startOperation('edit', type);
+
             const form = document.getElementById(`${type}Form-${id}`);
             if (!form) throw new Error('Form not found');
 
-            // Store original values
+            // Store original values and make fields editable
             fields.forEach(field => {
                 const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
                 if (!element) return;
@@ -175,7 +185,6 @@ class TreeItemManager {
                     element.dataset.originalText = element.options[element.selectedIndex]?.text;
                 }
 
-                // Make editable
                 element.removeAttribute(element.tagName === 'SELECT' ? 'disabled' : 'readonly');
                 element.style.display = 'inline-block';
                 element.classList.add('editing');
@@ -190,12 +199,10 @@ class TreeItemManager {
             // Focus name field
             document.getElementById(`id_${type}Name-${id}`)?.focus();
 
+            this.completeOperation('edit', type);
         } catch (error) {
-            console.error('Error in editItem:', error);
-            NotificationUI.show({
-                message: `Failed to edit ${type}: ${error.message}`,
-                type: 'error'
-            });
+            this.handleError('Edit Error', error);
+            this.completeOperation('edit', type, error);
         }
     }
 
@@ -210,6 +217,8 @@ class TreeItemManager {
         event.preventDefault();
 
         try {
+            this.startOperation('cancelEdit', type);
+
             fields.forEach(field => {
                 const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
                 if (!element) return;
@@ -236,46 +245,11 @@ class TreeItemManager {
                 controls.style.display = 'none';
             }
 
-            Forms.clearErrors(type, id);
-
+            this.clearFormErrors(type, id);
+            this.completeOperation('cancelEdit', type);
         } catch (error) {
-            console.error('Error in cancelEdit:', error);
-            NotificationUI.show({
-                message: `Failed to cancel edit: ${error.message}`,
-                type: 'error'
-            });
-        }
-    }
-
-    /**
-     * Shows measurement modal
-     * @param {string} locationId - Location ID
-     */
-    showMeasurementModal(locationId) {
-        try {
-            Modal.show(locationId);
-        } catch (error) {
-            console.error('Error showing modal:', error);
-            NotificationUI.show({
-                message: `Failed to show modal: ${error.message}`,
-                type: 'error'
-            });
-        }
-    }
-
-    /**
-     * Hides measurement modal
-     * @param {string} locationId - Location ID
-     */
-    hideMeasurementModal(locationId) {
-        try {
-            Modal.hide(locationId);
-        } catch (error) {
-            console.error('Error hiding modal:', error);
-            NotificationUI.show({
-                message: `Failed to hide modal: ${error.message}`,
-                type: 'error'
-            });
+            this.handleError('Cancel Edit Error', error);
+            this.completeOperation('cancelEdit', type, error);
         }
     }
 
@@ -285,7 +259,7 @@ class TreeItemManager {
      * Creates a temporary form for new items
      * @private
      */
-    async _createTempForm(type, tempId, fields, parentId) {
+    async createTempForm(type, tempId, fields, parentId) {
         const form = document.createElement('form');
         form.id = `id_${type}Form-${tempId}`;
         form.className = 'tree-item w3-hover-light-grey';
@@ -305,7 +279,7 @@ class TreeItemManager {
         fieldsContainer.className = 'fields-container';
 
         for (const field of fields) {
-            const input = await Forms.createField(field, type, tempId);
+            const input = await TreeUI.createField(field, type, tempId);
             fieldsContainer.appendChild(input);
         }
 
@@ -322,7 +296,7 @@ class TreeItemManager {
      * Gets parent container for new items
      * @private
      */
-    _getParentContainer(type, parentId) {
+    getParentContainer(type, parentId) {
         return parentId
             ? document.getElementById(`id_${type}-${parentId}`)
             : document.querySelector('.tree-headings');
@@ -332,7 +306,7 @@ class TreeItemManager {
      * Inserts form into DOM
      * @private
      */
-    _insertForm(form, parentContainer, parentId) {
+    insertForm(form, parentContainer, parentId) {
         if (parentId) {
             parentContainer.classList.remove('w3-hide');
             parentContainer.classList.add('w3-show');
@@ -348,44 +322,36 @@ class TreeItemManager {
     }
 
     /**
-     * Sets up form submission handling
+     * Collects form data
      * @private
      */
-    _setupFormSubmission(form, type, tempId, fields, parentId) {
-        form.onsubmit = async (event) => {
-            event.preventDefault();
-            
-            try {
-                this._disableForm(form, true);
-
-                const data = Forms.collectData(type, tempId, fields);
-                if (parentId) {
-                    data[`${type}_id`] = parentId;
-                }
-
-                const response = await API[`${type}s`].create(data);
-                await this._updateUIFromResponse(response, type, tempId);
-
-                NotificationUI.show({
-                    message: `${type} created successfully`,
-                    type: 'success'
-                });
-
-            } catch (error) {
-                console.error('Error in form submission:', error);
-                Forms.showError(type, tempId, error.message);
-
-            } finally {
-                this._disableForm(form, false);
+    collectFormData(form, fields) {
+        const data = {};
+        fields.forEach(field => {
+            const element = form.querySelector(`[name="${field}"]`);
+            if (element) {
+                data[field] = element.value;
             }
-        };
+        });
+        return data;
+    }
+
+    /**
+     * Validates form data
+     * @private
+     */
+    validateFormData(data, fields) {
+        return fields.every(field => {
+            const value = data[field];
+            return value !== undefined && value !== '';
+        });
     }
 
     /**
      * Updates UI with API response
      * @private
      */
-    async _updateUIFromResponse(response, type, id) {
+    async updateUIFromResponse(response, type, id) {
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = response.html;
 
@@ -396,15 +362,75 @@ class TreeItemManager {
     }
 
     /**
-     * Disables/enables form inputs
+     * Sets form disabled state
      * @private
      */
-    _disableForm(form, disabled) {
+    setFormDisabled(form, disabled) {
         if (!form) return;
         
         form.querySelectorAll('input, select, button').forEach(element => {
             element.disabled = disabled;
         });
+    }
+
+    /**
+     * Clears form errors
+     * @private
+     */
+    clearFormErrors(type, id) {
+        const form = document.getElementById(`${type}Form-${id}`);
+        if (!form) return;
+
+        form.querySelectorAll('.field-error').forEach(error => error.remove());
+        form.querySelectorAll('.error').forEach(field => field.classList.remove('error'));
+    }
+
+    /**
+     * Starts a CRUD operation
+     * @private
+     */
+    startOperation(operation, type) {
+        const activeOperations = State.get(CRUD_STATE_KEY).activeOperations;
+        activeOperations.add(`${operation}_${type}`);
+        State.update(CRUD_STATE_KEY, { activeOperations });
+    }
+
+    /**
+     * Completes a CRUD operation
+     * @private
+     */
+    completeOperation(operation, type, error = null) {
+        const state = State.get(CRUD_STATE_KEY);
+        state.activeOperations.delete(`${operation}_${type}`);
+        State.update(CRUD_STATE_KEY, {
+            activeOperations: state.activeOperations,
+            lastOperation: {
+                type: operation,
+                itemType: type,
+                timestamp: new Date(),
+                status: error ? 'error' : 'success',
+                error
+            }
+        });
+    }
+
+    /**
+     * Handles operation errors
+     * @private
+     */
+    handleError(context, error) {
+        console.error(`${context}:`, error);
+        
+        NotificationUI.show({
+            message: `${context}: ${error.message}`,
+            type: 'error'
+        });
+
+        State.update(CRUD_STATE_KEY, { error: {
+            context,
+            message: error.message,
+            timestamp: new Date()
+        }});
     }
 }
 

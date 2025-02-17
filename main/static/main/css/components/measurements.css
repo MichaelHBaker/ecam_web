@@ -1,0 +1,55 @@
+/* components/measurements.css */
+/* Measurement specific styles */
+
+.measurement-fields {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.unit-select,
+.multiplier-select,
+.timezone-select {
+    padding: 4px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.unit-select { min-width: 120px; }
+.multiplier-select { width: 100px; }
+.timezone-select { width: 160px; }
+
+/* CodeMirror customizations */
+.CodeMirror {
+    height: 100% !important;
+    border: 1px solid #ccc;
+}
+
+.CodeMirror-gutters {
+    border-right: 1px solid #ddd;
+    z-index: 5;
+    display: flex;
+}
+
+.CodeMirror-linenumbers {
+    border-right: 1px solid #eee;
+}
+
+.CodeMirror-gutter {
+    min-width: 35px;
+}
+
+.CodeMirror-linenumber {
+    color: #999;
+    padding: 0 3px 0 5px;
+    cursor: default;
+}
+
+.CodeMirror-linedata {
+    color: #2196F3;
+    text-align: right;
+    font-size: 12px;
+    padding: 0 5px;
+    cursor: pointer;
+}

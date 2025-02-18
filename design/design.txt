@@ -5,15 +5,16 @@ use case
         find a project 
         add project 
 
-refactor
-    complete function update
-    can i delete templatetags
-    explore other classes that need revision
-    figure out imports not used
-    go over services
-    revisit the new api py
-    go over sources
-    examine urls 
+Models
+Equation or expression 
+Operator 
+Parameters 
+Coefficients 
+Templates with assignable elements 
+Shared interpolation 
+Parameters can be computed or a measurement 
+Equations can be joined
+ISO 80000-2 mathemnatical symbols and operators
 
 Immediate
     Get it working again

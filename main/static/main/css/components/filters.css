@@ -1,21 +1,52 @@
 /* components/filters.css */
+/* Filter component styles - extends w3.css */
 
-/* Only styles that extend w3.css functionality */
-
-/* Filter container - uses w3-bar-item as base */
-.filter-container {
-    border-bottom: 1px solid #eee;
+/* Filter container */
+.filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
 }
 
-/* Active filter state - extends w3-pale-blue */
-.filter-active {
+/* Filter input */
+.filter-input {
+    flex-grow: 1;
     position: relative;
+}
+
+.filter-input input {
+    padding-right: 32px; /* Space for clear button */
+}
+
+/* Clear button */
+.clear-filter {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    color: #757575;
+    display: none;
+    background: none;
+    border: none;
+    padding: 4px;
+}
+
+/* Show clear button when input has content */
+.w3-input:not(:placeholder-shown) ~ .clear-filter {
+    display: block;
+}
+
+/* Active filter indicator */
+.filter-active .w3-input {
+    border-color: #2196F3;
 }
 
 .filter-active::after {
     content: '';
     position: absolute;
-    right: 8px;
+    right: 32px;
     top: 50%;
     width: 8px;
     height: 8px;
@@ -24,20 +55,52 @@
     transform: translateY(-50%);
 }
 
-/* Loading state - uses w3-spin */
-.filter-loading {
+/* Filter loading state */
+.filter-loading .w3-input {
+    padding-right: 40px;
+}
+
+.filter-loading::after {
+    content: '';
     position: absolute;
-    right: 8px;
+    right: 32px;
     top: 50%;
+    width: 16px;
+    height: 16px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #2196F3;
+    border-radius: 50%;
     transform: translateY(-50%);
+    animation: spin 1s linear infinite;
 }
 
-/* Clear button container - extends w3-right */
-.filter-clear-container {
-    display: none;
+/* Filter count badge */
+.filter-count {
+    background: #2196F3;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    margin-left: 8px;
 }
 
-/* Show clear button when filter has content */
-.w3-input:not(:placeholder-shown) ~ .filter-clear-container {
-    display: block;
+/* Filter options */
+.filter-options {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+    .filter-bar {
+        flex-wrap: wrap;
+    }
+    
+    .filter-options {
+        width: 100%;
+        margin-top: 8px;
+        justify-content: flex-end;
+    }
 }

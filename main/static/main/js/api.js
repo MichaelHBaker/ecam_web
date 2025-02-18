@@ -1,60 +1,66 @@
 // api.js
-// Enhanced API interface module with improved error handling and state management
+// Enhanced API interface aligned with Django TreeNodeViewSet
 
 import { State } from './state.js';
 
-// Constants
 const API_STATE_KEY = 'api_state';
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000;
 
 /**
- * Get CSRF token with validation
- * @returns {string|null}
+ * API Error Types based on Django response patterns
  */
-const getCSRFToken = () => {
-    const token = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
-    if (!token) {
-        console.warn('CSRF token not found in the DOM');
-        return null;
-    }
-    return token;
+const API_ERROR_TYPES = {
+    VALIDATION: 'validation_error',
+    PERMISSION: 'permission_error',
+    NOT_FOUND: 'not_found',
+    NETWORK: 'network_error',
+    SERVER: 'server_error',
+    UNKNOWN: 'unknown_error'
 };
 
 /**
- * Configuration object for API calls
+ * Enhanced API Error class
  */
-const API_CONFIG = {
-    basePath: '/api',
-    headers: {
-        'X-CSRFToken': getCSRFToken(),
-        'Content-Type': 'application/json'
-    },
-    credentials: 'include',
-    retryCount: 0
-};
-
-/**
- * Enhanced error class for API responses
- */
-export class APIError extends Error {
-    constructor(message, response, data) {
+class APIError extends Error {
+    constructor(type, message, response, data = null) {
         super(message);
         this.name = 'APIError';
+        this.type = type;
         this.response = response;
         this.data = data;
-        this.status = response.status;
+        this.status = response?.status;
         this.timestamp = new Date();
-        this.retryable = this.isRetryable();
     }
 
     /**
-     * Determine if error is retryable
+     * Format validation errors from Django
+     * @returns {Object} Formatted errors
+     */
+    getValidationErrors() {
+        if (this.type !== API_ERROR_TYPES.VALIDATION || !this.data) {
+            return null;
+        }
+
+        // Handle Django validation error format
+        const errors = {};
+        Object.entries(this.data).forEach(([field, messages]) => {
+            errors[field] = Array.isArray(messages) ? messages : [messages];
+        });
+
+        return errors;
+    }
+
+    /**
+     * Check if error is retryable
      * @returns {boolean}
      */
     isRetryable() {
-        return [408, 429, 502, 503, 504].includes(this.status) || 
-               this.status === 0; // Network error
+        return [
+            408, // Request Timeout
+            429, // Too Many Requests
+            502, // Bad Gateway
+            503, // Service Unavailable
+            504  // Gateway Timeout
+        ].includes(this.status) || this.type === API_ERROR_TYPES.NETWORK;
     }
 
     /**
@@ -63,7 +69,7 @@ export class APIError extends Error {
      */
     toLog() {
         return {
-            name: this.name,
+            type: this.type,
             message: this.message,
             status: this.status,
             timestamp: this.timestamp,
@@ -74,6 +80,72 @@ export class APIError extends Error {
 }
 
 /**
+ * Enhanced CSRF token management
+ */
+const CSRFManager = {
+    token: null,
+
+    /**
+     * Get CSRF token with validation
+     * @returns {string|null}
+     */
+    getToken() {
+        if (this.token) return this.token;
+
+        const tokenElement = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (tokenElement) {
+            this.token = tokenElement.value;
+            return this.token;
+        }
+
+        const cookieToken = this.getTokenFromCookie();
+        if (cookieToken) {
+            this.token = cookieToken;
+            return this.token;
+        }
+
+        console.warn('CSRF token not found');
+        return null;
+    },
+
+    /**
+     * Get token from Django CSRF cookie
+     * @private
+     */
+    getTokenFromCookie() {
+        const cookieName = 'csrftoken';
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${cookieName}=`);
+        if (parts.length === 2) {
+            return parts.pop().split(';').shift();
+        }
+        return null;
+    },
+
+    /**
+     * Reset stored token
+     */
+    reset() {
+        this.token = null;
+    }
+};
+
+/**
+ * API Configuration
+ */
+const API_CONFIG = {
+    basePath: '/api',
+    headers: {
+        'Content-Type': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+    },
+    credentials: 'include',
+    retryCount: 0,
+    maxRetries: 3,
+    retryDelay: 1000,
+    timeout: 30000
+};
+/**
  * Request interceptor for preprocessing requests
  * @param {Object} config - Request configuration
  * @returns {Object} Modified configuration
@@ -83,12 +155,34 @@ const requestInterceptor = (config) => {
     State.update(API_STATE_KEY, {
         loading: true,
         endpoint: config.endpoint,
-        method: config.method
+        method: config.method,
+        timestamp: new Date()
     });
 
-    // Refresh CSRF token
-    config.headers['X-CSRFToken'] = getCSRFToken();
-    
+    // Add CSRF token
+    const token = CSRFManager.getToken();
+    if (token) {
+        config.headers['X-CSRFToken'] = token;
+    }
+
+    // Add Django expected headers for AJAX
+    config.headers['X-Requested-With'] = 'XMLHttpRequest';
+
+    // Handle query parameters
+    if (config.params) {
+        const params = new URLSearchParams();
+        Object.entries(config.params).forEach(([key, value]) => {
+            if (value !== null && value !== undefined) {
+                if (Array.isArray(value)) {
+                    value.forEach(v => params.append(key, v));
+                } else {
+                    params.append(key, value);
+                }
+            }
+        });
+        config.endpoint += `?${params.toString()}`;
+    }
+
     return config;
 };
 
@@ -107,26 +201,68 @@ const responseInterceptor = async (response) => {
         }
     });
 
+    // Handle response based on status
+    if (!response.ok) {
+        let errorType = API_ERROR_TYPES.UNKNOWN;
+        let errorData = null;
+        let errorMessage = response.statusText;
+
+        try {
+            const contentType = response.headers.get('content-type');
+            if (contentType?.includes('application/json')) {
+                errorData = await response.json();
+                errorMessage = errorData.detail || errorData.message || errorMessage;
+            }
+
+            // Map Django response status to error type
+            switch (response.status) {
+                case 400:
+                    errorType = API_ERROR_TYPES.VALIDATION;
+                    break;
+                case 403:
+                    errorType = API_ERROR_TYPES.PERMISSION;
+                    break;
+                case 404:
+                    errorType = API_ERROR_TYPES.NOT_FOUND;
+                    break;
+                case 500:
+                    errorType = API_ERROR_TYPES.SERVER;
+                    break;
+            }
+        } catch (error) {
+            console.error('Error parsing error response:', error);
+        }
+
+        throw new APIError(errorType, errorMessage, response, errorData);
+    }
+
     return response;
 };
 
 /**
- * Enhanced API client with error handling and request configuration
+ * Enhanced API client with Django-specific handling
  */
-export const APIClient = {
+class APIClient {
+    constructor(config = {}) {
+        this.config = {
+            ...API_CONFIG,
+            ...config
+        };
+    }
+
     /**
      * Send API request with retry logic
      * @param {string} endpoint - API endpoint
-     * @param {Object} options - Fetch options
+     * @param {Object} options - Request options
      * @returns {Promise} API response
      */
     async request(endpoint, options = {}) {
         const config = {
-            ...API_CONFIG,
+            ...this.config,
             ...options,
             endpoint,
             headers: {
-                ...API_CONFIG.headers,
+                ...this.config.headers,
                 ...(options.headers || {})
             }
         };
@@ -138,218 +274,510 @@ export const APIClient = {
 
         // Process request through interceptor
         const processedConfig = requestInterceptor(config);
-        const cleanEndpoint = processedConfig.endpoint.startsWith('/') ? 
-            processedConfig.endpoint : 
-            `/${processedConfig.endpoint}`;
-        const url = `${API_CONFIG.basePath}${cleanEndpoint}`;
+        const url = this.buildUrl(processedConfig.endpoint);
 
         try {
-            const response = await fetch(url, processedConfig);
-            const interceptedResponse = await responseInterceptor(response);
-            return this._handleResponse(interceptedResponse);
+            // Add timeout
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => {
+                    reject(new APIError(
+                        API_ERROR_TYPES.NETWORK,
+                        'Request timeout',
+                        { status: 408 }
+                    ));
+                }, this.config.timeout);
+            });
+
+            // Send request with timeout
+            const response = await Promise.race([
+                fetch(url, processedConfig),
+                timeoutPromise
+            ]);
+
+            // Process response
+            const processedResponse = await responseInterceptor(response);
+            return this.handleResponse(processedResponse);
+
         } catch (error) {
-            const apiError = new APIError(
-                'Network error occurred',
-                { status: 0, statusText: error.message },
-                null
-            );
+            // Handle network errors
+            if (!(error instanceof APIError)) {
+                error = new APIError(
+                    API_ERROR_TYPES.NETWORK,
+                    'Network error occurred',
+                    { status: 0 }
+                );
+            }
 
             // Retry logic for retryable errors
-            if (apiError.retryable && config.retryCount < MAX_RETRIES) {
+            if (error.isRetryable() && config.retryCount < this.config.maxRetries) {
                 config.retryCount++;
-                await new Promise(resolve => setTimeout(resolve, RETRY_DELAY * config.retryCount));
+                const delay = this.config.retryDelay * config.retryCount;
+                await new Promise(resolve => setTimeout(resolve, delay));
                 return this.request(endpoint, config);
             }
 
-            throw apiError;
+            throw error;
         }
-    },
-
+    }
     /**
-     * Enhanced response handler with improved error processing
+     * Handle API response with Django-specific processing
      * @private
      */
-    async _handleResponse(response) {
+    async handleResponse(response) {
         const contentType = response.headers.get('content-type');
-        let data;
-
+        
         try {
             if (contentType?.includes('application/json')) {
-                data = await response.json();
+                const data = await response.json();
+                
+                // Handle Django pagination format
+                if (data.hasOwnProperty('results') && data.hasOwnProperty('count')) {
+                    return {
+                        nodes: data.results,
+                        total: data.count,
+                        hasMore: data.next !== null,
+                        page: {
+                            current: data.current_page,
+                            total: data.total_pages,
+                            size: data.page_size
+                        }
+                    };
+                }
+                
+                return data;
             } else if (response.status === 204) {
                 return null;
             } else {
-                data = await response.text();
+                return await response.text();
             }
-
-            if (!response.ok) {
-                let message;
-                if (response.status === 400 && typeof data === 'object') {
-                    message = Object.entries(data)
-                        .map(([field, messages]) => {
-                            if (Array.isArray(messages)) {
-                                return `${field}: ${messages.join(', ')}`;
-                            }
-                            return `${field}: ${messages}`;
-                        })
-                        .join('\n');
-                } else {
-                    message = data.detail || `API Error: ${response.statusText}`;
-                }
-
-                throw new APIError(message, response, data);
-            }
-
-            return data;
         } catch (error) {
-            // Log error details
-            console.error('API Response Error:', error.toLog?.() || error);
-            throw error;
+            throw new APIError(
+                API_ERROR_TYPES.UNKNOWN,
+                'Error processing response',
+                response,
+                error
+            );
         }
+    }
+
+    /**
+     * Build full URL for endpoint
+     * @private
+     */
+    buildUrl(endpoint) {
+        const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+        return `${this.config.basePath}${cleanEndpoint}`;
+    }
+}
+
+/**
+ * TreeNode API methods aligned with Django ViewSets
+ */
+const treeNodeAPI = {
+    /**
+     * Project endpoints
+     */
+    Projects: {
+        /**
+         * List projects with filtering and pagination
+         * @param {Object} params - Query parameters
+         * @returns {Promise} Project list response
+         */
+        list: (params = {}) => 
+            client.request('projects/', {
+                method: 'GET',
+                params: {
+                    offset: params.offset || 0,
+                    limit: params.limit || 20,
+                    filter: params.filter || '',
+                    ordering: params.ordering || '-created_at'
+                }
+            }),
+
+        /**
+         * Get project details
+         * @param {string} id - Project ID
+         * @returns {Promise} Project details response
+         */
+        get: (id) => 
+            client.request(`projects/${id}/`),
+
+        /**
+         * Create new project
+         * @param {Object} data - Project data
+         * @returns {Promise} Created project response
+         */
+        create: (data) => 
+            client.request('projects/', {
+                method: 'POST',
+                body: JSON.stringify(data)
+            }),
+
+        /**
+         * Update project
+         * @param {string} id - Project ID
+         * @param {Object} data - Update data
+         * @returns {Promise} Updated project response
+         */
+        update: (id, data) => 
+            client.request(`projects/${id}/`, {
+                method: 'PATCH',
+                body: JSON.stringify(data)
+            }),
+
+        /**
+         * Delete project
+         * @param {string} id - Project ID
+         * @returns {Promise} Delete response
+         */
+        delete: (id) => 
+            client.request(`projects/${id}/`, {
+                method: 'DELETE'
+            }),
+
+        /**
+         * Get project children (locations)
+         * @param {string} id - Project ID
+         * @param {Object} params - Query parameters
+         * @returns {Promise} Children response
+         */
+        getChildren: (id, params = {}) => 
+            client.request(`projects/${id}/children/`, {
+                params: {
+                    offset: params.offset || 0,
+                    limit: params.limit || 20,
+                    filter: params.filter || ''
+                }
+            }),
+
+        /**
+         * Get project access information
+         * @param {string} id - Project ID
+         * @returns {Promise} Access response
+         */
+        getAccess: (id) => 
+            client.request(`projects/${id}/access/`),
+
+        /**
+         * Grant project access
+         * @param {string} id - Project ID
+         * @param {string} userId - User ID
+         * @returns {Promise} Grant response
+         */
+        grantAccess: (id, userId) => 
+            client.request(`projects/${id}/grant-access/`, {
+                method: 'POST',
+                body: JSON.stringify({ user_id: userId })
+            }),
+
+        /**
+         * Revoke project access
+         * @param {string} id - Project ID
+         * @param {string} userId - User ID
+         * @returns {Promise} Revoke response
+         */
+        revokeAccess: (id, userId) => 
+            client.request(`projects/${id}/revoke-access/`, {
+                method: 'POST',
+                body: JSON.stringify({ user_id: userId })
+            })
+    },
+    /**
+     * Location endpoints
+     */
+    Locations: {
+        /**
+         * List locations with filtering and pagination
+         * @param {Object} params - Query parameters
+         * @returns {Promise} Location list response
+         */
+        list: (params = {}) => 
+            client.request('locations/', {
+                params: {
+                    project: params.project,
+                    offset: params.offset || 0,
+                    limit: params.limit || 20,
+                    filter: params.filter || '',
+                    ordering: params.ordering || 'name'
+                }
+            }),
+
+        /**
+         * Get location details
+         * @param {string} id - Location ID
+         * @returns {Promise} Location details response
+         */
+        get: (id) => 
+            client.request(`locations/${id}/`),
+
+        /**
+         * Create new location
+         * @param {Object} data - Location data
+         * @returns {Promise} Created location response
+         */
+        create: (data) => 
+            client.request('locations/', {
+                method: 'POST',
+                body: JSON.stringify(data)
+            }),
+
+        /**
+         * Update location
+         * @param {string} id - Location ID
+         * @param {Object} data - Update data
+         * @returns {Promise} Updated location response
+         */
+        update: (id, data) => 
+            client.request(`locations/${id}/`, {
+                method: 'PATCH',
+                body: JSON.stringify(data)
+            }),
+
+        /**
+         * Delete location
+         * @param {string} id - Location ID
+         * @returns {Promise} Delete response
+         */
+        delete: (id) => 
+            client.request(`locations/${id}/`, {
+                method: 'DELETE'
+            }),
+
+        /**
+         * Get location children (measurements)
+         * @param {string} id - Location ID
+         * @param {Object} params - Query parameters
+         * @returns {Promise} Children response
+         */
+        getChildren: (id, params = {}) => 
+            client.request(`locations/${id}/children/`, {
+                params: {
+                    offset: params.offset || 0,
+                    limit: params.limit || 20,
+                    filter: params.filter || '',
+                    type: params.type || ''
+                }
+            }),
+
+        /**
+         * Get location statistics
+         * @param {string} id - Location ID
+         * @returns {Promise} Statistics response
+         */
+        getStats: (id) => 
+            client.request(`locations/${id}/stats/`)
     },
 
     /**
-     * GET request with query parameter handling
-     * @param {string} endpoint - API endpoint
-     * @param {Object} [params] - Query parameters
-     * @returns {Promise} API response
+     * Measurement endpoints
      */
-    async get(endpoint, params = null) {
-        const url = params ? 
-            `${endpoint}?${new URLSearchParams(params)}` : 
-            endpoint;
-        return this.request(url, { method: 'GET' });
-    },
+    Measurements: {
+        /**
+         * List measurements with filtering and pagination
+         * @param {Object} params - Query parameters
+         * @returns {Promise} Measurement list response
+         */
+        list: (params = {}) => 
+            client.request('measurements/', {
+                params: {
+                    location: params.location,
+                    category: params.category,
+                    type: params.type,
+                    offset: params.offset || 0,
+                    limit: params.limit || 20,
+                    filter: params.filter || '',
+                    ordering: params.ordering || 'name'
+                }
+            }),
 
-    /**
-     * POST request with improved data handling
-     * @param {string} endpoint - API endpoint
-     * @param {Object} data - Request data
-     * @returns {Promise} API response
-     */
-    async post(endpoint, data) {
-        return this.request(endpoint, {
-            method: 'POST',
-            body: data instanceof FormData ? data : JSON.stringify(data)
-        });
-    },
+        /**
+         * Get measurement details
+         * @param {string} id - Measurement ID
+         * @returns {Promise} Measurement details response
+         */
+        get: (id) => 
+            client.request(`measurements/${id}/`),
 
-    /**
-     * PATCH request with data validation
-     * @param {string} endpoint - API endpoint
-     * @param {Object} data - Request data
-     * @returns {Promise} API response
-     */
-    async patch(endpoint, data) {
-        if (!data || typeof data !== 'object') {
-            throw new Error('Invalid data for PATCH request');
-        }
-        return this.request(endpoint, {
-            method: 'PATCH',
-            body: JSON.stringify(data)
-        });
-    },
+        /**
+         * Create new measurement
+         * @param {Object} data - Measurement data
+         * @returns {Promise} Created measurement response
+         */
+        create: (data) => 
+            client.request('measurements/', {
+                method: 'POST',
+                body: JSON.stringify(data)
+            }),
 
-    /**
-     * DELETE request with confirmation option
-     * @param {string} endpoint - API endpoint
-     * @param {boolean} [confirm=false] - Whether to confirm deletion
-     * @returns {Promise} API response
-     */
-    async delete(endpoint, confirm = false) {
-        if (confirm && !window.confirm('Are you sure you want to delete this item?')) {
-            throw new Error('Delete operation cancelled by user');
-        }
-        return this.request(endpoint, { method: 'DELETE' });
+        /**
+         * Update measurement
+         * @param {string} id - Measurement ID
+         * @param {Object} data - Update data
+         * @returns {Promise} Updated measurement response
+         */
+        update: (id, data) => 
+            client.request(`measurements/${id}/`, {
+                method: 'PATCH',
+                body: JSON.stringify(data)
+            }),
+
+        /**
+         * Delete measurement
+         * @param {string} id - Measurement ID
+         * @returns {Promise} Delete response
+         */
+        delete: (id) => 
+            client.request(`measurements/${id}/`, {
+                method: 'DELETE'
+            }),
+
+        /**
+         * Get measurement timeseries data
+         * @param {string} id - Measurement ID
+         * @param {Object} params - Query parameters
+         * @returns {Promise} Timeseries response
+         */
+        getTimeseries: (id, params = {}) => 
+            client.request(`measurements/${id}/timeseries/`, {
+                params: {
+                    start: params.start,
+                    end: params.end,
+                    interval: params.interval || 'hour',
+                    aggregate: params.aggregate || 'avg'
+                }
+            }),
+
+        /**
+         * Get measurement type choices
+         * @returns {Promise} Choices response
+         */
+        getChoices: () => 
+            client.request('measurements/choices/')
     }
 };
+/**
+ * Model fields API for form building
+ */
+const modelFieldsAPI = {
+    /**
+     * Get field definitions for all models
+     * @returns {Promise} Field definitions response
+     */
+    getFields: () => 
+        client.request('fields/'),
 
-// Initialize API state in state management
+    /**
+     * Get validation rules
+     * @returns {Promise} Validation rules response
+     */
+    getValidationRules: () => 
+        client.request('fields/validation-rules/'),
+
+    /**
+     * Get field dependencies
+     * @returns {Promise} Dependencies response
+     */
+    getDependencies: () => 
+        client.request('fields/dependencies/')
+};
+
+/**
+ * Initialize API client with configuration
+ */
+const client = new APIClient({
+    onError: (error) => {
+        // Update global error state
+        State.update(API_STATE_KEY, {
+            error: {
+                type: error.type,
+                message: error.message,
+                timestamp: new Date()
+            }
+        });
+
+        // Log error details
+        console.error('API Error:', error.toLog());
+    },
+
+    onRetry: (endpoint, retryCount) => {
+        // Update retry state
+        State.update(API_STATE_KEY, {
+            retries: {
+                endpoint,
+                count: retryCount,
+                timestamp: new Date()
+            }
+        });
+
+        console.warn(`Retrying request to ${endpoint} (attempt ${retryCount})`);
+    }
+});
+
+// Initialize API state
 State.set(API_STATE_KEY, {
     loading: false,
     lastResponse: null,
-    error: null
+    error: null,
+    retries: null
 });
 
 /**
- * Domain-specific API endpoints with improved error handling
+ * API module exports
+ */
+export {
+    APIError,
+    API_ERROR_TYPES,
+    CSRFManager
+};
+
+/**
+ * Export combined API interface
  */
 export const API = {
-    Projects: {
-        list: () => APIClient.get('/projects/'),
-        get: (id) => APIClient.get(`/projects/${id}/`),
-        create: (data) => APIClient.post('/projects/', data),
-        update: (id, data) => APIClient.patch(`/projects/${id}/`, data),
-        delete: (id) => APIClient.delete(`/projects/${id}/`, true),
-        getAccess: (id) => APIClient.get(`/projects/${id}/access/`),
-        grantAccess: (id, userId) => APIClient.post(`/projects/${id}/grant-access/`, { user_id: userId }),
-        revokeAccess: (id, userId) => APIClient.post(`/projects/${id}/revoke-access/`, { user_id: userId })
+    ...treeNodeAPI,
+    ModelFields: modelFieldsAPI,
+
+    // General convenience methods
+    get: (endpoint, params) => client.request(endpoint, { method: 'GET', params }),
+    post: (endpoint, data) => client.request(endpoint, { method: 'POST', body: JSON.stringify(data) }),
+    patch: (endpoint, data) => client.request(endpoint, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (endpoint) => client.request(endpoint, { method: 'DELETE' }),
+
+    /**
+     * Reset API client state
+     */
+    reset: () => {
+        CSRFManager.reset();
+        State.update(API_STATE_KEY, {
+            loading: false,
+            lastResponse: null,
+            error: null,
+            retries: null
+        });
     },
 
-    Locations: {
-        list: (projectId) => APIClient.get('/locations/', { project: projectId }),
-        get: (id) => APIClient.get(`/locations/${id}/`),
-        create: (data) => APIClient.post('/locations/', data),
-        update: (id, data) => APIClient.patch(`/locations/${id}/`, data),
-        delete: (id) => APIClient.delete(`/locations/${id}/`, true),
-        getMeasurements: (id) => APIClient.get(`/locations/${id}/measurements/`),
-        getStats: (id) => APIClient.get(`/locations/${id}/stats/`)
-    },
+    /**
+     * Get current API state
+     * @returns {Object} Current API state
+     */
+    getState: () => State.get(API_STATE_KEY),
 
-    Measurements: {
-        list: (locationId) => APIClient.get('/measurements/', { location: locationId }),
-        get: (id) => APIClient.get(`/measurements/${id}/`),
-        create: (data) => APIClient.post('/measurements/', data),
-        update: (id, data) => APIClient.patch(`/measurements/${id}/`, data),
-        delete: (id) => APIClient.delete(`/measurements/${id}/`, true),
-        getTimeseries: (id, params) => APIClient.get(`/measurements/${id}/timeseries/`, params),
-        getChoices: () => APIClient.get('/measurements/choices/')
-    },
+    /**
+     * Check if API is currently loading
+     * @returns {boolean} Loading state
+     */
+    isLoading: () => State.get(API_STATE_KEY)?.loading || false,
 
-    DataImports: {
-        create: (locationId, file) => {
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('location_id', locationId);
-            return APIClient.post('/data-imports/', formData);
-        },
-        get: (id) => APIClient.get(`/data-imports/${id}/`),
-        getContent: (id, start, size) => APIClient.post(`/data-imports/${id}/content/`, { start, size }),
-        processBatch: (id, config, data) => APIClient.post(`/data-imports/${id}/process-batch/`, { config, data })
-    },
+    /**
+     * Get last API error if any
+     * @returns {Object|null} Last error
+     */
+    getLastError: () => State.get(API_STATE_KEY)?.error || null,
 
-    Datasets: {
-        list: (sourceId) => APIClient.get('/datasets/', { source: sourceId }),
-        get: (id) => APIClient.get(`/datasets/${id}/`),
-        create: (data) => APIClient.post('/datasets/', data),
-        update: (id, data) => APIClient.patch(`/datasets/${id}/`, data),
-        delete: (id) => APIClient.delete(`/datasets/${id}/`, true),
-        analyze: (id, config) => APIClient.post(`/datasets/${id}/analyze/`, config)
-    },
-
-    DataSources: {
-        list: (projectId) => APIClient.get('/data-sources/', { project: projectId }),
-        get: (id) => APIClient.get(`/data-sources/${id}/`),
-        create: (data) => APIClient.post('/data-sources/', data),
-        update: (id, data) => APIClient.patch(`/data-sources/${id}/`, data),
-        delete: (id) => APIClient.delete(`/data-sources/${id}/`, true),
-        getConfig: (id) => APIClient.get(`/data-sources/${id}/config/`),
-        saveConfig: (id, config) => APIClient.post(`/data-sources/${id}/config/`, config)
-    },
-
-    Categories: {
-        list: () => APIClient.get('/measurement-categories/'),
-        get: (id) => APIClient.get(`/measurement-categories/${id}/`),
-        getTypes: (id) => APIClient.get(`/measurement-categories/${id}/types/`),
-        getMeasurements: (id, params) => APIClient.get(`/measurement-categories/${id}/measurements/`, params),
-        getStats: (id) => APIClient.get(`/measurement-categories/${id}/stats/`)
-    },
-
-    Types: {
-        list: (params) => APIClient.get('/measurement-types/', params),
-        get: (id) => APIClient.get(`/measurement-types/${id}/`),
-        getUnits: (id) => APIClient.get(`/measurement-types/${id}/units/`),
-        getMeasurements: (id, params) => APIClient.get(`/measurement-types/${id}/measurements/`, params),
-        getStats: (id) => APIClient.get(`/measurement-types/${id}/stats/`)
-    }
+    /**
+     * Subscribe to API state changes
+     * @param {Function} callback - State change callback
+     * @returns {Function} Unsubscribe function
+     */
+    subscribe: (callback) => State.subscribe(API_STATE_KEY, callback)
 };

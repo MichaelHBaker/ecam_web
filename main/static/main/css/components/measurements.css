@@ -1,55 +1,108 @@
 /* components/measurements.css */
-/* Measurement specific styles */
+/* Measurement specific styles - extends w3.css */
 
+/* Measurement fields container */
 .measurement-fields {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
     flex-wrap: wrap;
+    padding: 8px;
 }
 
-.unit-select,
-.multiplier-select,
-.timezone-select {
+/* Select controls */
+.measurement-select {
+    min-width: 120px;
     padding: 4px 8px;
     border: 1px solid #ccc;
     border-radius: 4px;
+    background-color: white;
 }
 
 .unit-select { min-width: 120px; }
 .multiplier-select { width: 100px; }
 .timezone-select { width: 160px; }
 
+/* Measurement editor */
+.measurement-editor {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    margin: 8px 0;
+}
+
 /* CodeMirror customizations */
-.CodeMirror {
-    height: 100% !important;
-    border: 1px solid #ccc;
+.measurement-editor .CodeMirror {
+    height: auto !important;
+    min-height: 200px;
 }
 
 .CodeMirror-gutters {
     border-right: 1px solid #ddd;
-    z-index: 5;
-    display: flex;
-}
-
-.CodeMirror-linenumbers {
-    border-right: 1px solid #eee;
-}
-
-.CodeMirror-gutter {
-    min-width: 35px;
+    background-color: #f8f9fa;
 }
 
 .CodeMirror-linenumber {
-    color: #999;
-    padding: 0 3px 0 5px;
-    cursor: default;
+    color: #6c757d;
+    padding: 0 8px;
 }
 
-.CodeMirror-linedata {
-    color: #2196F3;
-    text-align: right;
-    font-size: 12px;
-    padding: 0 5px;
-    cursor: pointer;
+/* Measurement status indicators */
+.measurement-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.85em;
+}
+
+.status-active {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+}
+
+.status-inactive {
+    background-color: #f5f5f5;
+    color: #757575;
+}
+
+.status-error {
+    background-color: #ffebee;
+    color: #c62828;
+}
+
+/* Measurement validation */
+.measurement-field.error {
+    border-color: #f44336;
+}
+
+.measurement-error {
+    color: #f44336;
+    font-size: 0.85em;
+    margin-top: 4px;
+}
+
+/* Measurement charts */
+.measurement-chart {
+    height: 300px;
+    margin: 16px 0;
+}
+
+.chart-legend {
+    display: flex;
+    gap: 16px;
+    padding: 8px;
+    justify-content: center;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
 }

@@ -1,821 +1,687 @@
 // forms.js
-// Enhanced form handling and validation utilities
+// Enhanced form handling with Django model field integration
 
 import { State } from './state.js';
+import { API } from './api.js';
 import { NotificationUI } from './ui.js';
 
 const FORMS_STATE_KEY = 'forms_state';
 
 /**
- * Map to store form state data
- * @type {Map<string, Object>}
+ * Field type handlers mapped to Django model field types
  */
-const formStates = new Map();
-
-/**
- * Field type definitions with validation rules
- */
-const FIELD_TYPES = {
-    string: {
+const FIELD_HANDLERS = {
+    CharField: {
         component: 'input',
-        attributes: { type: 'text' },
-        validate: (value) => typeof value === 'string'
+        type: 'text',
+        createField: (config) => ({
+            ...config,
+            maxLength: config.max_length,
+            minLength: config.min_length,
+            pattern: config.regex
+        })
     },
-    number: {
+    TextField: {
+        component: 'textarea',
+        createField: (config) => ({
+            ...config,
+            rows: 3
+        })
+    },
+    IntegerField: {
         component: 'input',
-        attributes: { type: 'number' },
-        validate: (value) => !isNaN(parseFloat(value))
+        type: 'number',
+        createField: (config) => ({
+            ...config,
+            step: 1,
+            min: config.min_value,
+            max: config.max_value
+        })
     },
-    date: {
+    FloatField: {
         component: 'input',
-        attributes: { type: 'date' },
-        validate: (value) => !isNaN(Date.parse(value))
+        type: 'number',
+        createField: (config) => ({
+            ...config,
+            step: 'any',
+            min: config.min_value,
+            max: config.max_value
+        })
     },
-    choice: {
+    BooleanField: {
+        component: 'input',
+        type: 'checkbox',
+        createField: (config) => ({
+            ...config,
+            checked: config.default || false
+        })
+    },
+    DateField: {
+        component: 'input',
+        type: 'date',
+        createField: (config) => ({
+            ...config,
+            min: config.min_value,
+            max: config.max_value
+        })
+    },
+    ChoiceField: {
         component: 'select',
-        validate: (value, field) => {
-            const choices = field.choices || [];
-            return choices.some(c => c.id === value);
-        }
+        createField: (config) => ({
+            ...config,
+            options: config.choices.map(([value, label]) => ({
+                value,
+                label,
+                selected: value === config.default
+            }))
+        })
     },
-    boolean: {
-        component: 'input',
-        attributes: { type: 'checkbox' },
-        validate: (value) => typeof value === 'boolean'
+    ForeignKey: {
+        component: 'select',
+        createField: (config) => ({
+            ...config,
+            async: true,
+            loadOptions: () => API.ModelFields.getChoices(config.related_model)
+        })
     }
 };
 
 /**
- * Generates a consistent field ID across the application
- * @param {string} type - The form type (e.g., 'measurement', 'project')
- * @param {string|Object} field - The field name or configuration object
- * @param {string} id - The instance ID
- * @returns {string} The generated field ID
+ * Form Manager Class
  */
-export const getFieldId = (type, field, id) => {
-    const fieldName = typeof field === 'string' ? field : field.name;
-    return `field_${type}_${fieldName}_${id}`;
-};
-
-/**
- * Initializes form state with error handling
- * @param {string} type - Form type
- * @param {string} id - Form instance ID
- * @param {Object} initialData - Initial form data
- */
-export const initializeFormState = (type, id, initialData = {}) => {
-    try {
-        const formId = `${type}-${id}`;
+class FormManager {
+    constructor() {
+        // Track form instances
+        this.forms = new Map();
         
-        const state = {
-            originalValues: { ...initialData },
-            currentValues: { ...initialData },
-            isDirty: false,
-            errors: new Map(),
-            validators: new Map(),
-            lastUpdate: new Date(),
-            status: 'initialized'
-        };
+        // Cache field definitions
+        this.fieldDefinitions = null;
+        this.validationRules = null;
+        this.fieldDependencies = null;
 
-        formStates.set(formId, state);
-        
-        // Update global form state
-        updateFormsState(formId, 'initialized');
+        // Bind methods
+        this.handleSubmit = this.handleSubmit.bind(this);
+        this.handleFieldChange = this.handleFieldChange.bind(this);
+        this.handleFieldBlur = this.handleFieldBlur.bind(this);
 
-    } catch (error) {
-        console.error('Error initializing form state:', error);
-        NotificationUI.show({
-            message: `Failed to initialize form: ${error.message}`,
-            type: 'error'
+        // Initialize state
+        this.initializeState();
+    }
+
+    /**
+     * Initialize form state
+     * @private
+     */
+    initializeState() {
+        State.set(FORMS_STATE_KEY, {
+            instances: {},
+            modelFields: null,
+            validationRules: null,
+            dependencies: null,
+            lastUpdate: new Date()
         });
     }
-};
 
-/**
- * Creates form field elements based on configuration
- * @param {Object} field - Field configuration object
- * @param {string} type - Form type
- * @param {string} id - Form instance ID
- * @param {Object} fieldInfo - Additional field information
- * @returns {HTMLElement} The created form field element
- */
-export const createField = (field, type, id, fieldInfo = {}) => {
-    try {
-        const fieldType = fieldInfo.type || 'string';
-        const typeConfig = FIELD_TYPES[fieldType];
-        
-        if (!typeConfig) {
-            throw new Error(`Unsupported field type: ${fieldType}`);
-        }
+    /**
+     * Load field definitions from Django
+     * @returns {Promise<void>}
+     */
+    async loadFieldDefinitions() {
+        try {
+            // Load all required definitions
+            const [fields, rules, dependencies] = await Promise.all([
+                API.ModelFields.getFields(),
+                API.ModelFields.getValidationRules(),
+                API.ModelFields.getDependencies()
+            ]);
 
-        const element = document.createElement(typeConfig.component);
-        
-        // Set common attributes
-        element.id = getFieldId(type, field, id);
-        element.name = field;
-        element.className = 'tree-item-field editing';
-        
-        // Apply type-specific attributes
-        if (typeConfig.attributes) {
-            Object.entries(typeConfig.attributes).forEach(([key, value]) => {
-                element.setAttribute(key, value);
+            // Cache results
+            this.fieldDefinitions = fields;
+            this.validationRules = rules;
+            this.fieldDependencies = dependencies;
+
+            // Update state
+            State.update(FORMS_STATE_KEY, {
+                modelFields: fields,
+                validationRules: rules,
+                dependencies: dependencies,
+                lastUpdate: new Date()
             });
-        }
 
-        // Set up field based on type
-        if (fieldType === 'choice') {
-            setupChoiceField(element, field, fieldInfo);
-        } else {
-            setupBasicField(element, field, fieldInfo);
-        }
-
-        // Add validation
-        addFieldValidation(element, type, id, field, fieldInfo);
-        
-        // Add event listeners
-        setupFieldEventListeners(element, type, id, field);
-
-        return element;
-
-    } catch (error) {
-        console.error('Error creating field:', error);
-        NotificationUI.show({
-            message: `Failed to create field: ${error.message}`,
-            type: 'error'
-        });
-        
-        // Return a disabled input as fallback
-        const fallback = document.createElement('input');
-        fallback.type = 'text';
-        fallback.disabled = true;
-        fallback.value = 'Error creating field';
-        return fallback;
-    }
-};
-
-/**
- * Sets up a choice (select) field
- * @private
- */
-const setupChoiceField = (element, field, fieldInfo) => {
-    const choices = fieldInfo.choices || [];
-    
-    // Add placeholder option
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = `Select ${field.replace(/_/g, ' ')}`;
-    placeholder.disabled = true;
-    placeholder.selected = true;
-    element.appendChild(placeholder);
-
-    // Add choices
-    choices.forEach(choice => {
-        const option = document.createElement('option');
-        option.value = choice.id;
-        option.textContent = choice.display_name || choice.name;
-        
-        // Add data attributes
-        if (choice.data) {
-            Object.entries(choice.data).forEach(([key, value]) => {
-                option.dataset[key] = value;
+        } catch (error) {
+            console.error('Error loading field definitions:', error);
+            NotificationUI.show({
+                message: 'Error loading form definitions',
+                type: 'error'
             });
+            throw error;
         }
-
-        element.appendChild(option);
-    });
-};
-
-/**
- * Sets up a basic input field
- * @private
- */
-const setupBasicField = (element, field, fieldInfo) => {
-    if (fieldInfo.type === 'date') {
-        element.type = 'date';
-    } else {
-        element.type = 'text';
     }
-
-    element.placeholder = field.replace(/_/g, ' ');
-    
-    if (fieldInfo.required) {
-        element.required = true;
-    }
-
-    if (fieldInfo.pattern) {
-        element.pattern = fieldInfo.pattern;
-    }
-
-    if (fieldInfo.min !== undefined) {
-        element.min = fieldInfo.min;
-    }
-
-    if (fieldInfo.max !== undefined) {
-        element.max = fieldInfo.max;
-    }
-
-    if (fieldInfo.maxLength) {
-        element.maxLength = fieldInfo.maxLength;
-    }
-};
-
-/**
- * Sets up event listeners for a field
- * @private
- */
-const setupFieldEventListeners = (element, type, id, field) => {
-    // Track changes
-    element.addEventListener('change', () => {
-        trackFieldChange(type, id, field);
-    });
-
-    // Live validation
-    element.addEventListener('input', () => {
-        validateField(type, id, field);
-    });
-
-    // Focus handling
-    element.addEventListener('focus', () => {
-        element.classList.add('focused');
-        updateFormsState(`${type}-${id}`, 'field-focused', { field });
-    });
-
-    element.addEventListener('blur', () => {
-        element.classList.remove('focused');
-        validateField(type, id, field);
-        updateFormsState(`${type}-${id}`, 'field-blurred', { field });
-    });
-};
-
-/**
- * Updates global forms state
- * @private
- */
-const updateFormsState = (formId, status, data = {}) => {
-    const currentState = State.get(FORMS_STATE_KEY) || {};
-    
-    State.update(FORMS_STATE_KEY, {
-        ...currentState,
-        [formId]: {
-            status,
-            timestamp: new Date(),
-            ...data
-        }
-    });
-};
-// forms.js - Part 2
-// Validation and field tracking
-
-/**
- * Adds validation to a field
- * @private
- */
-const addFieldValidation = (element, type, id, field, fieldInfo) => {
-    const formId = `${type}-${id}`;
-    const state = formStates.get(formId);
-    
-    if (!state) return;
-
-    // Get field type configuration
-    const fieldType = fieldInfo.type || 'string';
-    const typeConfig = FIELD_TYPES[fieldType];
-
-    // Create composite validator
-    const validator = (value) => {
-        // Required field validation
-        if (fieldInfo.required && !value) {
-            return `${field} is required`;
+    /**
+     * Create a new form instance
+     * @param {string} modelType - Django model type
+     * @param {string} instanceId - Form instance ID
+     * @param {Object} options - Form options
+     * @returns {Promise<HTMLFormElement>} Created form
+     */
+    async createForm(modelType, instanceId, options = {}) {
+        if (!this.fieldDefinitions) {
+            await this.loadFieldDefinitions();
         }
 
-        // Type-specific validation
-        if (value && !typeConfig.validate(value, fieldInfo)) {
-            return `Invalid ${fieldType} value for ${field}`;
-        }
-
-        // Pattern validation
-        if (fieldInfo.pattern && value && !new RegExp(fieldInfo.pattern).test(value)) {
-            return fieldInfo.patternError || `${field} does not match required pattern`;
-        }
-
-        // Range validation
-        if (fieldType === 'number' && value) {
-            const numValue = parseFloat(value);
-            if (fieldInfo.min !== undefined && numValue < fieldInfo.min) {
-                return `${field} must be at least ${fieldInfo.min}`;
-            }
-            if (fieldInfo.max !== undefined && numValue > fieldInfo.max) {
-                return `${field} must be no more than ${fieldInfo.max}`;
-            }
-        }
-
-        // Length validation
-        if (fieldType === 'string' && value) {
-            if (fieldInfo.minLength && value.length < fieldInfo.minLength) {
-                return `${field} must be at least ${fieldInfo.minLength} characters`;
-            }
-            if (fieldInfo.maxLength && value.length > fieldInfo.maxLength) {
-                return `${field} must be no more than ${fieldInfo.maxLength} characters`;
-            }
-        }
-
-        // Custom validation
-        if (fieldInfo.validate) {
-            const customResult = fieldInfo.validate(value);
-            if (customResult !== true) {
-                return customResult;
-            }
-        }
-
-        return true;
-    };
-
-    state.validators.set(field, validator);
-};
-
-/**
- * Tracks changes to form fields
- * @param {string} type - Form type
- * @param {string} id - Form instance ID
- * @param {string} field - Field name
- */
-const trackFieldChange = (type, id, field) => {
-    const formId = `${type}-${id}`;
-    const state = formStates.get(formId);
-    if (!state) return;
-
-    const element = document.getElementById(getFieldId(type, field, id));
-    if (!element) return;
-
-    try {
-        // Get field value based on type
-        const value = getFieldValue(element);
+        const formId = `${modelType}-${instanceId}`;
         
-        // Update state
-        state.currentValues[field] = value;
-        state.isDirty = !areValuesEqual(state.currentValues, state.originalValues);
-        state.lastUpdate = new Date();
+        try {
+            // Get model field definitions
+            const modelFields = this.fieldDefinitions[modelType];
+            if (!modelFields) {
+                throw new Error(`No field definitions found for ${modelType}`);
+            }
 
-        // Update global form state
-        updateFormsState(formId, 'field-changed', {
-            field,
-            isDirty: state.isDirty
-        });
+            // Create form element
+            const form = document.createElement('form');
+            form.id = formId;
+            form.className = 'w3-container';
+            form.dataset.type = modelType;
+            form.dataset.id = instanceId;
 
-        // Update form status
-        updateFormStatus(type, id);
+            // Add form fields
+            for (const field of modelFields) {
+                const fieldElement = await this.createField(field, options.initialData?.[field.name]);
+                form.appendChild(fieldElement);
+            }
 
-    } catch (error) {
-        console.error('Error tracking field change:', error);
-        NotificationUI.show({
-            message: `Failed to track field change: ${error.message}`,
-            type: 'error'
-        });
+            // Setup form event handlers
+            form.addEventListener('submit', this.handleSubmit);
+            
+            // Store form instance
+            this.forms.set(formId, {
+                element: form,
+                type: modelType,
+                id: instanceId,
+                fields: modelFields,
+                state: {
+                    dirty: false,
+                    valid: true,
+                    submitted: false,
+                    errors: new Map()
+                }
+            });
+
+            // Update state
+            this.updateFormState(formId, 'created');
+
+            return form;
+
+        } catch (error) {
+            console.error(`Error creating form ${formId}:`, error);
+            throw error;
+        }
     }
-};
 
-/**
- * Validates a specific field
- * @param {string} type - Form type
- * @param {string} id - Form instance ID
- * @param {string} field - Field name
- * @returns {boolean} True if valid
- */
-export const validateField = (type, id, field) => {
-    const formId = `${type}-${id}`;
-    const state = formStates.get(formId);
-    if (!state) return true;
+    /**
+     * Create a form field element
+     * @param {Object} fieldConfig - Field configuration
+     * @param {*} initialValue - Initial field value
+     * @returns {Promise<HTMLElement>} Created field element
+     */
+    async createField(fieldConfig, initialValue) {
+        const handler = FIELD_HANDLERS[fieldConfig.field_type];
+        if (!handler) {
+            console.warn(`No handler for field type: ${fieldConfig.field_type}`);
+            return null;
+        }
 
-    const element = document.getElementById(getFieldId(type, field, id));
-    if (!element) return true;
+        try {
+            // Create field container
+            const container = document.createElement('div');
+            container.className = 'field-container w3-margin-bottom';
 
-    try {
-        const validator = state.validators.get(field);
-        if (!validator) return true;
+            // Add label if specified
+            if (fieldConfig.label) {
+                const label = document.createElement('label');
+                label.className = 'w3-text-dark-grey';
+                label.htmlFor = fieldConfig.name;
+                label.textContent = fieldConfig.label;
+                if (fieldConfig.required) {
+                    label.innerHTML += ' <span class="w3-text-red">*</span>';
+                }
+                container.appendChild(label);
+            }
 
-        const value = getFieldValue(element);
-        const result = validator(value);
+            // Create field element
+            const field = document.createElement(handler.component);
+            field.className = 'w3-input w3-border';
+            field.name = fieldConfig.name;
+            field.id = fieldConfig.name;
 
-        if (result === true) {
-            clearFieldError(type, id, field);
-            element.classList.add('valid');
-            element.classList.remove('invalid');
-            return true;
-        } else {
-            showFieldError(type, id, field, result);
-            element.classList.add('invalid');
-            element.classList.remove('valid');
+            // Apply handler-specific configuration
+            const config = handler.createField(fieldConfig);
+            Object.entries(config).forEach(([key, value]) => {
+                if (key === 'options' && Array.isArray(value)) {
+                    // Handle select options
+                    value.forEach(option => {
+                        const optElement = document.createElement('option');
+                        optElement.value = option.value;
+                        optElement.textContent = option.label;
+                        optElement.selected = option.selected;
+                        field.appendChild(optElement);
+                    });
+                } else if (key !== 'component' && key !== 'createField') {
+                    field[key] = value;
+                }
+            });
+
+            // Set initial value if provided
+            if (initialValue !== undefined) {
+                if (handler.type === 'checkbox') {
+                    field.checked = Boolean(initialValue);
+                } else {
+                    field.value = initialValue;
+                }
+            }
+
+            // Add field event listeners
+            field.addEventListener('change', () => this.handleFieldChange(field));
+            field.addEventListener('blur', () => this.handleFieldBlur(field));
+
+            // Add field to container
+            container.appendChild(field);
+
+            // Add error container
+            const errorContainer = document.createElement('div');
+            errorContainer.className = 'field-error w3-text-red w3-small w3-hide';
+            container.appendChild(errorContainer);
+
+            // Load async options if needed
+            if (config.async && config.loadOptions) {
+                try {
+                    const options = await config.loadOptions();
+                    field.innerHTML = ''; // Clear loading state
+                    options.forEach(option => {
+                        const optElement = document.createElement('option');
+                        optElement.value = option.value;
+                        optElement.textContent = option.label;
+                        field.appendChild(optElement);
+                    });
+                } catch (error) {
+                    console.error('Error loading field options:', error);
+                    // Add error option
+                    const errorOpt = document.createElement('option');
+                    errorOpt.value = '';
+                    errorOpt.textContent = 'Error loading options';
+                    errorOpt.disabled = true;
+                    field.appendChild(errorOpt);
+                }
+            }
+
+            return container;
+
+        } catch (error) {
+            console.error('Error creating field:', error);
+            throw error;
+        }
+    }
+    /**
+     * Handle form submission
+     * @param {Event} event - Submit event
+     * @private
+     */
+    async handleSubmit(event) {
+        event.preventDefault();
+        const form = event.target;
+        const formId = `${form.dataset.type}-${form.dataset.id}`;
+        const instance = this.forms.get(formId);
+
+        if (!instance) return;
+
+        try {
+            // Mark form as submitted
+            instance.state.submitted = true;
+            this.updateFormState(formId, 'submitting');
+
+            // Validate all fields
+            const isValid = await this.validateForm(formId);
+            if (!isValid) {
+                this.updateFormState(formId, 'invalid');
+                return;
+            }
+
+            // Collect form data
+            const formData = this.collectFormData(form, instance.fields);
+
+            // Dispatch custom event with form data
+            const submitEvent = new CustomEvent('form:submit', {
+                detail: {
+                    formId,
+                    type: instance.type,
+                    id: instance.id,
+                    data: formData
+                },
+                bubbles: true,
+                cancelable: true
+            });
+
+            const shouldProceed = form.dispatchEvent(submitEvent);
+            if (!shouldProceed) {
+                this.updateFormState(formId, 'cancelled');
+                return;
+            }
+
+            this.updateFormState(formId, 'submitted');
+
+        } catch (error) {
+            console.error('Form submission error:', error);
+            this.updateFormState(formId, 'error', error);
+            this.showFormError(form, error);
+        }
+    }
+
+    /**
+     * Validate entire form
+     * @param {string} formId - Form identifier
+     * @returns {Promise<boolean>} Validation result
+     * @private
+     */
+    async validateForm(formId) {
+        const instance = this.forms.get(formId);
+        if (!instance) return false;
+
+        const form = instance.element;
+        let isValid = true;
+
+        // Clear previous errors
+        this.clearFormErrors(form);
+
+        try {
+            // Validate each field
+            for (const field of instance.fields) {
+                const element = form.elements[field.name];
+                if (!element) continue;
+
+                const fieldValid = await this.validateField(element, field);
+                isValid = isValid && fieldValid;
+            }
+
+            // Check field dependencies
+            if (isValid && this.fieldDependencies) {
+                const dependencyErrors = this.validateDependencies(form, instance.type);
+                if (dependencyErrors.length > 0) {
+                    dependencyErrors.forEach(error => {
+                        this.showFieldError(
+                            form.elements[error.field],
+                            error.message
+                        );
+                    });
+                    isValid = false;
+                }
+            }
+
+            return isValid;
+
+        } catch (error) {
+            console.error('Form validation error:', error);
+            this.showFormError(form, error);
             return false;
         }
-
-    } catch (error) {
-        console.error('Error validating field:', error);
-        NotificationUI.show({
-            message: `Failed to validate field: ${error.message}`,
-            type: 'error'
-        });
-        return false;
     }
-};
 
-/**
- * Validates entire form
- * @param {string} type - Form type
- * @param {string} id - Form instance ID
- * @returns {boolean} True if all fields are valid
- */
-export const validateForm = (type, id) => {
-    const formId = `${type}-${id}`;
-    const state = formStates.get(formId);
-    if (!state) return true;
-
-    const form = document.getElementById(`${type}Form-${id}`);
-    if (!form) return true;
-
-    try {
-        clearFormErrors(type, id);
-        
-        let isValid = true;
-        const errors = [];
-
-        // Validate all fields
-        for (const [field, validator] of state.validators) {
-            if (!validateField(type, id, field)) {
-                isValid = false;
-                const element = document.getElementById(getFieldId(type, field, id));
-                errors.push({
-                    field,
-                    message: element?.dataset.errorMessage || 'Validation failed'
-                });
+    /**
+     * Validate a single field
+     * @param {HTMLElement} element - Field element
+     * @param {Object} fieldConfig - Field configuration
+     * @returns {Promise<boolean>} Validation result
+     * @private
+     */
+    async validateField(element, fieldConfig) {
+        try {
+            const value = this.getFieldValue(element);
+            
+            // Check required
+            if (fieldConfig.required && !value) {
+                this.showFieldError(element, `${fieldConfig.label || fieldConfig.name} is required`);
+                return false;
             }
+
+            // Skip further validation if empty and not required
+            if (!value && !fieldConfig.required) {
+                return true;
+            }
+
+            // Get field type validator
+            const handler = FIELD_HANDLERS[fieldConfig.field_type];
+            if (!handler) return true;
+
+            // Run field type validation
+            if (handler.validate) {
+                const typeValid = await handler.validate(value, fieldConfig);
+                if (!typeValid) {
+                    this.showFieldError(element, `Invalid ${fieldConfig.field_type.toLowerCase()}`);
+                    return false;
+                }
+            }
+
+            // Run Django validation rules
+            if (this.validationRules && fieldConfig.validation_rules) {
+                for (const rule of fieldConfig.validation_rules) {
+                    const ruleConfig = this.validationRules[rule];
+                    if (!ruleConfig) continue;
+
+                    const ruleValid = await this.validateRule(value, ruleConfig);
+                    if (!ruleValid) {
+                        this.showFieldError(element, ruleConfig.message);
+                        return false;
+                    }
+                }
+            }
+
+            // Clear any previous errors
+            this.clearFieldError(element);
+            return true;
+
+        } catch (error) {
+            console.error('Field validation error:', error);
+            this.showFieldError(element, 'Validation error occurred');
+            return false;
         }
-
-        // Update form status
-        updateFormsState(formId, isValid ? 'valid' : 'invalid', { errors });
-
-        return isValid;
-
-    } catch (error) {
-        console.error('Error validating form:', error);
-        NotificationUI.show({
-            message: `Failed to validate form: ${error.message}`,
-            type: 'error'
-        });
-        return false;
     }
-};
+    /**
+     * Show field error
+     * @param {HTMLElement} element - Field element
+     * @param {string} message - Error message
+     * @private
+     */
+    showFieldError(element, message) {
+        const container = element.closest('.field-container');
+        if (!container) return;
 
-/**
- * Shows an error for a specific field
- * @param {string} type - Form type
- * @param {string} id - Form instance ID
- * @param {string} field - Field name
- * @param {string} error - Error message
- */
-export const showFieldError = (type, id, field, error) => {
-    const element = document.getElementById(getFieldId(type, field, id));
-    if (!element) return;
-
-    try {
-        // Add error classes
-        element.classList.add('error');
-        element.dataset.errorMessage = error;
+        element.classList.add('w3-border-red');
         
-        // Create or update error display
-        let errorDisplay = document.getElementById(`${getFieldId(type, field, id)}-error`);
-        if (!errorDisplay) {
-            errorDisplay = document.createElement('div');
-            errorDisplay.id = `${getFieldId(type, field, id)}-error`;
-            errorDisplay.className = 'w3-text-red field-error';
-            errorDisplay.style.fontSize = '0.8em';
-            element.parentNode.insertBefore(errorDisplay, element.nextSibling);
+        const errorDisplay = container.querySelector('.field-error');
+        if (errorDisplay) {
+            errorDisplay.textContent = message;
+            errorDisplay.classList.remove('w3-hide');
+            
+            // Animate error appearance
+            errorDisplay.style.opacity = '0';
+            requestAnimationFrame(() => {
+                errorDisplay.style.transition = 'opacity 0.2s ease-in';
+                errorDisplay.style.opacity = '1';
+            });
         }
-        errorDisplay.textContent = error;
-
-        // Ensure error is visible
-        errorDisplay.style.display = 'block';
-        errorDisplay.style.opacity = '0';
-        requestAnimationFrame(() => {
-            errorDisplay.style.transition = 'opacity 0.2s ease-in-out';
-            errorDisplay.style.opacity = '1';
-        });
-
-        // Update state
-        const formId = `${type}-${id}`;
-        const state = formStates.get(formId);
-        if (state) {
-            state.errors.set(field, error);
-        }
-
-        // Update global form state
-        updateFormsState(formId, 'field-error', {
-            field,
-            error
-        });
-
-    } catch (error) {
-        console.error('Error showing field error:', error);
     }
-};
 
-/**
- * Gets field value based on field type
- * @private
- */
-const getFieldValue = (element) => {
-    switch (element.type) {
-        case 'checkbox':
-            return element.checked;
-        case 'number':
-            return element.value ? parseFloat(element.value) : null;
-        case 'date':
-            return element.value ? new Date(element.value) : null;
-        default:
-            return element.value;
-    }
-};
+    /**
+     * Clear field error
+     * @param {HTMLElement} element - Field element
+     * @private
+     */
+    clearFieldError(element) {
+        const container = element.closest('.field-container');
+        if (!container) return;
 
-/**
- * Compares two value objects for equality
- * @private
- */
-const areValuesEqual = (obj1, obj2) => {
-    const keys1 = Object.keys(obj1);
-    const keys2 = Object.keys(obj2);
-
-    if (keys1.length !== keys2.length) return false;
-
-    return keys1.every(key => {
-        const val1 = obj1[key];
-        const val2 = obj2[key];
-
-        if (val1 instanceof Date && val2 instanceof Date) {
-            return val1.getTime() === val2.getTime();
-        }
-
-        return val1 === val2;
-    });
-};
-// forms.js - Part 3
-// Form status, cleanup, and data collection
-
-/**
- * Clears error for a specific field
- * @param {string} type - Form type
- * @param {string} id - Form instance ID
- * @param {string} field - Field name
- */
-export const clearFieldError = (type, id, field) => {
-    const element = document.getElementById(getFieldId(type, field, id));
-    if (!element) return;
-
-    try {
-        // Remove error classes and data
-        element.classList.remove('error');
-        delete element.dataset.errorMessage;
+        element.classList.remove('w3-border-red');
         
-        // Remove error display with animation
-        const errorDisplay = document.getElementById(`${getFieldId(type, field, id)}-error`);
+        const errorDisplay = container.querySelector('.field-error');
         if (errorDisplay) {
             errorDisplay.style.transition = 'opacity 0.2s ease-out';
             errorDisplay.style.opacity = '0';
-            setTimeout(() => errorDisplay.remove(), 200);
+            
+            setTimeout(() => {
+                errorDisplay.classList.add('w3-hide');
+                errorDisplay.textContent = '';
+            }, 200);
+        }
+    }
+
+    /**
+     * Show form-level error
+     * @param {HTMLFormElement} form - Form element
+     * @param {Error} error - Error object
+     * @private
+     */
+    showFormError(form, error) {
+        let errorContainer = form.querySelector('.form-error');
+        if (!errorContainer) {
+            errorContainer = document.createElement('div');
+            errorContainer.className = 'form-error w3-panel w3-pale-red w3-leftbar w3-border-red';
+            form.insertBefore(errorContainer, form.firstChild);
+        }
+
+        errorContainer.innerHTML = `
+            <p><strong>Error:</strong> ${error.message}</p>
+            ${error.details ? `<p class="w3-small">${error.details}</p>` : ''}
+        `;
+
+        errorContainer.style.display = 'block';
+    }
+
+    /**
+     * Clear all form errors
+     * @param {HTMLFormElement} form - Form element
+     * @private
+     */
+    clearFormErrors(form) {
+        // Clear field errors
+        form.querySelectorAll('.field-error').forEach(error => {
+            error.classList.add('w3-hide');
+            error.textContent = '';
+        });
+
+        // Clear form error
+        const formError = form.querySelector('.form-error');
+        if (formError) {
+            formError.style.display = 'none';
+            formError.innerHTML = '';
+        }
+
+        // Clear error styling
+        form.querySelectorAll('.w3-border-red').forEach(element => {
+            element.classList.remove('w3-border-red');
+        });
+    }
+
+    /**
+     * Handle field change event
+     * @param {HTMLElement} field - Changed field
+     * @private
+     */
+    handleFieldChange(field) {
+        const form = field.closest('form');
+        if (!form) return;
+
+        const formId = `${form.dataset.type}-${form.dataset.id}`;
+        const instance = this.forms.get(formId);
+        if (!instance) return;
+
+        // Update dirty state
+        instance.state.dirty = true;
+
+        // Run validation if form was previously submitted
+        if (instance.state.submitted) {
+            const fieldConfig = instance.fields.find(f => f.name === field.name);
+            if (fieldConfig) {
+                this.validateField(field, fieldConfig);
+            }
         }
 
         // Update state
-        const formId = `${type}-${id}`;
-        const state = formStates.get(formId);
-        if (state) {
-            state.errors.delete(field);
-        }
-
-        // Update global form state
-        updateFormsState(formId, 'field-error-cleared', { field });
-
-    } catch (error) {
-        console.error('Error clearing field error:', error);
-    }
-};
-
-/**
- * Clears all form errors
- * @param {string} type - Form type
- * @param {string} id - Form instance ID
- */
-export const clearFormErrors = (type, id) => {
-    const form = document.getElementById(`${type}Form-${id}`);
-    if (!form) return;
-
-    try {
-        // Remove all error displays
-        form.querySelectorAll('.field-error').forEach(error => {
-            error.style.transition = 'opacity 0.2s ease-out';
-            error.style.opacity = '0';
-            setTimeout(() => error.remove(), 200);
+        this.updateFormState(formId, 'field-changed', {
+            field: field.name,
+            value: this.getFieldValue(field)
         });
-
-        // Remove error classes
-        form.querySelectorAll('.error').forEach(field => {
-            field.classList.remove('error');
-            delete field.dataset.errorMessage;
-        });
-
-        // Clear state errors
-        const formId = `${type}-${id}`;
-        const state = formStates.get(formId);
-        if (state) {
-            state.errors.clear();
-        }
-
-        // Update global form state
-        updateFormsState(formId, 'errors-cleared');
-
-    } catch (error) {
-        console.error('Error clearing form errors:', error);
     }
-};
 
-/**
- * Updates form status and UI
- * @param {string} type - Form type
- * @param {string} id - Form instance ID
- */
-const updateFormStatus = (type, id) => {
-    const formId = `${type}-${id}`;
-    const state = formStates.get(formId);
-    if (!state) return;
-
-    try {
-        const form = document.getElementById(`${type}Form-${id}`);
+    /**
+     * Handle field blur event
+     * @param {HTMLElement} field - Blurred field
+     * @private
+     */
+    handleFieldBlur(field) {
+        const form = field.closest('form');
         if (!form) return;
 
-        // Update submit button state
-        const submitButton = form.querySelector('button[type="submit"]');
-        if (submitButton) {
-            const isDisabled = !state.isDirty || state.errors.size > 0;
-            submitButton.disabled = isDisabled;
-            
-            // Update button appearance
-            submitButton.classList.toggle('w3-disabled', isDisabled);
-            submitButton.classList.toggle('w3-blue', !isDisabled);
+        const formId = `${form.dataset.type}-${form.dataset.id}`;
+        const instance = this.forms.get(formId);
+        if (!instance) return;
+
+        // Validate on blur
+        const fieldConfig = instance.fields.find(f => f.name === field.name);
+        if (fieldConfig) {
+            this.validateField(field, fieldConfig);
         }
 
-        // Update form classes
-        form.classList.toggle('dirty', state.isDirty);
-        form.classList.toggle('has-errors', state.errors.size > 0);
-
-        // Update global form state
-        updateFormsState(formId, 'status-updated', {
-            isDirty: state.isDirty,
-            hasErrors: state.errors.size > 0
+        // Update state
+        this.updateFormState(formId, 'field-blur', {
+            field: field.name
         });
-
-    } catch (error) {
-        console.error('Error updating form status:', error);
     }
-};
 
-/**
- * Resets form to original state
- * @param {string} type - Form type
- * @param {string} id - Form instance ID
- */
-export const resetForm = (type, id) => {
-    const formId = `${type}-${id}`;
-    const state = formStates.get(formId);
-    if (!state) return;
+    /**
+     * Get field value based on type
+     * @param {HTMLElement} field - Field element
+     * @returns {*} Field value
+     * @private
+     */
+    getFieldValue(field) {
+        switch (field.type) {
+            case 'checkbox':
+                return field.checked;
+            case 'select-multiple':
+                return Array.from(field.selectedOptions).map(opt => opt.value);
+            case 'number':
+                return field.value ? Number(field.value) : null;
+            case 'date':
+                return field.value ? new Date(field.value) : null;
+            default:
+                return field.value;
+        }
+    }
 
-    try {
-        // Reset all fields to original values
-        Object.entries(state.originalValues).forEach(([field, value]) => {
-            const element = document.getElementById(getFieldId(type, field, id));
-            if (element) {
-                setFieldValue(element, value);
-                clearFieldError(type, id, field);
+    /**
+     * Update form state
+     * @param {string} formId - Form identifier
+     * @param {string} action - State action
+     * @param {Object} [data] - Additional data
+     * @private
+     */
+    updateFormState(formId, action, data = {}) {
+        const currentState = State.get(FORMS_STATE_KEY);
+        
+        State.update(FORMS_STATE_KEY, {
+            ...currentState,
+            instances: {
+                ...currentState.instances,
+                [formId]: {
+                    ...currentState.instances[formId],
+                    lastAction: action,
+                    lastUpdate: new Date(),
+                    ...data
+                }
             }
         });
-
-        // Reset state
-        state.currentValues = { ...state.originalValues };
-        state.isDirty = false;
-        state.errors.clear();
-        state.lastUpdate = new Date();
-
-        // Update form status
-        updateFormStatus(type, id);
-
-        // Update global form state
-        updateFormsState(formId, 'reset');
-
-    } catch (error) {
-        console.error('Error resetting form:', error);
-        NotificationUI.show({
-            message: `Failed to reset form: ${error.message}`,
-            type: 'error'
-        });
     }
-};
+}
 
-/**
- * Collects current form data
- * @param {string} type - Form type
- * @param {string} id - Form instance ID
- * @returns {Object|null} Form data or null if validation fails
- */
-export const collectFormData = (type, id) => {
-    if (!validateForm(type, id)) {
-        return null;
-    }
-
-    const formId = `${type}-${id}`;
-    const state = formStates.get(formId);
-    if (!state) return null;
-
-    try {
-        // Create clean copy of current values
-        const data = { ...state.currentValues };
-
-        // Add metadata
-        Object.defineProperty(data, '_metadata', {
-            value: {
-                timestamp: new Date(),
-                formId,
-                isValid: true,
-                isDirty: state.isDirty
-            },
-            enumerable: false
-        });
-
-        return data;
-
-    } catch (error) {
-        console.error('Error collecting form data:', error);
-        NotificationUI.show({
-            message: `Failed to collect form data: ${error.message}`,
-            type: 'error'
-        });
-        return null;
-    }
-};
-
-/**
- * Sets field value based on field type
- * @private
- */
-const setFieldValue = (element, value) => {
-    switch (element.type) {
-        case 'checkbox':
-            element.checked = Boolean(value);
-            break;
-        case 'date':
-            element.value = value instanceof Date ? 
-                value.toISOString().split('T')[0] : value;
-            break;
-        default:
-            element.value = value !== null && value !== undefined ? value : '';
-    }
-};
-
-/**
- * Cleans up form resources
- * @param {string} type - Form type
- * @param {string} id - Form instance ID
- */
-export const cleanupForm = (type, id) => {
-    const formId = `${type}-${id}`;
-    
-    try {
-        // Remove form state
-        formStates.delete(formId);
-
-        // Clear errors
-        clearFormErrors(type, id);
-
-        // Remove event listeners
-        const form = document.getElementById(`${type}Form-${id}`);
-        if (form) {
-            form.querySelectorAll('input, select, textarea').forEach(element => {
-                element.removeEventListener('change', () => {});
-                element.removeEventListener('input', () => {});
-                element.removeEventListener('focus', () => {});
-                element.removeEventListener('blur', () => {});
-            });
-        }
-
-        // Update global form state
-        updateFormsState(formId, 'cleaned-up');
-
-    } catch (error) {
-        console.error('Error cleaning up form:', error);
-        NotificationUI.show({
-            message: `Failed to clean up form: ${error.message}`,
-            type: 'error'
-        });
-    }
-};
-
-// Initialize forms state in state management
-State.set(FORMS_STATE_KEY, {
-    activeForms: new Set(),
-    lastUpdate: new Date(),
-    error: null
-});
+// Export singleton instance
+export const Forms = new FormManager();

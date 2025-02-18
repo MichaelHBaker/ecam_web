@@ -1,25 +1,80 @@
 /* base.css */
-/* Only extends w3.css with custom utilities */
+/* Core utility extensions for w3.css */
 
-/* Custom animations not in w3.css */
+/* Animations */
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
 
-.custom-spin {
+.w3-spin {
     animation: spin 1s linear infinite;
 }
 
-/* Additional status indicators */
-.status-indicator {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 1000;
+/* Loading states */
+.loading-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
 }
 
-/* Custom loading indicator extending w3-spin */
-.loading-indicator i {
+.loading-state i {
     margin-right: 8px;
 }
+
+/* Error states */
+.error-state {
+    padding: 20px;
+    text-align: center;
+}
+
+.error-message {
+    margin-bottom: 10px;
+    color: #f44336;
+}
+
+/* Empty states */
+.empty-state {
+    padding: 20px;
+    text-align: center;
+    color: #757575;
+}
+
+/* Transitions */
+.w3-transition {
+    transition: all 0.3s ease;
+}
+
+/* Cursor utilities */
+.w3-cursor-pointer { cursor: pointer; }
+.w3-cursor-move { cursor: move; }
+.w3-cursor-not-allowed { cursor: not-allowed; }
+
+/* Display utilities */
+.w3-flex { display: flex; }
+.w3-inline-flex { display: inline-flex; }
+.w3-items-center { align-items: center; }
+.w3-justify-center { justify-content: center; }
+.w3-justify-between { justify-content: space-between; }
+
+/* Spacing utilities */
+.w3-gap-4 { gap: 4px; }
+.w3-gap-8 { gap: 8px; }
+.w3-gap-16 { gap: 16px; }
+
+/* Z-index utilities */
+.w3-z-0 { z-index: 0; }
+.w3-z-10 { z-index: 10; }
+.w3-z-20 { z-index: 20; }
+.w3-z-30 { z-index: 30; }
+.w3-z-40 { z-index: 40; }
+.w3-z-50 { z-index: 50; }
+
+/* Position utilities */
+.w3-relative { position: relative; }
+.w3-absolute { position: absolute; }
+
+/* Visibility utilities */
+.w3-invisible { visibility: hidden; }
+.w3-visible { visibility: visible; }

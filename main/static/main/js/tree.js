@@ -1,4 +1,5 @@
-// main/static/main/js/tree.js
+// tree.js
+// Enhanced tree component aligned with Django TreeNodeViewSet
 
 import { State } from './state.js';
 import { DOM } from './dom.js';
@@ -7,455 +8,665 @@ import { NotificationUI } from './ui.js';
 
 class TreeManager {
     constructor() {
-        // Track loaded states
-        this.loadedNodes = new Set();
-        this.loading = new Set();
+        // Node state tracking
+        this.loadedNodes = new Map(); // Track loaded state by type & id
+        this.expandedNodes = new Map(); // Track expanded state by type & id
+        this.loading = new Set(); // Track loading operations
         
-        // Track expanded states
-        this.expandedNodes = new Set();
-        
-        // Filter state
-        this.currentFilter = '';
-        
+        // Node type configurations
+        this.nodeTypes = {
+            project: {
+                childType: 'location',
+                loadChildren: async (id) => API.Projects.getChildren(id),
+                canHaveChildren: true
+            },
+            location: {
+                childType: 'measurement',
+                loadChildren: async (id) => API.Locations.getChildren(id),
+                canHaveChildren: true
+            },
+            measurement: {
+                childType: null,
+                loadChildren: null,
+                canHaveChildren: false
+            }
+        };
+
         // Bind methods
-        this.handleTreeClick = this.handleTreeClick.bind(this);
+        this.handleNodeClick = this.handleNodeClick.bind(this);
+        this.handleNodeAction = this.handleNodeAction.bind(this);
         this.handleFilter = this.handleFilter.bind(this);
-        
+
         // Initialize state
+        this.initializeState();
+    }
+
+    /**
+     * Initialize tree state
+     * @private
+     */
+    initializeState() {
         State.set('tree_state', {
             filter: '',
-            expanded: [],
-            loaded: [],
+            pagination: {
+                offset: 0,
+                limit: 20,
+                hasMore: false
+            },
+            expanded: {
+                project: [],
+                location: [],
+                measurement: []
+            },
+            loaded: {
+                project: [],
+                location: [],
+                measurement: []
+            },
             lastUpdate: new Date()
         });
     }
 
-    async initialize(containerId = 'tree-container') {
-        this.container = DOM.getElement(containerId);
-        if (!this.container) {
-            throw new Error(`Container ${containerId} not found`);
-        }
-
-        // Set up event listeners
-        this.setupEventListeners();
-        
-        // Set up filter
-        this.setupFilter();
-        
-        // Load initial state
-        await this.loadInitialState();
-    }
-
-    setupEventListeners() {
-        // Tree node toggling
-        DOM.addDelegate(this.container, 'click', '[data-action="toggle"]', 
-            async (event, element) => {
-                const node = element.closest('.tree-item');
-                if (node) {
-                    await this.toggleNode(node);
-                }
-            }
-        );
-
-        // Other tree actions (edit, delete, etc)
-        DOM.addDelegate(this.container, 'click', '[data-action]',
-            (event, element) => {
-                const action = element.dataset.action;
-                if (action !== 'toggle') {
-                    this.handleAction(action, element);
-                }
-            }
-        );
-    }
-
-    setupFilter() {
-        const filterInput = DOM.getElement('[data-action="filter-projects"]');
-        if (filterInput) {
-            // Debounced filter handler
-            filterInput.addEventListener('input', 
-                DOM.debounce(() => {
-                    this.handleFilter(filterInput.value);
-                }, 300)
-            );
-
-            // Clear filter
-            DOM.addDelegate(this.container, 'click', '[data-action="clear-filter"]',
-                () => {
-                    filterInput.value = '';
-                    this.handleFilter('');
-                }
-            );
-        }
-    }
-
-    async loadInitialState() {
+    /**
+     * Initialize tree component
+     * @param {string} containerId - Container element ID
+     * @returns {Promise<void>}
+     */
+    async initialize(containerId) {
         try {
-            // Show loading state
-            this.container.classList.add('loading');
-            
-            // Get initial projects with current filter
-            const response = await API.get('/api/projects/', {
-                params: { filter: this.currentFilter }
-            });
-
-            // Update UI
-            this.renderProjects(response.data);
-            
-            // Restore expanded states
-            const expandedNodes = State.get('tree_state')?.expanded || [];
-            for (const nodeId of expandedNodes) {
-                const node = DOM.getElement(nodeId);
-                if (node) {
-                    await this.toggleNode(node, true);
-                }
+            this.container = DOM.getElement(containerId);
+            if (!this.container) {
+                throw new Error(`Container ${containerId} not found`);
             }
+
+            // Setup container structure
+            this.setupContainer();
+
+            // Setup event delegation
+            this.setupEventListeners();
+
+            // Load initial data
+            await this.loadInitialData();
+
+            // Subscribe to state changes
+            this.setupStateSubscriptions();
 
         } catch (error) {
-            NotificationUI.show({
-                message: `Error loading projects: ${error.message}`,
-                type: 'error'
-            });
-        } finally {
-            this.container.classList.remove('loading');
+            this.handleError('Initialization Error', error);
+            throw error;
         }
     }
 
-    async toggleNode(node, skipAnimation = false) {
-        const nodeId = node.dataset.id;
-        const nodeType = node.dataset.type;
-        const childrenContainer = node.querySelector('.children-container');
-        const toggleButton = node.querySelector('[data-action="toggle"] i');
-        
-        if (!childrenContainer || this.loading.has(nodeId)) {
-            return;
-        }
+    /**
+     * Setup container structure
+     * @private
+     */
+    setupContainer() {
+        // Clear container
+        this.container.innerHTML = '';
 
-        try {
-            const isExpanding = !this.expandedNodes.has(nodeId);
-            
-            // Update toggle button
-            toggleButton.className = isExpanding ? 
-                'bi bi-chevron-down' : 'bi bi-chevron-right';
-
-            // Show/hide children with optional animation
-            if (!skipAnimation) {
-                childrenContainer.style.transition = 'height 0.3s ease';
-                childrenContainer.style.height = 
-                    isExpanding ? '0' : childrenContainer.scrollHeight + 'px';
-            }
-            
-            if (isExpanding) {
-                childrenContainer.classList.remove('w3-hide');
-                
-                // Load children if not loaded
-                if (!this.loadedNodes.has(nodeId)) {
-                    await this.loadChildren(nodeId, nodeType, childrenContainer);
-                }
-                
-                this.expandedNodes.add(nodeId);
-                if (!skipAnimation) {
-                    childrenContainer.style.height = 
-                        childrenContainer.scrollHeight + 'px';
-                }
-            } else {
-                if (!skipAnimation) {
-                    childrenContainer.style.height = '0';
-                    await new Promise(resolve => 
-                        setTimeout(resolve, 300)
-                    );
-                }
-                childrenContainer.classList.add('w3-hide');
-                this.expandedNodes.delete(nodeId);
-            }
-
-            // Update state
-            State.update('tree_state', {
-                expanded: Array.from(this.expandedNodes),
-                lastUpdate: new Date()
-            });
-
-        } catch (error) {
-            NotificationUI.show({
-                message: `Error toggling node: ${error.message}`,
-                type: 'error'
-            });
-        } finally {
-            // Clean up animation styles
-            if (!skipAnimation) {
-                childrenContainer.style.transition = '';
-                childrenContainer.style.height = '';
-            }
-        }
-    }
-
-    async loadChildren(nodeId, nodeType, container) {
-        if (this.loading.has(nodeId) || this.loadedNodes.has(nodeId)) {
-            return;
-        }
-
-        try {
-            this.loading.add(nodeId);
-            this.showLoading(container);
-
-            // Get children from API
-            const response = await API.get(
-                `/api/${nodeType}s/children/`, 
-                { params: { parent_id: nodeId } }
-            );
-
-            // Render children
-            const fragment = document.createDocumentFragment();
-            response.data.forEach(child => {
-                const childElement = this.createNodeElement(child);
-                fragment.appendChild(childElement);
-            });
-
-            // Clear loading placeholder and append children
-            const childrenWrapper = container.querySelector('.children-wrapper');
-            childrenWrapper.innerHTML = '';
-            childrenWrapper.appendChild(fragment);
-
-            // Update state
-            this.loadedNodes.add(nodeId);
-            State.update('tree_state', {
-                loaded: [...this.loadedNodes],
-                lastUpdate: new Date()
-            });
-
-        } catch (error) {
-            NotificationUI.show({
-                message: `Error loading children: ${error.message}`,
-                type: 'error'
-            });
-            this.showError(container, error);
-        } finally {
-            this.loading.delete(nodeId);
-            this.hideLoading(container);
-        }
-    }
-
-    // UI helper methods
-    showLoading(container) {
-        const loadingEl = container.querySelector('.loading-state');
-        if (loadingEl) {
-            loadingEl.classList.remove('w3-hide');
-        }
-    }
-
-    hideLoading(container) {
-        const loadingEl = container.querySelector('.loading-state');
-        if (loadingEl) {
-            loadingEl.classList.add('w3-hide');
-        }
-    }
-
-    showError(container, error) {
-        const errorEl = container.querySelector('.error-state');
-        if (errorEl) {
-            const messageEl = errorEl.querySelector('.error-message');
-            if (messageEl) {
-                messageEl.textContent = error.message;
-            }
-            errorEl.classList.remove('w3-hide');
-        }
-    }
-
-    // New methods to complete the implementation
-
-    async handleFilter(filterValue) {
-        this.currentFilter = filterValue.trim();
-        
-        try {
-            // Show loading state
-            this.container.classList.add('loading');
-            
-            // Get filtered projects
-            const response = await API.get('/api/projects/', {
-                params: { filter: this.currentFilter }
-            });
-            
-            // Update UI
-            this.renderProjects(response.data);
-            
-            // Update state
-            State.update('tree_state', {
-                filter: this.currentFilter,
-                lastUpdate: new Date()
-            });
-            
-            // Show no results message if needed
-            this.toggleNoResults(response.data.length === 0);
-            
-        } catch (error) {
-            NotificationUI.show({
-                message: `Error applying filter: ${error.message}`,
-                type: 'error'
-            });
-        } finally {
-            this.container.classList.remove('loading');
-        }
-    }
-
-    handleAction(action, element) {
-        const node = element.closest('.tree-item');
-        if (!node) return;
-
-        const nodeId = node.dataset.id;
-        const nodeType = node.dataset.type;
-
-        switch (action) {
-            case 'edit':
-                this.handleEdit(nodeId, nodeType);
-                break;
-            case 'delete':
-                this.handleDelete(nodeId, nodeType, node);
-                break;
-            case 'add-child':
-                this.handleAddChild(nodeId, nodeType);
-                break;
-        }
-    }
-
-    async handleEdit(nodeId, nodeType) {
-        try {
-            // Fetch node details
-            const response = await API.get(`/api/${nodeType}s/${nodeId}/`);
-            
-            // Show edit modal/form (implementation depends on your UI library)
-            const modal = document.getElementById('edit-modal');
-            if (modal) {
-                // Populate form with node data
-                const form = modal.querySelector('form');
-                if (form) {
-                    Object.entries(response.data).forEach(([key, value]) => {
-                        const input = form.elements[key];
-                        if (input) {
-                            input.value = value;
-                        }
-                    });
-                }
-                
-                // Show modal
-                modal.classList.remove('w3-hide');
-            }
-        } catch (error) {
-            NotificationUI.show({
-                message: `Error loading ${nodeType} details: ${error.message}`,
-                type: 'error'
-            });
-        }
-    }
-
-    async handleDelete(nodeId, nodeType, nodeElement) {
-        if (confirm(`Are you sure you want to delete this ${nodeType}?`)) {
-            try {
-                await API.delete(`/api/${nodeType}s/${nodeId}/`);
-                
-                // Remove node from UI
-                nodeElement.remove();
-                
-                // Clean up state
-                this.loadedNodes.delete(nodeId);
-                this.expandedNodes.delete(nodeId);
-                
-                // Update state
-                State.update('tree_state', {
-                    loaded: [...this.loadedNodes],
-                    expanded: [...this.expandedNodes],
-                    lastUpdate: new Date()
-                });
-                
-                NotificationUI.show({
-                    message: `${nodeType} deleted successfully`,
-                    type: 'success'
-                });
-            } catch (error) {
-                NotificationUI.show({
-                    message: `Error deleting ${nodeType}: ${error.message}`,
-                    type: 'error'
-                });
-            }
-        }
-    }
-
-    async handleAddChild(parentId, parentType) {
-        // Show add modal/form (implementation depends on your UI library)
-        const modal = document.getElementById('add-modal');
-        if (modal) {
-            // Set parent info in form
-            const form = modal.querySelector('form');
-            if (form) {
-                const parentInput = form.elements['parent_id'];
-                if (parentInput) {
-                    parentInput.value = parentId;
-                }
-            }
-            
-            // Show modal
-            modal.classList.remove('w3-hide');
-        }
-    }
-
-    renderProjects(projects) {
-        // Clear existing content
-        const wrapper = this.container.querySelector('.tree-wrapper');
-        if (!wrapper) return;
-        
-        wrapper.innerHTML = '';
-        
-        // Create and append project nodes
-        const fragment = document.createDocumentFragment();
-        projects.forEach(project => {
-            const projectElement = this.createNodeElement(project);
-            fragment.appendChild(projectElement);
-        });
-        
-        wrapper.appendChild(fragment);
-    }
-
-    createNodeElement(node) {
-        const template = document.createElement('template');
-        template.innerHTML = `
-            <div class="tree-item" data-id="${node.id}" data-type="${node.type}">
-                <div class="tree-item-content">
-                    <button class="toggle-btn" data-action="toggle">
-                        <i class="bi bi-chevron-right"></i>
+        // Add tree structure
+        this.container.innerHTML = `
+            <div class="tree-header w3-bar w3-light-grey">
+                <div class="w3-bar-item">
+                    <input type="text" 
+                           class="w3-input" 
+                           placeholder="Filter nodes..."
+                           data-action="filter">
+                </div>
+                <div class="w3-bar-item w3-right">
+                    <button class="w3-button" data-action="expand-all">
+                        <i class="bi bi-arrows-expand"></i>
                     </button>
-                    <span class="item-name">${node.name}</span>
-                    <div class="item-actions">
-                        <button data-action="edit">
-                            <i class="bi bi-pencil"></i>
-                        </button>
-                        <button data-action="delete">
-                            <i class="bi bi-trash"></i>
-                        </button>
-                        <button data-action="add-child">
-                            <i class="bi bi-plus"></i>
-                        </button>
+                    <button class="w3-button" data-action="collapse-all">
+                        <i class="bi bi-arrows-collapse"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="tree-content">
+                <div class="tree-wrapper"></div>
+                <div class="tree-loader w3-hide">
+                    <i class="bi bi-arrow-repeat w3-spin"></i> Loading...
+                </div>
+                <div class="tree-error w3-hide">
+                    <div class="w3-panel w3-pale-red">
+                        <h3>Error</h3>
+                        <p class="error-message"></p>
                     </div>
                 </div>
-                <div class="children-container w3-hide">
-                    <div class="loading-state w3-hide">
-                        <i class="bi bi-arrow-repeat spin"></i> Loading...
+                <div class="tree-empty w3-hide">
+                    <div class="w3-panel w3-pale-yellow">
+                        <p>No items found</p>
                     </div>
-                    <div class="error-state w3-hide">
-                        <span class="error-message"></span>
-                        <button data-action="retry">Retry</button>
-                    </div>
-                    <div class="children-wrapper"></div>
                 </div>
             </div>
         `;
+
+        // Store references to main elements
+        this.wrapper = this.container.querySelector('.tree-wrapper');
+        this.loader = this.container.querySelector('.tree-loader');
+        this.errorContainer = this.container.querySelector('.tree-error');
+        this.emptyContainer = this.container.querySelector('.tree-empty');
+    }
+    /**
+     * Setup event listeners using delegation
+     * @private
+     */
+    setupEventListeners() {
+        // Node expansion/collapse
+        DOM.addDelegate(this.container, 'click', '[data-action="toggle"]', (e, target) => {
+            const node = target.closest('.tree-item');
+            if (node) {
+                e.preventDefault();
+                this.toggleNode(node);
+            }
+        });
+
+        // Node actions (edit, delete, add)
+        DOM.addDelegate(this.container, 'click', '[data-node-action]', (e, target) => {
+            const node = target.closest('.tree-item');
+            if (node) {
+                e.preventDefault();
+                const action = target.dataset.nodeAction;
+                this.handleNodeAction(action, node);
+            }
+        });
+
+        // Filter input
+        const filterInput = this.container.querySelector('[data-action="filter"]');
+        if (filterInput) {
+            filterInput.addEventListener('input', DOM.debounce((e) => {
+                this.handleFilter(e.target.value);
+            }, 300));
+        }
+
+        // Expand/Collapse all
+        DOM.addDelegate(this.container, 'click', '[data-action="expand-all"]', () => {
+            this.expandAll();
+        });
+
+        DOM.addDelegate(this.container, 'click', '[data-action="collapse-all"]', () => {
+            this.collapseAll();
+        });
+
+        // Load more on scroll
+        this.wrapper.addEventListener('scroll', DOM.debounce(() => {
+            if (this.shouldLoadMore()) {
+                this.loadMore();
+            }
+        }, 100));
+    }
+
+    /**
+     * Setup state subscriptions
+     * @private
+     */
+    setupStateSubscriptions() {
+        // Subscribe to filter changes
+        State.subscribe('tree_state', (newState, oldState) => {
+            if (newState.filter !== oldState?.filter) {
+                const filterInput = this.container.querySelector('[data-action="filter"]');
+                if (filterInput && filterInput.value !== newState.filter) {
+                    filterInput.value = newState.filter;
+                }
+            }
+        });
+
+        // Subscribe to expanded state changes
+        State.subscribe('tree_state', (newState, oldState) => {
+            const newExpanded = newState.expanded;
+            const oldExpanded = oldState?.expanded || {};
+
+            // Handle newly expanded nodes
+            Object.entries(newExpanded).forEach(([type, ids]) => {
+                const oldIds = oldExpanded[type] || [];
+                const addedIds = ids.filter(id => !oldIds.includes(id));
+                addedIds.forEach(id => this.ensureNodeExpanded(type, id));
+            });
+        });
+    }
+
+    /**
+     * Load initial data
+     * @private
+     */
+    async loadInitialData() {
+        try {
+            this.showLoading();
+
+            const state = State.get('tree_state');
+            const params = {
+                offset: 0,
+                limit: state.pagination.limit,
+                filter: state.filter
+            };
+
+            // Load root level (projects)
+            const response = await API.Projects.list(params);
+            
+            // Update pagination state
+            State.update('tree_state', {
+                pagination: {
+                    offset: params.limit,
+                    limit: params.limit,
+                    hasMore: response.has_more
+                }
+            });
+
+            // Render nodes
+            await this.renderNodes(response.nodes);
+
+            // Restore expanded state
+            await this.restoreExpandedState();
+
+            this.hideLoading();
+            this.toggleEmpty(response.nodes.length === 0);
+
+        } catch (error) {
+            this.handleError('Load Error', error);
+            this.showError(error);
+        }
+    }
+
+    /**
+     * Check if more data should be loaded
+     * @private
+     */
+    shouldLoadMore() {
+        const state = State.get('tree_state');
+        if (!state.pagination.hasMore || this.loading.has('more')) {
+            return false;
+        }
+
+        const { scrollTop, scrollHeight, clientHeight } = this.wrapper;
+        const threshold = 100; // pixels from bottom
+        return (scrollHeight - scrollTop - clientHeight) < threshold;
+    }
+
+    /**
+     * Load more nodes
+     * @private
+     */
+    async loadMore() {
+        if (this.loading.has('more')) return;
+
+        try {
+            this.loading.add('more');
+            const state = State.get('tree_state');
+            
+            const params = {
+                offset: state.pagination.offset,
+                limit: state.pagination.limit,
+                filter: state.filter
+            };
+
+            const response = await API.Projects.list(params);
+
+            // Update pagination state
+            State.update('tree_state', {
+                pagination: {
+                    offset: state.pagination.offset + params.limit,
+                    limit: params.limit,
+                    hasMore: response.has_more
+                }
+            });
+
+            // Append new nodes
+            await this.renderNodes(response.nodes, true);
+
+        } catch (error) {
+            this.handleError('Load More Error', error);
+            NotificationUI.show({
+                message: 'Error loading more items',
+                type: 'error'
+            });
+        } finally {
+            this.loading.delete('more');
+        }
+    }
+    /**
+     * Render tree nodes
+     * @param {Array} nodes - Nodes to render
+     * @param {boolean} [append=false] - Whether to append or replace
+     * @private
+     */
+    async renderNodes(nodes, append = false) {
+        if (!append) {
+            this.wrapper.innerHTML = '';
+        }
+
+        const fragment = document.createDocumentFragment();
         
+        for (const node of nodes) {
+            const element = this.createNodeElement(node);
+            fragment.appendChild(element);
+
+            // If node was previously expanded, load its children
+            const type = node.type || 'project';
+            if (this.isNodeExpanded(type, node.id)) {
+                await this.loadNodeChildren(node.id, type, element);
+            }
+        }
+
+        this.wrapper.appendChild(fragment);
+    }
+
+    /**
+     * Create node element
+     * @param {Object} node - Node data
+     * @private
+     */
+    createNodeElement(node) {
+        const type = node.type || 'project';
+        const typeConfig = this.nodeTypes[type];
+        const canHaveChildren = typeConfig.canHaveChildren;
+
+        const template = document.createElement('template');
+        template.innerHTML = `
+            <div class="tree-item w3-hover-light-grey" 
+                 data-id="${node.id}" 
+                 data-type="${type}">
+                <div class="tree-item-content w3-bar">
+                    ${canHaveChildren ? `
+                        <button class="w3-bar-item w3-button toggle-btn" 
+                                data-action="toggle">
+                            <i class="bi bi-chevron-right"></i>
+                        </button>
+                    ` : `
+                        <span class="w3-bar-item spacer"></span>
+                    `}
+                    
+                    <div class="w3-bar-item item-data">
+                        <span class="item-name">${node.name}</span>
+                        ${node.description ? `
+                            <span class="item-description w3-small w3-text-grey">
+                                ${node.description}
+                            </span>
+                        ` : ''}
+                    </div>
+
+                    <div class="w3-bar-item w3-right item-actions">
+                        <button class="w3-button" 
+                                data-node-action="edit" 
+                                title="Edit">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        
+                        ${canHaveChildren ? `
+                            <button class="w3-button" 
+                                    data-node-action="add" 
+                                    title="Add child">
+                                <i class="bi bi-plus"></i>
+                            </button>
+                        ` : ''}
+                        
+                        <button class="w3-button" 
+                                data-node-action="delete" 
+                                title="Delete">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+
+                ${canHaveChildren ? `
+                    <div class="children-container w3-hide">
+                        <div class="w3-panel w3-center loading-indicator w3-hide">
+                            <i class="bi bi-arrow-repeat w3-spin"></i> Loading...
+                        </div>
+                        <div class="children-wrapper"></div>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+
         return template.content.firstElementChild;
     }
 
-    toggleNoResults(show) {
-        const noResults = this.container.querySelector('.no-results');
-        if (noResults) {
-            noResults.classList.toggle('w3-hide', !show);
+    /**
+     * Toggle node expansion state
+     * @param {HTMLElement} nodeElement - Node element
+     * @private
+     */
+    async toggleNode(nodeElement) {
+        const nodeId = nodeElement.dataset.id;
+        const nodeType = nodeElement.dataset.type;
+        const typeConfig = this.nodeTypes[nodeType];
+
+        if (!typeConfig.canHaveChildren || this.loading.has(nodeId)) {
+            return;
         }
+
+        const childrenContainer = nodeElement.querySelector('.children-container');
+        const toggleButton = nodeElement.querySelector('.toggle-btn i');
+        
+        if (!childrenContainer || !toggleButton) return;
+
+        const isExpanding = childrenContainer.classList.contains('w3-hide');
+        
+        try {
+            // Update button state immediately
+            toggleButton.className = isExpanding ? 
+                'bi bi-chevron-down' : 'bi bi-chevron-right';
+
+            if (isExpanding) {
+                // Show container before loading
+                childrenContainer.classList.remove('w3-hide');
+                
+                // Load children if not already loaded
+                if (!this.isNodeLoaded(nodeType, nodeId)) {
+                    await this.loadNodeChildren(nodeId, nodeType, nodeElement);
+                }
+
+                // Update expanded state
+                this.setNodeExpanded(nodeType, nodeId, true);
+            } else {
+                // Collapse with animation
+                const height = childrenContainer.scrollHeight;
+                childrenContainer.style.height = height + 'px';
+                
+                requestAnimationFrame(() => {
+                    childrenContainer.style.height = '0';
+                    
+                    setTimeout(() => {
+                        childrenContainer.classList.add('w3-hide');
+                        childrenContainer.style.height = '';
+                        
+                        // Update expanded state
+                        this.setNodeExpanded(nodeType, nodeId, false);
+                    }, 300);
+                });
+            }
+
+        } catch (error) {
+            this.handleError('Toggle Error', error);
+            // Revert button state on error
+            toggleButton.className = 'bi bi-chevron-right';
+        }
+    }
+    /**
+     * Load children for a node
+     * @param {string} nodeId - Parent node ID
+     * @param {string} nodeType - Parent node type
+     * @param {HTMLElement} nodeElement - Parent node element
+     * @private
+     */
+    async loadNodeChildren(nodeId, nodeType, nodeElement) {
+        if (this.loading.has(nodeId)) return;
+
+        const typeConfig = this.nodeTypes[nodeType];
+        if (!typeConfig.loadChildren) return;
+
+        const childrenContainer = nodeElement.querySelector('.children-container');
+        const loadingIndicator = childrenContainer?.querySelector('.loading-indicator');
+        const childrenWrapper = childrenContainer?.querySelector('.children-wrapper');
+        
+        if (!childrenContainer || !loadingIndicator || !childrenWrapper) return;
+
+        try {
+            this.loading.add(nodeId);
+            loadingIndicator.classList.remove('w3-hide');
+
+            // Load children data
+            const response = await typeConfig.loadChildren(nodeId);
+            
+            // Clear existing children
+            childrenWrapper.innerHTML = '';
+            
+            // Create and append child nodes
+            const fragment = document.createDocumentFragment();
+            for (const child of response.nodes) {
+                const childElement = this.createNodeElement({
+                    ...child,
+                    type: typeConfig.childType
+                });
+                fragment.appendChild(childElement);
+            }
+            childrenWrapper.appendChild(fragment);
+
+            // Update loaded state
+            this.setNodeLoaded(nodeType, nodeId, true);
+
+        } catch (error) {
+            this.handleError('Load Children Error', error);
+            childrenContainer.classList.add('w3-hide');
+            NotificationUI.show({
+                message: `Error loading ${typeConfig.childType}s`,
+                type: 'error'
+            });
+        } finally {
+            this.loading.delete(nodeId);
+            loadingIndicator.classList.add('w3-hide');
+        }
+    }
+
+    /**
+     * State tracking methods
+     */
+    isNodeExpanded(type, id) {
+        const state = State.get('tree_state');
+        return state.expanded[type]?.includes(id) || false;
+    }
+
+    setNodeExpanded(type, id, expanded) {
+        const state = State.get('tree_state');
+        const expandedIds = new Set(state.expanded[type] || []);
+        
+        if (expanded) {
+            expandedIds.add(id);
+        } else {
+            expandedIds.delete(id);
+        }
+
+        State.update('tree_state', {
+            expanded: {
+                ...state.expanded,
+                [type]: Array.from(expandedIds)
+            }
+        });
+    }
+
+    isNodeLoaded(type, id) {
+        const state = State.get('tree_state');
+        return state.loaded[type]?.includes(id) || false;
+    }
+
+    setNodeLoaded(type, id, loaded) {
+        const state = State.get('tree_state');
+        const loadedIds = new Set(state.loaded[type] || []);
+        
+        if (loaded) {
+            loadedIds.add(id);
+        } else {
+            loadedIds.delete(id);
+        }
+
+        State.update('tree_state', {
+            loaded: {
+                ...state.loaded,
+                [type]: Array.from(loadedIds)
+            }
+        });
+    }
+
+    /**
+     * Error handling and UI state methods
+     */
+    handleError(context, error) {
+        console.error(`Tree Error (${context}):`, error);
+        
+        // Update error state
+        State.update('tree_state', {
+            error: {
+                context,
+                message: error.message,
+                timestamp: new Date()
+            }
+        });
+    }
+
+    showError(error) {
+        if (!this.errorContainer) return;
+
+        const messageEl = this.errorContainer.querySelector('.error-message');
+        if (messageEl) {
+            messageEl.textContent = error.message;
+        }
+        
+        this.errorContainer.classList.remove('w3-hide');
+        this.loader.classList.add('w3-hide');
+    }
+
+    showLoading() {
+        if (!this.loader) return;
+        this.loader.classList.remove('w3-hide');
+        this.errorContainer?.classList.add('w3-hide');
+    }
+
+    hideLoading() {
+        this.loader?.classList.add('w3-hide');
+    }
+
+    toggleEmpty(show) {
+        if (!this.emptyContainer) return;
+        this.emptyContainer.classList.toggle('w3-hide', !show);
+    }
+
+    /**
+     * Clean up resources
+     */
+    destroy() {
+        // Clear state
+        this.loadedNodes.clear();
+        this.expandedNodes.clear();
+        this.loading.clear();
+
+        // Remove event listeners (DOM utility handles this)
+        if (this.container) {
+            this.container.innerHTML = '';
+        }
+
+        // Clear state
+        State.update('tree_state', {
+            filter: '',
+            pagination: {
+                offset: 0,
+                limit: 20,
+                hasMore: false
+            },
+            expanded: {
+                project: [],
+                location: [],
+                measurement: []
+            },
+            loaded: {
+                project: [],
+                location: [],
+                measurement: []
+            },
+            lastUpdate: new Date()
+        });
     }
 }
 
-export default TreeManager;
+// Export single instance
+export const Tree = new TreeManager();

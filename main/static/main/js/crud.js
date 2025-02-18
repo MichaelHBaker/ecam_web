@@ -67,372 +67,513 @@ class TreeItemManager {
             this.completeOperation('create', type, error);
         }
     }
-
-    /**
+/**
      * Updates an existing tree item
-     * @param {Event} event - Form submission event
      * @param {string} type - Item type
      * @param {string} id - Item ID
-     * @param {Array} fields - Field configuration array
+     * @param {Object} data - Update data
      * @returns {Promise<void>}
      */
-    async updateItem(event, type, id, fields) {
-        event.preventDefault();
-        
+async updateItem(type, id, data) {
+    try {
+        this.startOperation('update', type);
+
+        // Get item container
+        const item = document.querySelector(`[data-type="${type}"][data-id="${id}"]`);
+        if (!item) {
+            throw new Error('Item not found');
+        }
+
+        // Save current state for rollback
+        const previousState = this.saveItemState(item);
+
+        // Update UI optimistically
+        this.updateItemUI(item, data);
+
         try {
-            this.startOperation('update', type);
-            
-            // Collect and validate form data
-            const form = event.target;
-            const data = this.collectFormData(form, fields);
-            if (!this.validateFormData(data, fields)) {
-                throw new Error('Invalid form data');
-            }
-
-            // Disable form during update
-            this.setFormDisabled(form, true);
-
-            // Make API call
+            // Send API request
             const response = await API[`${type}s`].update(id, data);
-
-            // Update UI
-            await this.updateUIFromResponse(response, type, id);
+            
+            // Update state and UI with response data
+            this.finalizeUpdate(item, response);
             
             NotificationUI.show({
                 message: `${type} updated successfully`,
                 type: 'success'
             });
 
-            this.completeOperation('update', type);
         } catch (error) {
-            this.handleError('Update Error', error);
-            this.completeOperation('update', type, error);
-        } finally {
-            const form = document.getElementById(`${type}Form-${id}`);
-            this.setFormDisabled(form, false);
+            // Rollback UI changes on error
+            this.rollbackItemState(item, previousState);
+            throw error;
         }
+
+        this.completeOperation('update', type);
+    } catch (error) {
+        this.handleError('Update Error', error);
+        this.completeOperation('update', type, error);
     }
+}
 
-    /**
-     * Deletes a tree item
-     * @param {string} type - Item type
-     * @param {string} id - Item ID
-     * @returns {Promise<void>}
-     */
-    async deleteItem(type, id) {
+/**
+ * Deletes a tree item
+ * @param {string} type - Item type
+ * @param {string} id - Item ID
+ * @returns {Promise<void>}
+ */
+async deleteItem(type, id) {
+    try {
+        this.startOperation('delete', type);
+
+        // Get item container
+        const item = document.querySelector(`[data-type="${type}"][data-id="${id}"]`);
+        if (!item) {
+            throw new Error('Item not found');
+        }
+
+        // Save state for potential rollback
+        const parentContainer = item.parentElement;
+        const nextSibling = item.nextSibling;
+        const itemState = this.saveItemState(item);
+
+        // Remove item optimistically
+        item.classList.add('w3-animate-opacity');
+        await new Promise(resolve => setTimeout(resolve, 300));
+        item.remove();
+
         try {
-            this.startOperation('delete', type);
-
-            const treeItem = document.getElementById(`id_form-${type}-${id}`)?.closest('.tree-item');
-            const container = document.getElementById(`id_${type}-${id}`);
-            
-            // Start fade animation
-            [treeItem, container].forEach(el => {
-                if (el) {
-                    el.style.transition = 'opacity 0.3s';
-                    el.style.opacity = '0.5';
-                    el.style.pointerEvents = 'none';
-                }
-            });
-
-            // Delete via API
+            // Send API request
             await API[`${type}s`].delete(id);
-
-            // Remove from DOM
-            [treeItem, container].forEach(el => el?.remove());
-
+            
             NotificationUI.show({
                 message: `${type} deleted successfully`,
                 type: 'success'
             });
 
-            this.completeOperation('delete', type);
         } catch (error) {
-            // Restore elements on error
-            [treeItem, container].forEach(el => {
-                if (el) {
-                    el.style.opacity = '1';
-                    el.style.pointerEvents = 'auto';
-                }
-            });
-
-            this.handleError('Delete Error', error);
-            this.completeOperation('delete', type, error);
+            // Rollback on error
+            this.rollbackDelete(parentContainer, nextSibling, item, itemState);
+            throw error;
         }
+
+        this.completeOperation('delete', type);
+    } catch (error) {
+        this.handleError('Delete Error', error);
+        this.completeOperation('delete', type, error);
     }
-
-    /**
-     * Enables edit mode for a tree item
-     * @param {string} type - Item type
-     * @param {string} id - Item ID
-     * @param {Array} fields - Field configuration array
-     * @returns {Promise<void>}
-     */
-    async editItem(type, id, fields) {
-        try {
-            this.startOperation('edit', type);
-
-            const form = document.getElementById(`${type}Form-${id}`);
-            if (!form) throw new Error('Form not found');
-
-            // Store original values and make fields editable
-            fields.forEach(field => {
-                const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
-                if (!element) return;
-
-                element.dataset.originalValue = element.value;
-                if (element.tagName === 'SELECT') {
-                    element.dataset.originalText = element.options[element.selectedIndex]?.text;
-                }
-
-                element.removeAttribute(element.tagName === 'SELECT' ? 'disabled' : 'readonly');
-                element.style.display = 'inline-block';
-                element.classList.add('editing');
-            });
-
-            // Show edit controls
-            const controls = document.getElementById(`id_${type}EditControls-${id}`);
-            if (controls) {
-                controls.style.display = 'inline-flex';
-            }
-
-            // Focus name field
-            document.getElementById(`id_${type}Name-${id}`)?.focus();
-
-            this.completeOperation('edit', type);
-        } catch (error) {
-            this.handleError('Edit Error', error);
-            this.completeOperation('edit', type, error);
-        }
-    }
-
-    /**
-     * Cancels edit mode for a tree item
-     * @param {Event} event - Click event
-     * @param {string} type - Item type
-     * @param {string} id - Item ID
-     * @param {Array} fields - Field configuration array
-     */
-    cancelEdit(event, type, id, fields) {
-        event.preventDefault();
-
-        try {
-            this.startOperation('cancelEdit', type);
-
-            fields.forEach(field => {
-                const element = document.getElementById(`id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`);
-                if (!element) return;
-
-                // Restore original value
-                element.value = element.dataset.originalValue || '';
-
-                // Restore display state
-                element.setAttribute(
-                    element.tagName === 'SELECT' ? 'disabled' : 'readonly',
-                    'true'
-                );
-                element.style.display = field === 'name' ? 'inline-block' : 'none';
-                element.classList.remove('editing', 'error');
-
-                // Clean up stored data
-                delete element.dataset.originalValue;
-                delete element.dataset.originalText;
-            });
-
-            // Hide edit controls
-            const controls = document.getElementById(`id_${type}EditControls-${id}`);
-            if (controls) {
-                controls.style.display = 'none';
-            }
-
-            this.clearFormErrors(type, id);
-            this.completeOperation('cancelEdit', type);
-        } catch (error) {
-            this.handleError('Cancel Edit Error', error);
-            this.completeOperation('cancelEdit', type, error);
-        }
-    }
-
-    // Private helper methods
-
-    /**
+}
+/**
      * Creates a temporary form for new items
      * @private
      */
-    async createTempForm(type, tempId, fields, parentId) {
-        const form = document.createElement('form');
-        form.id = `id_${type}Form-${tempId}`;
-        form.className = 'tree-item w3-hover-light-grey';
+async createTempForm(type, tempId, fields, parentId) {
+    const form = document.createElement('form');
+    form.className = 'tree-item temp-item w3-animate-opacity';
+    form.dataset.type = type;
+    form.dataset.id = tempId;
 
-        // Add CSRF token
-        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
-        if (csrfToken) {
-            const csrfInput = document.createElement('input');
-            csrfInput.type = 'hidden';
-            csrfInput.name = 'csrfmiddlewaretoken';
-            csrfInput.value = csrfToken;
-            form.appendChild(csrfInput);
-        }
+    // Add fields
+    const fieldsContainer = document.createElement('div');
+    fieldsContainer.className = 'fields-container';
 
-        // Add fields
-        const fieldsContainer = document.createElement('div');
-        fieldsContainer.className = 'fields-container';
-
-        for (const field of fields) {
-            const input = await TreeUI.createField(field, type, tempId);
-            fieldsContainer.appendChild(input);
-        }
-
-        form.appendChild(fieldsContainer);
-
-        // Add edit controls
-        const controls = TreeUI.createEditControls(type, tempId);
-        form.appendChild(controls);
-
-        return form;
-    }
-
-    /**
-     * Gets parent container for new items
-     * @private
-     */
-    getParentContainer(type, parentId) {
-        return parentId
-            ? document.getElementById(`id_${type}-${parentId}`)
-            : document.querySelector('.tree-headings');
-    }
-
-    /**
-     * Inserts form into DOM
-     * @private
-     */
-    insertForm(form, parentContainer, parentId) {
-        if (parentId) {
-            parentContainer.classList.remove('w3-hide');
-            parentContainer.classList.add('w3-show');
-            parentContainer.insertAdjacentElement('afterbegin', form);
-
-            const chevronIcon = document.getElementById(`id_chevronIcon-id_${parentContainer.id}`);
-            if (chevronIcon) {
-                chevronIcon.className = "bi bi-chevron-down";
-            }
-        } else {
-            parentContainer.insertAdjacentElement('afterend', form);
-        }
-    }
-
-    /**
-     * Collects form data
-     * @private
-     */
-    collectFormData(form, fields) {
-        const data = {};
-        fields.forEach(field => {
-            const element = form.querySelector(`[name="${field}"]`);
-            if (element) {
-                data[field] = element.value;
-            }
-        });
-        return data;
-    }
-
-    /**
-     * Validates form data
-     * @private
-     */
-    validateFormData(data, fields) {
-        return fields.every(field => {
-            const value = data[field];
-            return value !== undefined && value !== '';
-        });
-    }
-
-    /**
-     * Updates UI with API response
-     * @private
-     */
-    async updateUIFromResponse(response, type, id) {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = response.html;
-
-        const oldElement = document.getElementById(`id_form-${type}-${id}`)?.closest('.tree-item');
-        if (oldElement && tempDiv.firstElementChild) {
-            oldElement.replaceWith(tempDiv.firstElementChild);
-        }
-    }
-
-    /**
-     * Sets form disabled state
-     * @private
-     */
-    setFormDisabled(form, disabled) {
-        if (!form) return;
+    for (const field of fields) {
+        const input = document.createElement('input');
+        input.type = field.type || 'text';
+        input.name = field.name;
+        input.className = 'tree-item-field w3-input';
+        input.placeholder = field.label || field.name;
+        input.required = field.required || false;
         
-        form.querySelectorAll('input, select, button').forEach(element => {
-            element.disabled = disabled;
-        });
-    }
-
-    /**
-     * Clears form errors
-     * @private
-     */
-    clearFormErrors(type, id) {
-        const form = document.getElementById(`${type}Form-${id}`);
-        if (!form) return;
-
-        form.querySelectorAll('.field-error').forEach(error => error.remove());
-        form.querySelectorAll('.error').forEach(field => field.classList.remove('error'));
-    }
-
-    /**
-     * Starts a CRUD operation
-     * @private
-     */
-    startOperation(operation, type) {
-        const activeOperations = State.get(CRUD_STATE_KEY).activeOperations;
-        activeOperations.add(`${operation}_${type}`);
-        State.update(CRUD_STATE_KEY, { activeOperations });
-    }
-
-    /**
-     * Completes a CRUD operation
-     * @private
-     */
-    completeOperation(operation, type, error = null) {
-        const state = State.get(CRUD_STATE_KEY);
-        state.activeOperations.delete(`${operation}_${type}`);
-        State.update(CRUD_STATE_KEY, {
-            activeOperations: state.activeOperations,
-            lastOperation: {
-                type: operation,
-                itemType: type,
-                timestamp: new Date(),
-                status: error ? 'error' : 'success',
-                error
-            }
-        });
-    }
-
-    /**
-     * Handles operation errors
-     * @private
-     */
-    handleError(context, error) {
-        console.error(`${context}:`, error);
+        if (field.pattern) {
+            input.pattern = field.pattern;
+        }
         
+        fieldsContainer.appendChild(input);
+    }
+
+    // Add hidden parent ID if provided
+    if (parentId) {
+        const parentInput = document.createElement('input');
+        parentInput.type = 'hidden';
+        parentInput.name = 'parent_id';
+        parentInput.value = parentId;
+        fieldsContainer.appendChild(parentInput);
+    }
+
+    // Add action buttons
+    const actions = document.createElement('div');
+    actions.className = 'edit-controls w3-right';
+    actions.innerHTML = `
+        <button type="submit" class="w3-button w3-green">
+            <i class="bi bi-check"></i> Save
+        </button>
+        <button type="button" class="w3-button w3-red" data-action="cancel">
+            <i class="bi bi-x"></i> Cancel
+        </button>
+    `;
+
+    // Add event listeners
+    form.addEventListener('submit', (e) => this.handleSubmit(e, type));
+    actions.querySelector('[data-action="cancel"]').addEventListener('click', 
+        () => this.handleCancel(form));
+
+    form.appendChild(fieldsContainer);
+    form.appendChild(actions);
+
+    return form;
+}
+
+/**
+ * Find appropriate parent container for new item
+ * @private
+ */
+getParentContainer(type, parentId) {
+    if (!parentId) {
+        return document.querySelector('.tree-container');
+    }
+
+    const parentItem = document.querySelector(`[data-id="${parentId}"]`);
+    if (!parentItem) return null;
+
+    let container = parentItem.querySelector('.children-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'children-container';
+        parentItem.appendChild(container);
+    }
+
+    return container;
+}
+
+/**
+ * Insert form into container
+ * @private
+ */
+insertForm(form, container, parentId) {
+    if (parentId) {
+        // Insert at top of children container
+        container.insertBefore(form, container.firstChild);
+    } else {
+        // Insert at bottom of main container
+        container.appendChild(form);
+    }
+
+    // Trigger animation
+    requestAnimationFrame(() => {
+        form.style.opacity = '1';
+    });
+}
+
+/**
+ * Save item state for potential rollback
+ * @private
+ */
+saveItemState(item) {
+    return {
+        innerHTML: item.innerHTML,
+        className: item.className,
+        style: item.getAttribute('style'),
+        data: Object.fromEntries(
+            Array.from(item.attributes)
+                .filter(attr => attr.name.startsWith('data-'))
+                .map(attr => [attr.name, attr.value])
+        )
+    };
+}
+/**
+     * Handle form submission
+     * @private
+     */
+async handleSubmit(event, type) {
+    event.preventDefault();
+    const form = event.target;
+    
+    try {
+        this.startOperation('save', type);
+        
+        // Collect form data
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        
+        // Send to API
+        const response = await API[`${type}s`].create(data);
+        
+        // Replace temp form with new item
+        const newItem = TreeUI.createTreeItem({
+            type,
+            id: response.id,
+            name: response.name,
+            fields: Object.keys(data),
+            parent: data.parent_id,
+            hasChildren: type !== 'measurement'
+        });
+
+        form.parentNode.insertBefore(newItem, form);
+        form.remove();
+
         NotificationUI.show({
-            message: `${context}: ${error.message}`,
-            type: 'error'
+            message: `${type} created successfully`,
+            type: 'success'
         });
 
-        State.update(CRUD_STATE_KEY, { error: {
-            context,
-            message: error.message,
-            timestamp: new Date()
-        }});
+        this.completeOperation('save', type);
+        
+    } catch (error) {
+        this.handleError('Save Error', error);
+        this.completeOperation('save', type, error);
     }
 }
 
+/**
+ * Handle form cancellation
+ * @private
+ */
+handleCancel(form) {
+    form.classList.add('w3-animate-opacity');
+    form.style.opacity = '0';
+    
+    setTimeout(() => {
+        form.remove();
+    }, 300);
+}
+
+/**
+ * Update item UI with new data
+ * @private
+ */
+updateItemUI(item, data) {
+    // Update visible fields
+    Object.entries(data).forEach(([key, value]) => {
+        const field = item.querySelector(`[name="${key}"]`);
+        if (field) {
+            field.value = value;
+            
+            // Update display value if read-only
+            if (field.readOnly) {
+                const display = item.querySelector(`[data-field="${key}"]`);
+                if (display) {
+                    display.textContent = value;
+                }
+            }
+        }
+    });
+
+    // Update any dependent UI elements
+    const nameField = data.name || data.title;
+    if (nameField) {
+        const nameDisplay = item.querySelector('.item-name');
+        if (nameDisplay) {
+            nameDisplay.textContent = nameField;
+        }
+    }
+}
+
+/**
+ * Rollback item state
+ * @private
+ */
+rollbackItemState(item, state) {
+    item.innerHTML = state.innerHTML;
+    item.className = state.className;
+    
+    if (state.style) {
+        item.setAttribute('style', state.style);
+    } else {
+        item.removeAttribute('style');
+    }
+    
+    // Restore data attributes
+    Object.entries(state.data).forEach(([attr, value]) => {
+        item.setAttribute(attr, value);
+    });
+}
+
+/**
+ * Operation state management
+ * @private
+ */
+startOperation(operation, type) {
+    const operationId = `${operation}-${type}-${Date.now()}`;
+    this.pendingOperations.set(operationId, {
+        type: operation,
+        itemType: type,
+        startTime: new Date(),
+        status: 'pending'
+    });
+
+    State.update(CRUD_STATE_KEY, {
+        activeOperations: Array.from(this.pendingOperations.keys()),
+        lastOperation: {
+            id: operationId,
+            type: operation,
+            itemType: type,
+            status: 'started'
+        }
+    });
+
+    return operationId;
+}
+/**
+     * Complete operation and update state
+     * @private
+     */
+completeOperation(operation, type, error = null) {
+    const operationId = Array.from(this.pendingOperations.keys())
+        .find(key => {
+            const op = this.pendingOperations.get(key);
+            return op.type === operation && 
+                   op.itemType === type && 
+                   op.status === 'pending';
+        });
+
+    if (operationId) {
+        const operationData = this.pendingOperations.get(operationId);
+        operationData.status = error ? 'error' : 'completed';
+        operationData.endTime = new Date();
+        operationData.error = error;
+
+        if (!error) {
+            this.pendingOperations.delete(operationId);
+        }
+
+        State.update(CRUD_STATE_KEY, {
+            activeOperations: Array.from(this.pendingOperations.keys()),
+            lastOperation: {
+                id: operationId,
+                type: operation,
+                itemType: type,
+                status: operationData.status,
+                duration: operationData.endTime - operationData.startTime,
+                error: error ? error.message : null
+            }
+        });
+    }
+}
+
+/**
+ * Error handling with user feedback
+ * @private
+ */
+handleError(context, error) {
+    console.error(`${context}:`, error);
+
+    // Show user notification
+    NotificationUI.show({
+        message: error.message || 'An error occurred',
+        type: 'error',
+        duration: 5000
+    });
+
+    // Update error state
+    State.update(CRUD_STATE_KEY, {
+        error: {
+            context,
+            message: error.message,
+            timestamp: new Date(),
+            stack: error.stack
+        }
+    });
+
+    // Log to monitoring system if available
+    if (window.errorMonitor) {
+        window.errorMonitor.logError(context, error);
+    }
+}
+
+/**
+ * Finalize update with response data
+ * @private
+ */
+finalizeUpdate(item, response) {
+    // Update any server-generated fields
+    if (response.updated_at) {
+        const timestamp = item.querySelector('.update-timestamp');
+        if (timestamp) {
+            timestamp.textContent = new Date(response.updated_at)
+                .toLocaleString();
+        }
+    }
+
+    // Update version if tracked
+    if (response.version) {
+        item.dataset.version = response.version;
+    }
+
+    // Update any computed fields
+    if (response.computed_fields) {
+        Object.entries(response.computed_fields).forEach(([field, value]) => {
+            const display = item.querySelector(`[data-computed="${field}"]`);
+            if (display) {
+                display.textContent = value;
+            }
+        });
+    }
+}
+
+/**
+ * Roll back a deleted item
+ * @private
+ */
+rollbackDelete(parentContainer, nextSibling, item, state) {
+    // Restore item content and attributes
+    this.rollbackItemState(item, state);
+    
+    // Reinsert at original position
+    if (nextSibling) {
+        parentContainer.insertBefore(item, nextSibling);
+    } else {
+        parentContainer.appendChild(item);
+    }
+
+    // Restore visibility with animation
+    item.style.opacity = '0';
+    requestAnimationFrame(() => {
+        item.classList.add('w3-animate-opacity');
+        item.style.opacity = '1';
+    });
+}
+
+/**
+ * Check if operations are pending
+ * @returns {boolean}
+ */
+hasPendingOperations() {
+    return this.pendingOperations.size > 0;
+}
+
+/**
+ * Get operation statistics
+ * @returns {Object}
+ */
+getOperationStats() {
+    const stats = {
+        total: 0,
+        completed: 0,
+        pending: 0,
+        error: 0,
+        byType: {}
+    };
+
+    this.pendingOperations.forEach(op => {
+        stats.total++;
+        stats[op.status]++;
+        
+        if (!stats.byType[op.itemType]) {
+            stats.byType[op.itemType] = {
+                total: 0,
+                completed: 0,
+                pending: 0,
+                error: 0
+            };
+        }
+        
+        stats.byType[op.itemType].total++;
+        stats.byType[op.itemType][op.status]++;
+    });
+
+    return stats;
+}
+}
+
 // Export singleton instance
-export const crud = new TreeItemManager();
+export const CRUD = new TreeItemManager();

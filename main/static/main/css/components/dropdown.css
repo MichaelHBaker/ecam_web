@@ -1,47 +1,84 @@
-/* dropdowns.css */
-/* Only custom dropdown extensions */
+/* components/dropdowns.css */
+/* Dropdown extensions for w3.css */
 
-/* Tree-specific action menu */
-.tree-actions {
-    display: none;
-    margin-left: auto;
+/* Dropdown positioning */
+.w3-dropdown-content {
+    min-width: 160px;
+    z-index: 1;
+    transform: translateX(-10%);
 }
 
-.w3-bar-item:hover .tree-actions {
+.tree-item .w3-dropdown-content {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    transform: translateX(0);
+}
+
+/* Dropdown menu items */
+.w3-dropdown-content .w3-bar-item {
+    padding: 8px 16px;
     display: flex;
     align-items: center;
+    gap: 8px;
 }
 
-.action-menu i {
-    margin-right: 8px;
+.w3-dropdown-content .w3-bar-item i {
     width: 16px;
     text-align: center;
 }
 
-/* Custom dropdown positioning */
-.tree-dropdown {
-    position: absolute;
-    right: 0;
-    transform: translateY(2px);
+/* Hover effects */
+.w3-dropdown-content .w3-bar-item:hover {
+    background-color: #f1f1f1;
 }
 
-/* Extend w3-dropdown-content for tree needs */
-.w3-dropdown-content.tree-menu {
-    min-width: 200px;
-    transform: translateX(-90%);
+/* Dropdown dividers */
+.w3-dropdown-divider {
+    border-top: 1px solid #e0e0e0;
+    margin: 4px 0;
 }
 
-/* Action button states */
-.tree-action-btn {
-    opacity: 0.7;
-    transition: opacity 0.2s;
-}
-
-.tree-action-btn:hover {
-    opacity: 1;
-}
-
-.tree-action-btn.disabled {
-    opacity: 0.3;
+/* Disabled state */
+.w3-dropdown-content .w3-bar-item.w3-disabled {
+    opacity: 0.5;
     cursor: not-allowed;
+}
+
+.w3-dropdown-content .w3-bar-item.w3-disabled:hover {
+    background-color: transparent;
+}
+
+/* Active state */
+.w3-dropdown-content .w3-bar-item.w3-active {
+    background-color: #2196F3;
+    color: white;
+}
+
+/* Dropdown animations */
+.w3-dropdown-content {
+    transform-origin: top;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    opacity: 0;
+    transform: scaleY(0);
+}
+
+.w3-dropdown-content.w3-show {
+    opacity: 1;
+    transform: scaleY(1);
+}
+
+/* Dropdown header */
+.w3-dropdown-header {
+    padding: 8px 16px;
+    color: #757575;
+    font-size: 0.9em;
+    font-weight: 500;
+}
+
+/* Dropdown footer */
+.w3-dropdown-footer {
+    padding: 8px 16px;
+    background-color: #f5f5f5;
+    border-top: 1px solid #e0e0e0;
 }

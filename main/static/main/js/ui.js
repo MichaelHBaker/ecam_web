@@ -1,41 +1,48 @@
 // ui.js
-// Enhanced UI management and interaction utilities
+// Enhanced UI management with improved state integration
 
 import { State } from './state.js';
 
 const UI_STATE_KEY = 'ui_state';
 
 /**
- * Notification management class
+ * Enhanced Notification Manager
  */
 class NotificationManager {
     constructor() {
         this.container = null;
         this.queue = [];
-        this.activeNotifications = new Set();
+        this.activeNotifications = new Map();
         this.maxNotifications = 3;
+        
+        // Initialize state and container
         this.initialize();
+
+        // Bind methods
+        this.handleClick = this.handleClick.bind(this);
     }
 
     /**
-     * Initialize notification container
+     * Initialize notification system
      */
     initialize() {
-        // Create container if it doesn't exist
-        if (!this.container) {
-            this.container = document.createElement('div');
-            this.container.className = 'notification-container w3-display-topright';
-            this.container.style.cssText = `
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                z-index: 9999;
-                max-width: 400px;
-            `;
-            document.body.appendChild(this.container);
-        }
+        // Create container
+        this.container = document.createElement('div');
+        this.container.className = 'notification-container w3-display-topright';
+        this.container.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            max-width: 400px;
+            pointer-events: none;
+        `;
+        
+        // Add click handler
+        this.container.addEventListener('click', this.handleClick);
+        document.body.appendChild(this.container);
 
-        // Initialize UI state
+        // Initialize state
         State.set(UI_STATE_KEY, {
             notifications: {
                 active: [],
@@ -55,29 +62,86 @@ class NotificationManager {
             message: config.message || '',
             type: config.type || 'info',
             duration: config.duration || 3000,
-            position: config.position || 'top-right',
             closeable: config.closeable !== false,
+            actions: config.actions || [],
             timestamp: new Date(),
             ...config
         };
 
-        // Add to queue or show immediately
+        // Queue or show notification
         if (this.activeNotifications.size >= this.maxNotifications) {
             this.queue.push(notification);
-            this._updateState();
+            this.updateState();
         } else {
             this._showNotification(notification);
         }
     }
 
     /**
-     * Show a notification element
+     * Show an API error notification
+     * @param {Error} error - API error
+     */
+    showAPIError(error) {
+        let message = error.message;
+        let details = null;
+
+        // Handle validation errors
+        if (error.type === 'validation_error' && error.data) {
+            details = Object.entries(error.data)
+                .map(([field, errors]) => `${field}: ${errors.join(', ')}`)
+                .join('\n');
+        }
+
+        this.show({
+            message,
+            details,
+            type: 'error',
+            duration: 5000,
+            closeable: true,
+            actions: error.retryable ? [{
+                label: 'Retry',
+                action: error.retry
+            }] : []
+        });
+    }
+
+    /**
+     * Show a form error notification
+     * @param {string} formId - Form identifier
+     * @param {Object} errors - Form errors
+     */
+    showFormError(formId, errors) {
+        const message = 'Form validation failed';
+        const details = Object.entries(errors)
+            .map(([field, error]) => `${field}: ${error}`)
+            .join('\n');
+
+        this.show({
+            message,
+            details,
+            type: 'error',
+            duration: 5000,
+            closeable: true,
+            actions: [{
+                label: 'Go to Form',
+                action: () => {
+                    const form = document.getElementById(formId);
+                    if (form) {
+                        form.scrollIntoView({ behavior: 'smooth' });
+                    }
+                }
+            }]
+        });
+    }
+    /**
+     * Create and show notification element
      * @private
      */
     _showNotification(notification) {
+        // Create notification element
         const element = this._createNotificationElement(notification);
         this.container.appendChild(element);
-        this.activeNotifications.add(notification.id);
+        this.activeNotifications.set(notification.id, notification);
 
         // Trigger entrance animation
         requestAnimationFrame(() => {
@@ -87,22 +151,25 @@ class NotificationManager {
 
         // Set up auto-removal
         if (notification.duration > 0) {
-            setTimeout(() => {
+            const timer = setTimeout(() => {
                 this.remove(notification.id);
             }, notification.duration);
+
+            // Store timer for cleanup
+            notification.timer = timer;
         }
 
-        this._updateState();
+        this.updateState();
     }
 
     /**
-     * Create a notification element
+     * Create notification element
      * @private
      */
     _createNotificationElement(notification) {
         const element = document.createElement('div');
         element.id = notification.id;
-        element.className = `w3-panel notification ${this._getTypeClass(notification.type)}`;
+        element.className = `notification ${this._getTypeClass(notification.type)}`;
         element.style.cssText = `
             transition: all 0.3s ease-in-out;
             transform: translateX(100%);
@@ -110,9 +177,11 @@ class NotificationManager {
             margin: 8px;
             position: relative;
             overflow: hidden;
+            pointer-events: auto;
+            min-width: 280px;
         `;
 
-        // Add progress bar if duration > 0
+        // Progress bar for timed notifications
         if (notification.duration > 0) {
             const progress = document.createElement('div');
             progress.className = 'notification-progress';
@@ -139,15 +208,45 @@ class NotificationManager {
             element.appendChild(progress);
         }
 
-        // Add content
+        // Create content container
         const content = document.createElement('div');
         content.className = 'notification-content w3-padding';
+
+        // Add icon and message
         content.innerHTML = `
             <div class="notification-message">
                 ${this._getTypeIcon(notification.type)}
-                ${notification.message}
+                <span>${notification.message}</span>
             </div>
         `;
+
+        // Add details if present
+        if (notification.details) {
+            const details = document.createElement('div');
+            details.className = 'notification-details w3-small w3-text-grey';
+            details.style.marginTop = '4px';
+            details.textContent = notification.details;
+            content.appendChild(details);
+        }
+
+        // Add action buttons
+        if (notification.actions && notification.actions.length > 0) {
+            const actions = document.createElement('div');
+            actions.className = 'notification-actions w3-bar-block w3-margin-top';
+            
+            notification.actions.forEach(action => {
+                const button = document.createElement('button');
+                button.className = 'w3-button w3-small w3-border';
+                button.textContent = action.label;
+                button.dataset.action = 'notification-action';
+                button.dataset.notificationId = notification.id;
+                button.onclick = action.action;
+                actions.appendChild(button);
+            });
+
+            content.appendChild(actions);
+        }
+
         element.appendChild(content);
 
         // Add close button if closeable
@@ -155,7 +254,8 @@ class NotificationManager {
             const closeButton = document.createElement('button');
             closeButton.className = 'w3-button w3-hover-none w3-hover-text-white notification-close';
             closeButton.innerHTML = '×';
-            closeButton.onclick = () => this.remove(notification.id);
+            closeButton.dataset.action = 'notification-close';
+            closeButton.dataset.notificationId = notification.id;
             closeButton.style.cssText = `
                 position: absolute;
                 top: 0;
@@ -171,689 +271,748 @@ class NotificationManager {
 
         return element;
     }
-
     /**
-     * Remove a notification
+     * Remove notification by ID
      * @param {string} id - Notification ID
      */
     remove(id) {
         const element = document.getElementById(id);
-        if (!element) return;
-
-        // Trigger exit animation
-        element.style.transform = 'translateX(100%)';
+        const notification = this.activeNotifications.get(id);
+        
+        if (!element || !notification) return;
+        
+        // Clear timeout if exists
+        if (notification.timer) {
+            clearTimeout(notification.timer);
+        }
+        
+        // Start exit animation
         element.style.opacity = '0';
-
+        element.style.transform = 'translateX(100%)';
+        
         // Remove after animation
         setTimeout(() => {
-            element.remove();
+            if (element.parentNode) {
+                element.parentNode.removeChild(element);
+            }
+            
+            // Remove from tracking
             this.activeNotifications.delete(id);
-
-            // Show next notification from queue
-            if (this.queue.length > 0 && 
-                this.activeNotifications.size < this.maxNotifications) {
+            
+            // Show next queued notification if any
+            if (this.queue.length > 0) {
                 const next = this.queue.shift();
                 this._showNotification(next);
             }
-
-            this._updateState();
+            
+            this.updateState();
         }, 300);
     }
-
+    
+    /**
+     * Handle notification click events
+     * @param {Event} event - Click event
+     * @private
+     */
+    handleClick(event) {
+        const target = event.target;
+        const action = target.dataset.action;
+        
+        if (!action) return;
+        
+        const notificationId = target.dataset.notificationId;
+        
+        if (action === 'notification-close') {
+            this.remove(notificationId);
+        }
+    }
+    
     /**
      * Clear all notifications
      */
-    clear() {
-        this.activeNotifications.forEach(id => this.remove(id));
+    clearAll() {
+        // Remove all active notifications
+        this.activeNotifications.forEach((_, id) => {
+            this.remove(id);
+        });
+        
+        // Clear queue
         this.queue = [];
-        this._updateState();
+        
+        this.updateState();
     }
-
+    
     /**
-     * Get notification type class
+     * Update notification state
+     * @private
+     */
+    updateState() {
+        State.update(UI_STATE_KEY, {
+            notifications: {
+                active: Array.from(this.activeNotifications.keys()),
+                queue: this.queue.map(n => n.id),
+                lastUpdate: new Date()
+            }
+        });
+    }
+    
+    /**
+     * Get CSS class for notification type
+     * @param {string} type - Notification type
+     * @returns {string} CSS class
      * @private
      */
     _getTypeClass(type) {
-        const classes = {
-            success: 'w3-pale-green w3-border-green',
-            error: 'w3-pale-red w3-border-red',
-            warning: 'w3-pale-yellow w3-border-yellow',
-            info: 'w3-pale-blue w3-border-blue'
-        };
-        return classes[type] || classes.info;
+        switch (type) {
+            case 'success':
+                return 'w3-green';
+            case 'error':
+                return 'w3-red';
+            case 'warning':
+                return 'w3-amber';
+            case 'info':
+            default:
+                return 'w3-blue';
+        }
     }
-
+    
     /**
-     * Get notification type icon
+     * Get icon for notification type
+     * @param {string} type - Notification type
+     * @returns {string} Icon HTML
      * @private
      */
     _getTypeIcon(type) {
-        const icons = {
-            success: '<i class="bi bi-check-circle"></i>',
-            error: '<i class="bi bi-x-circle"></i>',
-            warning: '<i class="bi bi-exclamation-triangle"></i>',
-            info: '<i class="bi bi-info-circle"></i>'
-        };
-        return icons[type] || icons.info;
+        switch (type) {
+            case 'success':
+                return '<i class="bi bi-check-circle"></i>';
+            case 'error':
+                return '<i class="bi bi-x-circle"></i>';
+            case 'warning':
+                return '<i class="bi bi-exclamation-triangle"></i>';
+            case 'info':
+            default:
+                return '<i class="bi bi-info-circle"></i>';
+        }
     }
-
+}
+/**
+ * Enhanced Status UI Manager
+ */
+class StatusManager {
+    constructor() {
+        this.statuses = new Map();
+        this.container = null;
+        
+        // Initialize container
+        this.initialize();
+    }
+    
     /**
-     * Update UI state
+     * Initialize status system
+     */
+    initialize() {
+        // Create container
+        this.container = document.createElement('div');
+        this.container.className = 'status-container w3-display-bottommiddle';
+        this.container.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            z-index: 9000;
+            pointer-events: none;
+            text-align: center;
+        `;
+        document.body.appendChild(this.container);
+        
+        // Initialize state
+        State.update(UI_STATE_KEY, {
+            status: {
+                active: [],
+                lastUpdate: new Date()
+            }
+        });
+    }
+    
+    /**
+     * Show status message
+     * @param {string} message - Status message
+     * @param {Object} options - Status options
+     */
+    show(message, options = {}) {
+        const id = options.id || `status-${Date.now()}`;
+        const duration = options.duration || 0;
+        const type = options.type || 'info';
+        
+        // Check if status with this ID already exists
+        if (this.statuses.has(id)) {
+            this.update(id, message, options);
+            return;
+        }
+        
+        // Create status object
+        const status = {
+            id,
+            message,
+            type,
+            spinner: options.spinner !== false,
+            progress: options.progress || 0,
+            showProgress: options.showProgress || false,
+            timestamp: new Date()
+        };
+        
+        // Create and show element
+        const element = this._createStatusElement(status);
+        this.container.appendChild(element);
+        this.statuses.set(id, status);
+        
+        // Trigger entrance animation
+        requestAnimationFrame(() => {
+            element.style.transform = 'translateY(0)';
+            element.style.opacity = '1';
+        });
+        
+        // Auto-hide if duration specified
+        if (duration > 0) {
+            status.timer = setTimeout(() => {
+                this.hide(id);
+            }, duration);
+        }
+        
+        this.updateState();
+    }
+    
+    /**
+     * Update existing status
+     * @param {string} id - Status ID
+     * @param {string} message - New message
+     * @param {Object} options - Update options
+     */
+    update(id, message, options = {}) {
+        const status = this.statuses.get(id);
+        if (!status) return;
+        
+        const element = document.getElementById(id);
+        if (!element) return;
+        
+        // Clear existing timer if any
+        if (status.timer) {
+            clearTimeout(status.timer);
+            status.timer = null;
+        }
+        
+        // Update message
+        const messageEl = element.querySelector('.status-message');
+        if (messageEl) {
+            messageEl.textContent = message;
+        }
+        
+        // Update progress if provided
+        if (options.hasOwnProperty('progress')) {
+            status.progress = options.progress;
+            status.showProgress = true;
+            
+            const progressBar = element.querySelector('.progress-bar');
+            if (progressBar) {
+                progressBar.style.width = `${status.progress}%`;
+            } else {
+                // Add progress bar if not present
+                this._addProgressBar(element, status);
+            }
+        }
+        
+        // Set auto-hide timer if duration specified
+        if (options.duration > 0) {
+            status.timer = setTimeout(() => {
+                this.hide(id);
+            }, options.duration);
+        }
+        
+        this.updateState();
+    }
+    /**
+     * Hide status message
+     * @param {string} id - Status ID
+     */
+    hide(id) {
+        const element = document.getElementById(id);
+        const status = this.statuses.get(id);
+        
+        if (!element || !status) return;
+        
+        // Clear timeout if exists
+        if (status.timer) {
+            clearTimeout(status.timer);
+        }
+        
+        // Start exit animation
+        element.style.opacity = '0';
+        element.style.transform = 'translateY(20px)';
+        
+        // Remove after animation
+        setTimeout(() => {
+            if (element.parentNode) {
+                element.parentNode.removeChild(element);
+            }
+            
+            // Remove from tracking
+            this.statuses.delete(id);
+            this.updateState();
+        }, 300);
+    }
+    
+    /**
+     * Create status element
+     * @private
+     * @param {Object} status - Status configuration
+     * @returns {HTMLElement} Status element
+     */
+    _createStatusElement(status) {
+        const element = document.createElement('div');
+        element.id = status.id;
+        element.className = `status-item ${this._getStatusClass(status.type)}`;
+        element.style.cssText = `
+            transition: all 0.3s ease-in-out;
+            transform: translateY(20px);
+            opacity: 0;
+            margin: 8px;
+            padding: 10px 15px;
+            border-radius: 4px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: auto;
+            min-width: 240px;
+        `;
+        
+        // Add spinner if needed
+        if (status.spinner) {
+            element.innerHTML += `
+                <i class="bi bi-arrow-repeat w3-spin w3-margin-right"></i>
+            `;
+        }
+        
+        // Add message
+        const messageEl = document.createElement('span');
+        messageEl.className = 'status-message';
+        messageEl.textContent = status.message;
+        element.appendChild(messageEl);
+        
+        // Add progress bar if needed
+        if (status.showProgress) {
+            this._addProgressBar(element, status);
+        }
+        
+        return element;
+    }
+    
+    /**
+     * Add progress bar to status element
+     * @private
+     * @param {HTMLElement} element - Status element
+     * @param {Object} status - Status configuration
+     */
+    _addProgressBar(element, status) {
+        const progressContainer = document.createElement('div');
+        progressContainer.className = 'progress-container';
+        progressContainer.style.cssText = `
+            width: 100%;
+            background-color: rgba(255,255,255,0.3);
+            height: 4px;
+            margin-top: 8px;
+            border-radius: 2px;
+            overflow: hidden;
+        `;
+        
+        const progressBar = document.createElement('div');
+        progressBar.className = 'progress-bar';
+        progressBar.style.cssText = `
+            height: 100%;
+            width: ${status.progress}%;
+            background-color: rgba(255,255,255,0.7);
+            transition: width 0.3s ease;
+        `;
+        
+        progressContainer.appendChild(progressBar);
+        element.appendChild(progressContainer);
+    }
+    
+    /**
+     * Get status type class
+     * @private
+     * @param {string} type - Status type
+     * @returns {string} CSS class
+     */
+    _getStatusClass(type) {
+        switch (type) {
+            case 'success':
+                return 'w3-green';
+            case 'error':
+                return 'w3-red';
+            case 'warning':
+                return 'w3-amber';
+            case 'info':
+            default:
+                return 'w3-blue';
+        }
+    }
+    
+    /**
+     * Update status state
      * @private
      */
-    _updateState() {
+    updateState() {
         State.update(UI_STATE_KEY, {
-            notifications: {
-                active: Array.from(this.activeNotifications),
-                queue: this.queue,
+            status: {
+                active: Array.from(this.statuses.keys()),
                 lastUpdate: new Date()
             }
         });
     }
 }
-// ui.js - Part 2
-// Tree UI management and shared utilities
 
 /**
- * Tree UI management class
+ * Tree UI Manager
  */
 class TreeUIManager {
     constructor() {
-        this.activeNodes = new Set();
-        this.selectedNode = null;
-        this.dragState = null;
-        this._bindEvents();
+        this.renderQueue = new Set();
+        this.animations = new Map();
+        this.state = {
+            expandedNodes: new Set(),
+            selectedNode: null
+        };
+        
+        // Initialize tree state
+        this.initializeState();
     }
-
     /**
-     * Create a new tree item
-     * @param {Object} config - Tree item configuration
-     * @returns {HTMLElement} Created tree item
+     * Initialize tree UI state
+     * @private
      */
-    createTreeItem({ type, id, name, fields = [], parent = null, hasChildren = false }) {
+    initializeState() {
+        if (!State.get('tree_ui_state')) {
+            State.set('tree_ui_state', {
+                expanded: [],
+                selected: null,
+                lastAction: null,
+                lastUpdate: new Date()
+            });
+        }
+    }
+    
+    /**
+     * Render projects tree
+     * @param {Array} projects - Array of project data
+     */
+    renderProjects(projects) {
+        const container = document.querySelector('.tree-wrapper');
+        if (!container) return;
+        
+        // Clear container
+        container.innerHTML = '';
+        
+        if (!projects || projects.length === 0) {
+            const emptyMessage = document.querySelector('.no-results');
+            if (emptyMessage) {
+                emptyMessage.classList.remove('w3-hide');
+            }
+            return;
+        }
+        
+        // Hide empty message
+        const emptyMessage = document.querySelector('.no-results');
+        if (emptyMessage) {
+            emptyMessage.classList.add('w3-hide');
+        }
+        
+        // Create document fragment for better performance
+        const fragment = document.createDocumentFragment();
+        
+        // Render each project
+        projects.forEach(project => {
+            const projectNode = this.createTreeItem({
+                type: 'project',
+                id: project.id,
+                name: project.name,
+                description: project.description || '',
+                hasChildren: project.locations && project.locations.length > 0
+            });
+            
+            fragment.appendChild(projectNode);
+            
+            // If project has locations and was previously expanded, render them
+            if (this.isNodeExpanded('project', project.id) && 
+                project.locations && 
+                project.locations.length > 0) {
+                
+                const childrenContainer = projectNode.querySelector('.children-container');
+                if (childrenContainer) {
+                    childrenContainer.classList.remove('w3-hide');
+                    
+                    const locationsFragment = document.createDocumentFragment();
+                    project.locations.forEach(location => {
+                        const locationNode = this.createTreeItem({
+                            type: 'location',
+                            id: location.id,
+                            name: location.name,
+                            description: location.address || '',
+                            parent: project.id,
+                            hasChildren: true // Measurements will be loaded on demand
+                        });
+                        
+                        locationsFragment.appendChild(locationNode);
+                    });
+                    
+                    childrenContainer.appendChild(locationsFragment);
+                    
+                    // Update toggle button state
+                    const toggleIcon = projectNode.querySelector('[data-action="toggle"] i');
+                    if (toggleIcon) {
+                        toggleIcon.className = 'bi bi-chevron-down';
+                    }
+                }
+            }
+        });
+        
+        // Append all nodes at once
+        container.appendChild(fragment);
+    }
+    
+    /**
+     * Create a tree item element
+     * @param {Object} config - Item configuration
+     * @returns {HTMLElement} Tree item element
+     */
+    createTreeItem(config) {
+        const {
+            type, 
+            id, 
+            name, 
+            description = '', 
+            parent = null,
+            hasChildren = false
+        } = config;
+        
         const item = document.createElement('div');
         item.className = 'tree-item w3-hover-light-grey';
         item.dataset.type = type;
         item.dataset.id = id;
+        if (parent) item.dataset.parent = parent;
         
+        // Create item content
         const content = document.createElement('div');
-        content.className = 'tree-text';
-        content.id = `id_form-${type}-${id}`;
-
-        // Add expand/collapse button if has children
+        content.className = 'tree-item-content w3-bar';
+        
+        // Add toggle button for nodes that can have children
         if (hasChildren) {
-            const toggleBtn = this.createToggleButton(type, id);
-            content.appendChild(toggleBtn);
+            content.innerHTML += `
+                <button class="w3-bar-item w3-button toggle-btn" data-action="toggle">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
+            `;
+        } else {
+            content.innerHTML += `
+                <span class="w3-bar-item spacer" style="width: 38px;"></span>
+            `;
         }
-
-        // Add main content
-        content.appendChild(this.createItemContent(type, id, name, fields));
-
-        // Add action menu
-        content.appendChild(this.createActionMenu(type, id));
-
+        
+        // Add item data
+        content.innerHTML += `
+            <div class="w3-bar-item item-data">
+                <span class="item-name">${name}</span>
+                ${description ? `
+                    <span class="item-description w3-small w3-text-grey">${description}</span>
+                ` : ''}
+            </div>
+        `;
+        
+        // Add action buttons based on type
+        let actionButtons = '';
+        
+        // Common actions
+        actionButtons += `
+            <button class="w3-button" data-action="edit" title="Edit">
+                <i class="bi bi-pencil"></i>
+            </button>
+            <button class="w3-button" data-action="delete" title="Delete">
+                <i class="bi bi-trash"></i>
+            </button>
+        `;
+        
+        // Type-specific actions
+        if (type === 'project') {
+            actionButtons += `
+                <button class="w3-button" data-action="add-child" title="Add Location">
+                    <i class="bi bi-plus"></i>
+                </button>
+            `;
+        } else if (type === 'location') {
+            actionButtons += `
+                <button class="w3-button" data-action="add-child" title="Add Measurement">
+                    <i class="bi bi-plus"></i>
+                </button>
+            `;
+        }
+        
+        content.innerHTML += `
+            <div class="w3-bar-item w3-right item-actions">
+                ${actionButtons}
+            </div>
+        `;
+        
         item.appendChild(content);
         
-        // Add drop zone if item can have children
+        // Add children container for expandable nodes
         if (hasChildren) {
-            item.appendChild(this.createDropZone(type, id));
+            const childrenContainer = document.createElement('div');
+            childrenContainer.className = 'children-container w3-hide';
+            item.appendChild(childrenContainer);
         }
-
+        
         return item;
     }
-
     /**
-     * Create toggle button for expanding/collapsing
-     * @private
+     * Check if node is expanded
+     * @param {string} type - Node type
+     * @param {string} id - Node ID
+     * @returns {boolean} Is expanded
      */
-    createToggleButton(type, id) {
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'w3-button';
-        button.onclick = () => this.toggleNode(`id_${type}-${id}`);
-        button.innerHTML = '<i class="bi bi-chevron-right"></i>';
-        return button;
+    isNodeExpanded(type, id) {
+        const state = State.get('tree_ui_state');
+        return state && state.expanded && state.expanded.includes(`${type}-${id}`);
     }
-
+    
     /**
-     * Create tree item content
-     * @private
+     * Set node expanded state
+     * @param {string} type - Node type
+     * @param {string} id - Node ID
+     * @param {boolean} expanded - Expanded state
      */
-    createItemContent(type, id, name, fields) {
-        const container = document.createElement('div');
-        container.className = 'fields-container';
-
-        fields.forEach(field => {
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.id = `id_${type}${field.charAt(0).toUpperCase() + field.slice(1)}-${id}`;
-            input.name = field;
-            input.value = field === 'name' ? name : '';
-            input.className = 'tree-item-field';
-            input.readOnly = true;
-            input.style.display = field === 'name' ? 'inline' : 'none';
-            container.appendChild(input);
-        });
-
-        return container;
-    }
-
-    /**
-     * Create action menu for tree item
-     * @private
-     */
-    createActionMenu(type, id) {
-        const menu = document.createElement('div');
-        menu.className = 'item-actions';
-
-        const button = document.createElement('button');
-        button.className = 'w3-button';
-        button.innerHTML = '<i class="bi bi-three-dots-vertical"></i>';
-        menu.appendChild(button);
-
-        const dropdown = document.createElement('div');
-        dropdown.className = 'w3-dropdown-content w3-bar-block w3-border';
+    setNodeExpanded(type, id, expanded) {
+        const state = State.get('tree_ui_state');
+        const expandedNodes = new Set(state?.expanded || []);
+        const nodeKey = `${type}-${id}`;
         
-        // Add standard actions
-        this.addMenuItem(dropdown, 'edit', 'Edit', 'pencil', type, id);
-        this.addMenuItem(dropdown, 'delete', 'Delete', 'trash', type, id);
-
-        // Add type-specific actions
-        if (type === 'location') {
-            this.addMenuItem(dropdown, 'add-measurement', 'Add Measurement', 'plus', type, id);
-        }
-
-        menu.appendChild(dropdown);
-        return menu;
-    }
-
-    /**
-     * Add menu item to dropdown
-     * @private
-     */
-    addMenuItem(dropdown, action, text, icon, type, id) {
-        const item = document.createElement('a');
-        item.href = '#';
-        item.className = 'w3-bar-item w3-button';
-        item.innerHTML = `<i class="bi bi-${icon}"></i> ${text}`;
-        item.onclick = (e) => {
-            e.preventDefault();
-            this.handleAction(action, type, id);
-        };
-        dropdown.appendChild(item);
-    }
-
-    /**
-     * Create drop zone for drag and drop
-     * @private
-     */
-    createDropZone(type, id) {
-        const dropZone = document.createElement('div');
-        dropZone.className = 'tree-dropzone';
-        dropZone.dataset.type = type;
-        dropZone.dataset.parentId = id;
-
-        // Add drag and drop event listeners
-        dropZone.addEventListener('dragover', e => this.handleDragOver(e));
-        dropZone.addEventListener('dragleave', e => this.handleDragLeave(e));
-        dropZone.addEventListener('drop', e => this.handleDrop(e));
-
-        return dropZone;
-    }
-
-    /**
-     * Toggle tree node expansion
-     * @param {string} nodeId - Node identifier
-     */
-    toggleNode(nodeId) {
-        const node = document.getElementById(nodeId);
-        const icon = document.getElementById(`id_chevronIcon-${nodeId}`);
-        if (!node || !icon) return;
-
-        const isExpanded = node.classList.contains('w3-show');
-        
-        // Toggle node
-        node.classList.toggle('w3-show');
-        node.classList.toggle('w3-hide');
-        
-        // Update icon
-        icon.className = isExpanded ? 
-            "bi bi-chevron-right" : 
-            "bi bi-chevron-down";
-
-        // Update active nodes
-        if (isExpanded) {
-            this.activeNodes.delete(nodeId);
+        if (expanded) {
+            expandedNodes.add(nodeKey);
         } else {
-            this.activeNodes.add(nodeId);
+            expandedNodes.delete(nodeKey);
         }
-
-        // Update state
-        this._updateTreeState();
+        
+        State.update('tree_ui_state', {
+            expanded: Array.from(expandedNodes)
+        });
     }
-
+    
     /**
-     * Handle tree item action
-     * @private
+     * Toggle node expansion
+     * @param {HTMLElement} node - Node element
+     * @returns {Promise<void>}
      */
-    handleAction(action, type, id) {
-        const handlers = {
-            edit: () => this.emit('edit', { type, id }),
-            delete: () => this.emit('delete', { type, id }),
-            'add-measurement': () => this.emit('add-measurement', { type, id })
-        };
-
-        const handler = handlers[action];
-        if (handler) {
-            handler();
-        }
-    }
-
-    /**
-     * Handle drag over event
-     * @private
-     */
-    handleDragOver(event) {
-        event.preventDefault();
-        const dropZone = event.target.closest('.tree-dropzone');
-        if (dropZone && this._isValidDrop(dropZone)) {
-            dropZone.classList.add('tree-dropzone-active');
-        }
-    }
-
-    /**
-     * Handle drag leave event
-     * @private
-     */
-    handleDragLeave(event) {
-        const dropZone = event.target.closest('.tree-dropzone');
-        if (dropZone) {
-            dropZone.classList.remove('tree-dropzone-active');
-        }
-    }
-
-    /**
-     * Handle drop event
-     * @private
-     */
-    handleDrop(event) {
-        event.preventDefault();
-        const dropZone = event.target.closest('.tree-dropzone');
-        if (!dropZone || !this.dragState) return;
-
-        dropZone.classList.remove('tree-dropzone-active');
-
-        if (this._isValidDrop(dropZone)) {
-            this.emit('move', {
-                itemType: this.dragState.type,
-                itemId: this.dragState.id,
-                newParentType: dropZone.dataset.type,
-                newParentId: dropZone.dataset.parentId
+    async toggleNode(node) {
+        const type = node.dataset.type;
+        const id = node.dataset.id;
+        const childrenContainer = node.querySelector('.children-container');
+        const toggleIcon = node.querySelector('[data-action="toggle"] i');
+        
+        if (!childrenContainer || !toggleIcon) return;
+        
+        const isExpanded = !childrenContainer.classList.contains('w3-hide');
+        
+        if (isExpanded) {
+            // Collapse
+            toggleIcon.className = 'bi bi-chevron-right';
+            
+            // Animate collapse
+            const height = childrenContainer.scrollHeight;
+            childrenContainer.style.height = `${height}px`;
+            childrenContainer.style.overflow = 'hidden';
+            
+            // Trigger animation
+            requestAnimationFrame(() => {
+                childrenContainer.style.transition = 'height 0.3s ease-out';
+                childrenContainer.style.height = '0';
+                
+                // After animation
+                setTimeout(() => {
+                    childrenContainer.classList.add('w3-hide');
+                    childrenContainer.style.height = '';
+                    childrenContainer.style.transition = '';
+                    childrenContainer.style.overflow = '';
+                    
+                    // Update state
+                    this.setNodeExpanded(type, id, false);
+                }, 300);
+            });
+            
+        } else {
+            // Expand
+            toggleIcon.className = 'bi bi-chevron-down';
+            childrenContainer.classList.remove('w3-hide');
+            childrenContainer.style.height = '0';
+            childrenContainer.style.overflow = 'hidden';
+            childrenContainer.style.transition = 'height 0.3s ease-in';
+            
+            // Calculate and set target height
+            requestAnimationFrame(() => {
+                const targetHeight = childrenContainer.scrollHeight;
+                childrenContainer.style.height = `${targetHeight}px`;
+                
+                // After animation
+                setTimeout(() => {
+                    childrenContainer.style.height = '';
+                    childrenContainer.style.transition = '';
+                    childrenContainer.style.overflow = '';
+                    
+                    // Update state
+                    this.setNodeExpanded(type, id, true);
+                }, 300);
             });
         }
-
-        this.dragState = null;
     }
-
+    
     /**
-     * Check if drop is valid
-     * @private
+     * Update a tree node with new data
+     * @param {string} type - Node type 
+     * @param {string} id - Node ID
+     * @param {Object} data - New data
      */
-    _isValidDrop(dropZone) {
-        if (!this.dragState) return false;
-
-        const validMoves = {
-            location: ['project'],
-            measurement: ['location']
-        };
-
-        return validMoves[this.dragState.type]?.includes(dropZone.dataset.type);
-    }
-
-    /**
-     * Bind events
-     * @private
-     */
-    _bindEvents() {
-        // Make tree items draggable
-        document.addEventListener('mousedown', e => {
-            const treeItem = e.target.closest('.tree-item');
-            if (treeItem && !e.target.closest('.item-actions')) {
-                this.dragState = {
-                    type: treeItem.dataset.type,
-                    id: treeItem.dataset.id
-                };
-            }
-        });
-
-        document.addEventListener('mouseup', () => {
-            this.dragState = null;
-        });
-    }
-
-    /**
-     * Update tree state
-     * @private
-     */
-    _updateTreeState() {
-        State.update(UI_STATE_KEY, {
-            tree: {
-                activeNodes: Array.from(this.activeNodes),
-                selectedNode: this.selectedNode,
-                lastUpdate: new Date()
-            }
-        });
-    }
-
-    /**
-     * Emit custom event
-     * @private
-     */
-    emit(event, detail) {
-        document.dispatchEvent(new CustomEvent(`tree:${event}`, { detail }));
-    }
-}
-// ui.js - Part 3
-// Shared utilities, status indicators, and exports
-
-/**
- * Status indicator management class
- */
-class StatusUIManager {
-    constructor() {
-        this.activeStatuses = new Map();
-        this.container = null;
-        this.initialize();
-    }
-
-    /**
-     * Initialize status container
-     */
-    initialize() {
-        if (!this.container) {
-            this.container = document.createElement('div');
-            this.container.className = 'status-container w3-display-bottomright';
-            this.container.style.cssText = `
-                position: fixed;
-                bottom: 20px;
-                right: 20px;
-                z-index: 9998;
-            `;
-            document.body.appendChild(this.container);
-        }
-    }
-
-    /**
-     * Show status indicator
-     * @param {string} message - Status message
-     * @param {Object} options - Display options
-     */
-    show(message, options = {}) {
-        const config = {
-            id: options.id || `status-${Date.now()}`,
-            type: options.type || 'info',
-            spinner: options.spinner !== false,
-            timeout: options.timeout || 0,
-            ...options
-        };
-
-        // Create or update status element
-        const status = this._createStatusElement(message, config);
-        this.container.appendChild(status);
-        this.activeStatuses.set(config.id, { element: status, config });
-
-        // Handle timeout
-        if (config.timeout > 0) {
-            setTimeout(() => this.hide(config.id), config.timeout);
-        }
-
-        this._updateState();
-    }
-
-    /**
-     * Hide status indicator
-     * @param {string} id - Status identifier
-     */
-    hide(id) {
-        const status = this.activeStatuses.get(id);
-        if (!status) return;
-
-        status.element.style.opacity = '0';
-        setTimeout(() => {
-            status.element.remove();
-            this.activeStatuses.delete(id);
-            this._updateState();
-        }, 300);
-    }
-
-    /**
-     * Create status element
-     * @private
-     */
-    _createStatusElement(message, config) {
-        const element = document.createElement('div');
-        element.className = `status-indicator ${this._getTypeClass(config.type)}`;
-        element.style.cssText = `
-            margin: 8px;
-            padding: 12px;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            transition: opacity 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        `;
-
-        // Add spinner if requested
-        if (config.spinner) {
-            const spinner = document.createElement('div');
-            spinner.className = 'w3-spin';
-            spinner.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
-            spinner.style.marginRight = '8px';
-            element.appendChild(spinner);
-        }
-
-        // Add message
-        const messageElement = document.createElement('span');
-        messageElement.textContent = message;
-        element.appendChild(messageElement);
-
-        return element;
-    }
-
-    /**
-     * Get status type class
-     * @private
-     */
-    _getTypeClass(type) {
-        const classes = {
-            info: 'w3-blue',
-            success: 'w3-green',
-            warning: 'w3-yellow',
-            error: 'w3-red'
-        };
-        return classes[type] || classes.info;
-    }
-
-    /**
-     * Update UI state
-     * @private
-     */
-    _updateState() {
-        State.update(UI_STATE_KEY, {
-            status: {
-                active: Array.from(this.activeStatuses.keys()),
-                lastUpdate: new Date()
-            }
-        });
-    }
-}
-
-/**
- * Shared UI utilities
- */
-class UIUtilities {
-    /**
-     * Debounce function execution
-     * @param {Function} func - Function to debounce
-     * @param {number} wait - Wait time in milliseconds
-     * @returns {Function} Debounced function
-     */
-    static debounce(func, wait) {
-        let timeout;
-        return function executedFunction(...args) {
-            const later = () => {
-                clearTimeout(timeout);
-                func(...args);
-            };
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-        };
-    }
-
-    /**
-     * Format date for display
-     * @param {Date|string} date - Date to format
-     * @param {string} format - Format style
-     * @returns {string} Formatted date
-     */
-    static formatDate(date, format = 'medium') {
-        const d = new Date(date);
-        if (isNaN(d.getTime())) return '';
-
-        const options = {
-            short: { 
-                year: 'numeric', 
-                month: 'numeric', 
-                day: 'numeric' 
-            },
-            medium: { 
-                year: 'numeric', 
-                month: 'short', 
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-            },
-            long: { 
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            }
-        };
-
-        return d.toLocaleString(undefined, options[format] || options.medium);
-    }
-
-    /**
-     * Format file size
-     * @param {number} bytes - Size in bytes
-     * @returns {string} Formatted size
-     */
-    static formatFileSize(bytes) {
-        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-        let size = bytes;
-        let unitIndex = 0;
-
-        while (size >= 1024 && unitIndex < units.length - 1) {
-            size /= 1024;
-            unitIndex++;
-        }
-
-        return `${size.toFixed(1)} ${units[unitIndex]}`;
-    }
-
-    /**
-     * Create loading spinner
-     * @param {string} [size='medium'] - Spinner size
-     * @returns {HTMLElement} Spinner element
-     */
-    static createSpinner(size = 'medium') {
-        const spinner = document.createElement('div');
-        spinner.className = 'w3-spin loading-spinner';
+    updateNode(type, id, data) {
+        const node = document.querySelector(`.tree-item[data-type="${type}"][data-id="${id}"]`);
+        if (!node) return;
         
-        const sizes = {
-            small: '16px',
-            medium: '24px',
-            large: '32px'
-        };
-
-        spinner.style.cssText = `
-            width: ${sizes[size]};
-            height: ${sizes[size]};
-            display: inline-block;
-        `;
-
-        spinner.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
-        return spinner;
-    }
-
-    /**
-     * Add tooltip to element
-     * @param {HTMLElement} element - Target element
-     * @param {string} text - Tooltip text
-     * @param {Object} options - Tooltip options
-     */
-    static addTooltip(element, text, options = {}) {
-        const config = {
-            position: 'top',
-            delay: 500,
-            ...options
-        };
-
-        element.dataset.tooltip = text;
-        element.dataset.tooltipPosition = config.position;
-
-        let timeout;
-        let tooltipElement;
-
-        element.addEventListener('mouseenter', () => {
-            timeout = setTimeout(() => {
-                tooltipElement = document.createElement('div');
-                tooltipElement.className = 'w3-tooltip';
-                tooltipElement.textContent = text;
-                
-                const rect = element.getBoundingClientRect();
-                const positions = {
-                    top: { top: rect.top - 30, left: rect.left + (rect.width / 2) },
-                    bottom: { top: rect.bottom + 10, left: rect.left + (rect.width / 2) },
-                    left: { top: rect.top + (rect.height / 2), left: rect.left - 10 },
-                    right: { top: rect.top + (rect.height / 2), left: rect.right + 10 }
-                };
-
-                const pos = positions[config.position];
-                tooltipElement.style.cssText = `
-                    position: fixed;
-                    top: ${pos.top}px;
-                    left: ${pos.left}px;
-                    transform: translate(-50%, -50%);
-                    background: rgba(0,0,0,0.8);
-                    color: white;
-                    padding: 4px 8px;
-                    border-radius: 4px;
-                    font-size: 12px;
-                    z-index: 10000;
-                    pointer-events: none;
-                `;
-
-                document.body.appendChild(tooltipElement);
-            }, config.delay);
-        });
-
-        element.addEventListener('mouseleave', () => {
-            clearTimeout(timeout);
-            if (tooltipElement) {
-                tooltipElement.remove();
-                tooltipElement = null;
+        // Update name if provided
+        if (data.name) {
+            const nameEl = node.querySelector('.item-name');
+            if (nameEl) nameEl.textContent = data.name;
+        }
+        
+        // Update description if provided
+        if (data.description) {
+            const descEl = node.querySelector('.item-description');
+            if (descEl) {
+                descEl.textContent = data.description;
+            } else {
+                const dataEl = node.querySelector('.item-data');
+                if (dataEl) {
+                    const newDescEl = document.createElement('span');
+                    newDescEl.className = 'item-description w3-small w3-text-grey';
+                    newDescEl.textContent = data.description;
+                    dataEl.appendChild(newDescEl);
+                }
             }
-        });
+        }
+        
+        // Add highlight animation
+        node.classList.add('w3-pale-yellow');
+        setTimeout(() => {
+            node.classList.remove('w3-pale-yellow');
+        }, 1000);
     }
 }
 
-// Export UI managers and utilities
+// Export singleton instances
 export const NotificationUI = new NotificationManager();
+export const StatusUI = new StatusManager();
 export const TreeUI = new TreeUIManager();
-export const StatusUI = new StatusUIManager();
-export const Utilities = UIUtilities;

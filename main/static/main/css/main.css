@@ -1,9 +1,57 @@
 /* main.css */
-/* Import all component styles */
+/* Main CSS entry point - only handles imports and global styles */
 
+/* Base styles and utilities */
 @import 'base.css';
+
+/* Component styles */
 @import 'components/tree.css';
 @import 'components/measurements.css';
 @import 'components/dropdowns.css';
 @import 'components/modals.css';
-@import 'components/filters.css'; 
+@import 'components/filters.css';
+
+/* Global styles that don't fit in component files */
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+/* Override w3.css defaults only when necessary */
+.w3-container {
+    padding-left: 16px;
+    padding-right: 16px;
+}
+
+/* Focus styles for accessibility */
+:focus {
+    outline: 2px solid #2196F3;
+    outline-offset: 2px;
+}
+
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Print styles */
+@media print {
+    .no-print {
+        display: none !important;
+    }
+}

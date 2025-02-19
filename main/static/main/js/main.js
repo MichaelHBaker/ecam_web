@@ -38,6 +38,7 @@ class DashboardManager {
             StatusUI.show('Initializing dashboard...', { id: 'init' });
             
             // Initialize core components
+            DOM.initialize();
             Events.initialize();
             await this.initializeTree();
             this.initializeFilters();

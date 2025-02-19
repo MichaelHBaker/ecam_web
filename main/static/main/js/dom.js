@@ -1,5 +1,6 @@
 // dom.js
-// Enhanced DOM manipulation utilities - no jQuery dependencies
+
+import { State } from './state.js';
 
 class DOMUtilities {
     constructor() {
@@ -7,12 +8,6 @@ class DOMUtilities {
         this.mutationObservers = new Map();
         this.intersectionObservers = new Map();
         
-        // Initialize DOM state
-        State.set('dom_state', {
-            lastUpdate: new Date(),
-            observedElements: new Set(),
-            mutations: []
-        });
     }
 
     /**
@@ -21,6 +16,18 @@ class DOMUtilities {
      * @param {Object} config - Element configuration
      * @returns {HTMLElement} Created element
      */
+
+    // explicit initialization method
+    initialize() {
+        // Now State has been properly imported
+        State.set('dom_state', {
+            lastUpdate: new Date(),
+            observedElements: new Set(),
+            mutations: []
+        });
+        return this; // Allow chaining
+    }
+
     createElement(tag, config = {}) {
         try {
             const element = document.createElement(tag);
@@ -213,6 +220,7 @@ setAttributes(element, attributes) {
      * @param {Object} options - Event listener options
      * @returns {Function} Remove listener function
      */
+
 addDelegate(context, eventType, selector, handler, options = {}) {
     try {
         const listener = (event) => {
@@ -224,31 +232,37 @@ addDelegate(context, eventType, selector, handler, options = {}) {
 
         context.addEventListener(eventType, listener, options);
 
-        // Store in state for tracking
-        State.update('dom_state', {
-            eventDelegates: [
-                ...(State.get('dom_state')?.eventDelegates || []),
-                {
-                    context: context === document ? 'document' : context.id || 'unknown',
-                    eventType,
-                    selector,
-                    timestamp: new Date()
-                }
-            ]
-        });
+        // Only track in state if DOM state has been initialized
+        if (State && State.get('dom_state')) {
+            // Track in state
+            State.update('dom_state', {
+                eventDelegates: [
+                    ...(State.get('dom_state')?.eventDelegates || []),
+                    {
+                        context: context === document ? 'document' : context.id || 'unknown',
+                        eventType,
+                        selector,
+                        timestamp: new Date()
+                    }
+                ]
+            });
+        }
 
         // Return remove function
         return () => {
             context.removeEventListener(eventType, listener, options);
-            // Update state when removed
-            const currentDelegates = State.get('dom_state')?.eventDelegates || [];
-            State.update('dom_state', {
-                eventDelegates: currentDelegates.filter(d => 
-                    d.context !== (context === document ? 'document' : context.id) ||
-                    d.eventType !== eventType ||
-                    d.selector !== selector
-                )
-            });
+            
+            // Only update state if DOM state is initialized
+            if (State && State.get('dom_state')) {
+                const currentDelegates = State.get('dom_state')?.eventDelegates || [];
+                State.update('dom_state', {
+                    eventDelegates: currentDelegates.filter(d => 
+                        d.context !== (context === document ? 'document' : context.id) ||
+                        d.eventType !== eventType ||
+                        d.selector !== selector
+                    )
+                });
+            }
         };
     } catch (error) {
         console.error('Error adding delegate:', error);

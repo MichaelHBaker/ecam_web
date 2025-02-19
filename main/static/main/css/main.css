@@ -6,10 +6,10 @@
 
 /* Component styles */
 @import 'components/tree.css';
-@import 'components/measurements.css';
-@import 'components/dropdowns.css';
-@import 'components/modals.css';
-@import 'components/filters.css';
+@import 'components/measurement.css';
+@import 'components/dropdown.css';
+@import 'components/modal.css';
+@import 'components/filter.css';
 
 /* Global styles that don't fit in component files */
 html, body {

@@ -1,3 +1,11 @@
+changes
+    client side rendering, tree_item.html is gone
+        observables
+        subscription
+    lazy loading
+
+
+
 use case 
     login
     project action menu 

@@ -272,6 +272,8 @@ _checkFrozen(key) {
  */
 _isEqual(value1, value2) {
     if (value1 === value2) return true;
+
+    if (value1 == null || value2 == null) return value1 === value2;
     
     if (value1 instanceof Date && value2 instanceof Date) {
         return value1.getTime() === value2.getTime();
@@ -446,6 +448,57 @@ _cleanupSubscribers(key) {
 
     if (subscribers.size === 0) {
         this._subscribers.delete(key);
+    }
+}
+
+/**
+ * Wrap callback with debounce and filtering if needed
+ * @private
+ */
+_wrapCallback(callback, config) {
+    let wrapped = callback;
+    
+    // Add debouncing if specified
+    if (config.debounce > 0) {
+        wrapped = this._debounce(wrapped, config.debounce);
+    }
+    
+    // Add filtering if specified
+    if (config.filter) {
+        const originalWrapped = wrapped;
+        wrapped = (newValue, oldValue, notification) => {
+            if (config.filter(newValue, oldValue, notification)) {
+                originalWrapped(newValue, oldValue, notification);
+            }
+        };
+    }
+    
+    return wrapped;
+}
+
+/**
+ * Simple debounce implementation
+ * @private
+ */
+_debounce(func, wait) {
+    let timeout;
+    return function(...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+}
+
+/**
+ * Unsubscribe from state changes
+ * @private
+ */
+_unsubscribe(key, subscription) {
+    const subscribers = this._subscribers.get(key);
+    if (subscribers) {
+        subscribers.delete(subscription);
+        if (subscribers.size === 0) {
+            this._subscribers.delete(key);
+        }
     }
 }
 }

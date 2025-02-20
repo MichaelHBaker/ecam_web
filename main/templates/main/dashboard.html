@@ -9,53 +9,35 @@
 
     <!-- Projects Section -->
     <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
-        <button class="w3-bar-item w3-button section-button" data-action="toggle-section">
-            <i class="bi bi-chevron-right"></i> Projects
-        </button>
-    </div>
-    <div class="w3-container w3-hide">
-        <div class="w3-row">
-            <div class="w3-col m8 l9">
-                <!-- Projects Tree Container -->
-                <div class="tree-container">
-                    <div class="w3-bar w3-light-grey">
-                        <div class="w3-bar-item">
-                            <input type="text" class="w3-input" placeholder="Filter projects..." 
-                                data-action="filter-projects">
-                        </div>
-                        <div class="w3-bar-item w3-right">
-                            <button class="w3-button w3-hover-light-grey" title="Add Project" id="addProjectBtn">
-                                <i class="bi bi-plus-lg"></i> Add Project
-                            </button>
-                        </div>
-                    </div>
-                    <div class="tree-wrapper w3-margin-top">
-                        <!-- Projects will be loaded here dynamically -->
-                    </div>
-                    <div class="tree-loading w3-center w3-padding-16 w3-hide">
-                        <i class="bi bi-arrow-repeat w3-spin"></i> Loading projects...
-                    </div>
-                    <div class="no-results w3-panel w3-pale-yellow w3-hide">
-                        <p>No projects found. Create a new project to get started.</p>
-                    </div>
-                </div>
+        <div class="w3-bar-item" style="padding-right: 0">
+            <button class="w3-button section-button" data-action="toggle-section">
+                <i class="bi bi-chevron-right"></i> Projects
+            </button>
+        </div>
+        <!-- Changed the structure here -->
+        <div class="w3-dropdown-hover" style="margin-left: 0">
+            <button class="w3-button">
+                <i class="bi bi-three-dots-vertical"></i>
+            </button>
+            <div class="w3-dropdown-content w3-bar-block w3-card-4" style="min-width:150px">
+                <a href="#" class="w3-bar-item w3-button" data-action="filter-projects">
+                    <i class="bi bi-funnel"></i> Filter Projects
+                </a>
+                <a href="#" class="w3-bar-item w3-button" data-action="add-project">
+                    <i class="bi bi-plus-lg"></i> Add Project
+                </a>
             </div>
-            <div class="w3-col m4 l3">
-                <!-- Project Details Panel -->
-                <div class="w3-card w3-white">
-                    <div class="w3-container w3-blue">
-                        <h4>Project Details</h4>
-                    </div>
-                    <div class="w3-container">
-                        <div class="project-details-placeholder w3-padding-16 w3-center w3-text-grey">
-                            <p><i class="bi bi-info-circle"></i> Select a project to view details</p>
-                        </div>
-                        <div class="project-details w3-hide">
-                            <!-- Project details will be loaded here -->
-                        </div>
-                    </div>
-                </div>
-            </div>
+        </div>
+    </div>    
+    <div class="tree-container">
+        <div class="tree-wrapper w3-margin-top">
+            <!-- Projects will be loaded here dynamically -->
+        </div>
+        <div class="tree-loading w3-center w3-padding-16 w3-hide">
+            <i class="bi bi-arrow-repeat w3-spin"></i> Loading projects...
+        </div>
+        <div class="no-results w3-panel w3-pale-yellow w3-hide">
+            <p>No projects found. Create a new project to get started.</p>
         </div>
     </div>
 
@@ -95,20 +77,21 @@
 {% block extra_js %}
 
 <script type="module">
-    import { Dashboard } from '/static/main/js/main.js';
-    import { DOM } from '/static/main/js/dom.js';
-    import { NotificationUI } from '/static/main/js/ui.js';
+    import { 
+        DOM, 
+        NotificationUI,
+        Events,
+        TreeUI,
+        Dashboard
+    } from '/static/main/js/main.js';
 
     document.addEventListener('DOMContentLoaded', async () => {
         try {
             // Initialize DOM first
             DOM.initialize();
             
-            // Wait for Dashboard to initialize (if needed)
-            // Note: main.js already calls Dashboard.initialize() on DOMContentLoaded
-            
             // Add section toggle handler
-            DOM.addDelegate(document, 'click', '[data-action="toggle-section"]', async (e, target) => {
+            Events.addDelegate(document, 'click', '[data-action="toggle-section"]', async (e, target) => {
                 try {
                     const contentDiv = target.closest('.w3-bar').nextElementSibling;
                     const icon = target.querySelector('.bi');
@@ -173,11 +156,21 @@
                 }
             });
 
-            // Expand first section by default (optional)
-            // setTimeout(() => {
-            //     const firstSection = document.querySelector('[data-action="toggle-section"]');
-            //     if (firstSection) firstSection.click();
-            // }, 500);
+            Events.addDelegate(document, 'click', '[data-action="filter-projects"]', (e, target) => {
+                e.preventDefault();
+                const filterInput = DOM.getElement('[data-action="filter-projects"]');
+                if (filterInput) {
+                    filterInput.focus();
+                }
+            });
+            
+            Events.addDelegate(document, 'click', '[data-action="add-project"]', (e, target) => {
+                e.preventDefault();
+                const addButton = DOM.getElement('#addProjectBtn');
+                if (addButton) {
+                    addButton.click();
+                }
+            });
 
         } catch (error) {
             console.error('Error initializing dashboard:', error);

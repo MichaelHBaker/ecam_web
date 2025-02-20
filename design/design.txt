@@ -6,6 +6,17 @@ changes
     lazy loading
 
 
+if a second page is needed such as for model definition
+    // main.js
+    class PageManager {
+        constructor(pageType) {
+            this.pageType = pageType;
+            this.initialized = false;
+            this.loadingState = false;
+    // Page-specific manager
+    class DashboardManager extends PageManager {
+    // Page-specific manager
+    class ModelManager extends PageManager {
 
 use case 
     login

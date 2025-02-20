@@ -523,8 +523,21 @@ class DashboardManager {
     }
 }
 
-// Export singleton instance
-export const Dashboard = new DashboardManager();
+// Export utilities
+export {
+    State,
+    DOM,
+    Events,
+    CRUD,
+    API,
+    NotificationUI,
+    TreeUI,
+    StatusUI,
+    Dashboard
+};
+
+// Create singleton instance
+const Dashboard = new DashboardManager();
 
 // Initialize dashboard when DOM is ready
 document.addEventListener('DOMContentLoaded', () => {

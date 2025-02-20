@@ -333,7 +333,7 @@ class APIClient {
                 // Handle Django pagination format
                 if (data.hasOwnProperty('results') && data.hasOwnProperty('count')) {
                     return {
-                        nodes: data.results,
+                        data: data.results,  // Changed from nodes to data
                         total: data.count,
                         hasMore: data.next !== null,
                         page: {
@@ -344,6 +344,21 @@ class APIClient {
                     };
                 }
                 
+                // Handle direct array responses
+                if (Array.isArray(data)) {
+                    return {
+                        data: data,
+                        total: data.length,
+                        hasMore: false
+                    };
+                }
+                
+                // If data already has a 'data' property, return it as is
+                if (data.hasOwnProperty('data')) {
+                    return data;
+                }
+                
+                // Otherwise, return the data directly
                 return data;
             } else if (response.status === 204) {
                 return null;

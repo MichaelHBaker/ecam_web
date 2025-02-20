@@ -1,7 +1,8 @@
 changes
-    client side rendering, tree_item.html is gone
+    client side rendering (reactive), tree_item.html is gone
         observables
         subscription
+        delegation
     lazy loading
 
 

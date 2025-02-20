@@ -1,275 +1,193 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project Dashboard</title>
-    
-    <!-- W3.CSS -->
-    <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
-    
-    <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css">
-    
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/main/css/main.css">
-    
-    <!-- CSRF Token -->
-    {% csrf_token %}
-</head>
-<body>
-    <!-- Header -->
-    <header class="w3-container w3-top w3-white w3-border-bottom">
-        <div class="w3-bar">
-            <h1 class="w3-bar-item">Project Dashboard</h1>
-            <div class="w3-right w3-padding">
-                <button class="w3-button w3-green" id="addProjectBtn">
-                    <i class="bi bi-plus"></i> New Project
-                </button>
-            </div>
-        </div>
-    </header>
+{% extends 'base.html' %}
+{% load static %}
 
-    <!-- Main Content -->
-    <main class="w3-container" style="margin-top: 80px;">
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<!-- Main Content -->
+<main class="w3-container" style="margin-top: 80px;">
+
+    <!-- Projects Section -->
+    <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
+        <button class="w3-bar-item w3-button section-button" data-action="toggle-section">
+            <i class="bi bi-chevron-right"></i> Projects
+        </button>
+    </div>
+    <div class="w3-container w3-hide">
         <div class="w3-row">
-            <!-- Filters Section -->
-            <div class="w3-col m3 l2">
-                <div class="filter-container w3-card w3-padding">
-                    <h3>Filters</h3>
-                    <div class="filter-form">
-                        <input type="text" 
-                               class="w3-input w3-border" 
-                               placeholder="Search projects..."
-                               data-action="filter-projects">
-                        <div class="filter-options w3-margin-top">
-                            <!-- Filter options will be dynamically added -->
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <!-- Tree View Section -->
-            <div class="w3-col m9 l10">
-                <div class="tree-container w3-card w3-padding">
-                    <div class="tree-header w3-bar">
+            <div class="w3-col m8 l9">
+                <!-- Projects Tree Container -->
+                <div class="tree-container">
+                    <div class="w3-bar w3-light-grey">
                         <div class="w3-bar-item">
-                            <h3>Projects</h3>
+                            <input type="text" class="w3-input" placeholder="Filter projects..." 
+                                data-action="filter-projects">
                         </div>
                         <div class="w3-bar-item w3-right">
-                            <button class="w3-button w3-white" data-action="expand-all">
-                                <i class="bi bi-arrows-expand"></i> Expand All
-                            </button>
-                            <button class="w3-button w3-white" data-action="collapse-all">
-                                <i class="bi bi-arrows-collapse"></i> Collapse All
+                            <button class="w3-button w3-hover-light-grey" title="Add Project" id="addProjectBtn">
+                                <i class="bi bi-plus-lg"></i> Add Project
                             </button>
                         </div>
                     </div>
-                    <div class="tree-wrapper">
-                        <!-- Tree items will be dynamically added -->
+                    <div class="tree-wrapper w3-margin-top">
+                        <!-- Projects will be loaded here dynamically -->
                     </div>
-                    <div class="no-results w3-padding w3-center w3-hide">
-                        <p>No projects found</p>
+                    <div class="tree-loading w3-center w3-padding-16 w3-hide">
+                        <i class="bi bi-arrow-repeat w3-spin"></i> Loading projects...
+                    </div>
+                    <div class="no-results w3-panel w3-pale-yellow w3-hide">
+                        <p>No projects found. Create a new project to get started.</p>
+                    </div>
+                </div>
+            </div>
+            <div class="w3-col m4 l3">
+                <!-- Project Details Panel -->
+                <div class="w3-card w3-white">
+                    <div class="w3-container w3-blue">
+                        <h4>Project Details</h4>
+                    </div>
+                    <div class="w3-container">
+                        <div class="project-details-placeholder w3-padding-16 w3-center w3-text-grey">
+                            <p><i class="bi bi-info-circle"></i> Select a project to view details</p>
+                        </div>
+                        <div class="project-details w3-hide">
+                            <!-- Project details will be loaded here -->
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-    </main>
-
-    <!-- Modals -->
-    <!-- Add/Edit Project Modal -->
-    <div id="projectModal" class="w3-modal">
-        <div class="w3-modal-content w3-card-4 w3-animate-zoom">
-            <header class="w3-container w3-green">
-                <span class="w3-button w3-display-topright w3-hover-none w3-hover-text-white"
-                      data-action="close-modal">&times;</span>
-                <h3 class="modal-title">New Project</h3>
-            </header>
-            <form id="projectForm" class="w3-container w3-padding">
-                <input type="hidden" name="type" value="project">
-                <input type="hidden" name="id" value="">
-                
-                <div class="form-group">
-                    <label>Project Name</label>
-                    <input type="text" name="name" class="w3-input w3-border" required>
-                </div>
-                
-                <div class="form-group">
-                    <label>Description</label>
-                    <textarea name="description" class="w3-input w3-border"></textarea>
-                </div>
-                
-                <div class="form-actions w3-padding-16">
-                    <button type="submit" class="w3-button w3-green">Save</button>
-                    <button type="button" class="w3-button w3-grey" 
-                            data-action="close-modal">Cancel</button>
-                </div>
-            </form>
-        </div>
     </div>
 
-    <!-- Delete Confirmation Modal -->
-    <div id="deleteModal" class="w3-modal">
-        <div class="w3-modal-content w3-card-4 w3-animate-zoom">
-            <header class="w3-container w3-red">
-                <span class="w3-button w3-display-topright w3-hover-none w3-hover-text-white"
-                      data-action="close-modal">&times;</span>
-                <h3>Confirm Delete</h3>
-            </header>
-            <div class="w3-container w3-padding">
-                <p>Are you sure you want to delete this item? This action cannot be undone.</p>
-                <div class="delete-details w3-padding">
-                    <!-- Delete details will be dynamically added -->
-                </div>
-                <div class="w3-padding-16">
-                    <button class="w3-button w3-red" data-action="confirm-delete">Delete</button>
-                    <button class="w3-button w3-grey" data-action="close-modal">Cancel</button>
-                </div>
-            </div>
-        </div>
+    <!-- Measurements Section -->
+    <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
+        <button class="w3-bar-item w3-button section-button" data-action="toggle-section">
+            <i class="bi bi-chevron-right"></i> Measurements
+        </button>
     </div>
-    <!-- Loading Overlay -->
-    <div id="loadingOverlay" class="w3-modal">
-        <div class="w3-modal-content w3-card w3-animate-opacity w3-center">
-            <div class="w3-container w3-padding-32">
-                <i class="bi bi-arrow-repeat w3-spin"></i>
-                <p class="loading-message">Loading...</p>
-            </div>
-        </div>
+    <div class="w3-container w3-hide">
+        Measurements content
     </div>
 
-    <!-- JavaScript Modules -->
-    <script type="module">
-        import { State } from '/static/main/js/state.js';
-        import { DOM } from '/static/main/js/dom.js';
-        import { Events } from '/static/main/js/events.js';
-        import { CRUD } from '/static/main/js/crud.js';
-        import { API } from '/static/main/js/api.js';
-        import { NotificationUI, TreeUI, StatusUI } from '/static/main/js/ui.js';
-        
-        // Initialize components
-        document.addEventListener('DOMContentLoaded', async () => {
-            try {
-                // Show loading overlay
-                const loadingOverlay = DOM.getElement('#loadingOverlay');
-                loadingOverlay.style.display = 'block';
+    <!-- Data Section -->
+    <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
+        <button class="w3-bar-item w3-button section-button" data-action="toggle-section">
+            <i class="bi bi-chevron-right"></i> Data
+        </button>
+    </div>
+    <div class="w3-container w3-hide">
+        Data content
+    </div>
 
-                // Initialize events
-                Events.initialize();
+    <!-- Models Section -->
+    <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
+        <button class="w3-bar-item w3-button section-button" data-action="toggle-section">
+            <i class="bi bi-chevron-right"></i> Models
+        </button>
+    </div>
+    <div class="w3-container w3-hide">
+        Models content
+    </div>
+</main>
 
-                // Initialize tree view
-                const treeContainer = DOM.getElement('.tree-container');
-                if (treeContainer) {
-                    // Load initial projects
-                    const response = await API.Projects.list();
-                    TreeUI.renderProjects(response.data);
+{% endblock %}
 
-                    // Setup tree event handlers
-                    Events.addDelegate(treeContainer, 'click', '[data-action]', (e, target) => {
-                        const action = target.dataset.action;
-                        const item = target.closest('.tree-item');
+{% block extra_js %}
+
+<script type="module">
+    import { Dashboard } from '/static/main/js/main.js';
+    import { DOM } from '/static/main/js/dom.js';
+    import { NotificationUI } from '/static/main/js/ui.js';
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        try {
+            // Initialize DOM first
+            DOM.initialize();
+            
+            // Wait for Dashboard to initialize (if needed)
+            // Note: main.js already calls Dashboard.initialize() on DOMContentLoaded
+            
+            // Add section toggle handler
+            DOM.addDelegate(document, 'click', '[data-action="toggle-section"]', async (e, target) => {
+                try {
+                    const contentDiv = target.closest('.w3-bar').nextElementSibling;
+                    const icon = target.querySelector('.bi');
+                    const isExpanding = contentDiv.classList.contains('w3-hide');
+                    
+                    // Toggle section visibility
+                    if (isExpanding) {
+                        contentDiv.classList.remove('w3-hide');
+                        icon.classList.remove('bi-chevron-right');
+                        icon.classList.add('bi-chevron-down');
                         
-                        if (item) {
-                            const type = item.dataset.type;
-                            const id = item.dataset.id;
-                            
-                            switch(action) {
-                                case 'edit':
-                                    handleEdit(type, id);
-                                    break;
-                                case 'delete':
-                                    handleDelete(type, id);
-                                    break;
-                                case 'add-child':
-                                    handleAddChild(type, id);
-                                    break;
+                        // Handle section-specific initialization
+                        const sectionText = target.textContent.trim();
+                        if (sectionText.includes('Projects')) {
+                            // Show a status message during loading
+                            const statusId = 'loading-projects';
+                            try {
+                                NotificationUI.show({
+                                    message: 'Loading projects...',
+                                    type: 'info',
+                                    duration: 2000
+                                });
+                                await Dashboard.initializeTree();
+                            } catch (err) {
+                                NotificationUI.show({
+                                    message: `Failed to load projects: ${err.message}`,
+                                    type: 'error',
+                                    duration: 5000
+                                });
+                                throw err;
                             }
+                        } else if (sectionText.includes('Measurements')) {
+                            // Add measurements section initialization here
+                            // For now, we'll just show placeholder content
+                            contentDiv.innerHTML = contentDiv.innerHTML.trim() === 'Measurements content' ?
+                                '<div class="w3-panel w3-pale-blue"><p>Measurement data will appear here</p></div>' :
+                                contentDiv.innerHTML;
+                        } else if (sectionText.includes('Data')) {
+                            // Add data section initialization here
+                            contentDiv.innerHTML = contentDiv.innerHTML.trim() === 'Data content' ?
+                                '<div class="w3-panel w3-pale-blue"><p>Data management tools will appear here</p></div>' :
+                                contentDiv.innerHTML;
+                        } else if (sectionText.includes('Models')) {
+                            // Add models section initialization here
+                            contentDiv.innerHTML = contentDiv.innerHTML.trim() === 'Models content' ?
+                                '<div class="w3-panel w3-pale-blue"><p>Models will be displayed here</p></div>' :
+                                contentDiv.innerHTML;
                         }
+                    } else {
+                        // Collapse section
+                        contentDiv.classList.add('w3-hide');
+                        icon.classList.remove('bi-chevron-down');
+                        icon.classList.add('bi-chevron-right');
+                    }
+                } catch (error) {
+                    console.error('Error in section toggle:', error);
+                    NotificationUI.show({
+                        message: `Error toggling section: ${error.message}`,
+                        type: 'error',
+                        duration: 5000
                     });
-                }
-
-                // Setup filter handling
-                const filterInput = DOM.getElement('[data-action="filter-projects"]');
-                if (filterInput) {
-                    filterInput.addEventListener('input', DOM.debounce(async (e) => {
-                        const value = e.target.value.trim();
-                        const response = await API.Projects.list({ filter: value });
-                        TreeUI.renderProjects(response.data);
-                    }, 300));
-                }
-
-                // Setup form handling
-                document.querySelectorAll('form').forEach(form => {
-                    form.addEventListener('submit', async (e) => {
-                        e.preventDefault();
-                        const type = form.elements.type.value;
-                        const id = form.elements.id.value;
-                        const data = new FormData(form);
-                        
-                        try {
-                            if (id) {
-                                await CRUD.updateItem(type, id, Object.fromEntries(data));
-                            } else {
-                                await CRUD.addItem(type, Object.fromEntries(data));
-                            }
-                            closeModal(form.closest('.w3-modal'));
-                        } catch (error) {
-                            NotificationUI.show({
-                                message: error.message,
-                                type: 'error'
-                            });
-                        }
-                    });
-                });
-
-                // Initialize modal handlers
-                setupModalHandlers();
-
-            } catch (error) {
-                NotificationUI.show({
-                    message: 'Error initializing dashboard: ' + error.message,
-                    type: 'error'
-                });
-            } finally {
-                // Hide loading overlay
-                loadingOverlay.style.display = 'none';
-            }
-        });
-
-        // Event handlers
-        function setupModalHandlers() {
-            DOM.addDelegate(document, 'click', '[data-action="close-modal"]', (e) => {
-                const modal = e.target.closest('.w3-modal');
-                if (modal) {
-                    closeModal(modal);
                 }
             });
 
-            // Add project button
-            const addProjectBtn = DOM.getElement('#addProjectBtn');
-            if (addProjectBtn) {
-                addProjectBtn.addEventListener('click', () => {
-                    const modal = DOM.getElement('#projectModal');
-                    if (modal) {
-                        modal.querySelector('form').reset();
-                        modal.querySelector('.modal-title').textContent = 'New Project';
-                        modal.querySelector('[name="id"]').value = '';
-                        modal.style.display = 'block';
-                    }
-                });
-            }
-        }
+            // Expand first section by default (optional)
+            // setTimeout(() => {
+            //     const firstSection = document.querySelector('[data-action="toggle-section"]');
+            //     if (firstSection) firstSection.click();
+            // }, 500);
 
-        function closeModal(modal) {
-            modal.classList.add('w3-animate-opacity');
-            modal.style.opacity = '0';
-            setTimeout(() => {
-                modal.style.display = 'none';
-                modal.style.opacity = '1';
-                modal.classList.remove('w3-animate-opacity');
-                const form = modal.querySelector('form');
-                if (form) form.reset();
-            }, 300);
+        } catch (error) {
+            console.error('Error initializing dashboard:', error);
+            NotificationUI.show({
+                message: `Dashboard initialization error: ${error.message}`,
+                type: 'error',
+                duration: 0, // Show until dismissed
+                closeable: true
+            });
         }
-    </script>
-</body>
-</html>
+    });
+</script>
+{% endblock %}

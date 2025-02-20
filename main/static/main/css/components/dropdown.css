@@ -1,84 +1,70 @@
-/* components/dropdowns.css */
-/* Dropdown extensions for w3.css */
+/* components/dropdown.css */
+.w3-dropdown-hover {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+}
 
-/* Dropdown positioning */
 .w3-dropdown-content {
-    min-width: 160px;
-    z-index: 1;
-    transform: translateX(-10%);
-}
-
-.tree-item .w3-dropdown-content {
+    display: none;
     position: absolute;
-    right: 0;
-    top: 100%;
-    transform: translateX(0);
+    min-width: 160px;
+    box-shadow: 0 2px 5px 0 rgba(0,0,0,0.16), 0 2px 10px 0 rgba(0,0,0,0.12);
+    z-index: 100;
 }
 
-/* Dropdown menu items */
+.w3-dropdown-hover:hover .w3-dropdown-content {
+    display: block;
+}
+
 .w3-dropdown-content .w3-bar-item {
-    padding: 8px 16px;
     display: flex;
     align-items: center;
     gap: 8px;
+    padding: 8px 16px;
 }
 
 .w3-dropdown-content .w3-bar-item i {
-    width: 16px;
+    width: 20px;
     text-align: center;
 }
 
-/* Hover effects */
 .w3-dropdown-content .w3-bar-item:hover {
-    background-color: #f1f1f1;
-}
-
-/* Dropdown dividers */
-.w3-dropdown-divider {
-    border-top: 1px solid #e0e0e0;
-    margin: 4px 0;
-}
-
-/* Disabled state */
-.w3-dropdown-content .w3-bar-item.w3-disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-.w3-dropdown-content .w3-bar-item.w3-disabled:hover {
-    background-color: transparent;
-}
-
-/* Active state */
-.w3-dropdown-content .w3-bar-item.w3-active {
-    background-color: #2196F3;
-    color: white;
-}
-
-/* Dropdown animations */
-.w3-dropdown-content {
-    transform-origin: top;
-    transition: transform 0.2s ease, opacity 0.2s ease;
-    opacity: 0;
-    transform: scaleY(0);
-}
-
-.w3-dropdown-content.w3-show {
-    opacity: 1;
-    transform: scaleY(1);
-}
-
-/* Dropdown header */
-.w3-dropdown-header {
-    padding: 8px 16px;
-    color: #757575;
-    font-size: 0.9em;
-    font-weight: 500;
-}
-
-/* Dropdown footer */
-.w3-dropdown-footer {
-    padding: 8px 16px;
     background-color: #f5f5f5;
-    border-top: 1px solid #e0e0e0;
+}
+
+.menu-trigger {
+    margin-left: -8px;
+}
+
+.menu-trigger .w3-button {
+    padding: 8px;
+    background: none !important;
+}
+
+.menu-trigger .w3-button:hover,
+.menu-trigger .w3-button:focus {
+    background: none !important;
+    outline: none;
+}
+
+.menu-trigger .w3-dropdown-content {
+    margin-top: -1px;
+}
+
+@media (max-width: 600px) {
+    .w3-dropdown-content {
+        position: fixed;
+        top: auto;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        max-height: 80vh;
+        border-radius: 12px 12px 0 0;
+    }
+
+    .w3-dropdown-content .w3-bar-item {
+        padding: 12px 16px;
+    }
 }

@@ -12,20 +12,20 @@
         <button class="w3-bar-item w3-button section-button" data-action="toggle-section">
             <i class="bi bi-chevron-right"></i> Projects
         </button>
-        <div class="w3-dropdown-hover menu-trigger">
-            <button class="w3-button plain-button">
-                <i class="bi bi-three-dots-vertical"></i>
-            </button>
-            <div class="w3-dropdown-content w3-bar-block w3-card">
-                <a href="#" class="w3-bar-item w3-button" data-action="filter-projects">
-                    <i class="bi bi-funnel"></i> Filter Projects
-                </a>
-                <a href="#" class="w3-bar-item w3-button" data-action="add-project">
-                    <i class="bi bi-plus-lg"></i> Add Project
-                </a>
+            <div class="w3-dropdown-hover menu-trigger">
+                <button class="w3-button">
+                    <i class="bi bi-three-dots-vertical"></i>
+                </button>
+                <div class="w3-dropdown-content w3-bar-block">
+                    <a href="#" class="w3-bar-item w3-button" data-action="filter-projects">
+                        <i class="bi bi-funnel"></i> Filter Projects
+                    </a>
+                    <a href="#" class="w3-bar-item w3-button" data-action="add-project">
+                        <i class="bi bi-plus-lg"></i> Add Project
+                    </a>
+                </div>
             </div>
         </div>
-    </div>
     <div class="w3-container w3-hide">
         <div class="tree-container">
             <div class="tree-wrapper w3-margin-top">
@@ -39,7 +39,7 @@
             </div>
         </div>
     </div>
-        
+            
     <!-- Measurements Section -->
     <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
         <button class="w3-bar-item w3-button section-button" data-action="toggle-section">
@@ -74,21 +74,13 @@
 {% endblock %}
 
 {% block extra_js %}
-
 <script type="module">
-    import { 
-        DOM, 
-        NotificationUI,
-        Events,
-        TreeUI,
-        Dashboard
-    } from '/static/main/js/main.js';
+
 
     document.addEventListener('DOMContentLoaded', async () => {
         try {
-            // Initialize DOM first
-            DOM.initialize();
             
+
             // Add section toggle handler
             Events.addDelegate(document, 'click', '[data-action="toggle-section"]', async (e, target) => {
                 try {
@@ -105,8 +97,6 @@
                         // Handle section-specific initialization
                         const sectionText = target.textContent.trim();
                         if (sectionText.includes('Projects')) {
-                            // Show a status message during loading
-                            const statusId = 'loading-projects';
                             try {
                                 NotificationUI.show({
                                     message: 'Loading projects...',
@@ -123,18 +113,14 @@
                                 throw err;
                             }
                         } else if (sectionText.includes('Measurements')) {
-                            // Add measurements section initialization here
-                            // For now, we'll just show placeholder content
                             contentDiv.innerHTML = contentDiv.innerHTML.trim() === 'Measurements content' ?
                                 '<div class="w3-panel w3-pale-blue"><p>Measurement data will appear here</p></div>' :
                                 contentDiv.innerHTML;
                         } else if (sectionText.includes('Data')) {
-                            // Add data section initialization here
                             contentDiv.innerHTML = contentDiv.innerHTML.trim() === 'Data content' ?
                                 '<div class="w3-panel w3-pale-blue"><p>Data management tools will appear here</p></div>' :
                                 contentDiv.innerHTML;
                         } else if (sectionText.includes('Models')) {
-                            // Add models section initialization here
                             contentDiv.innerHTML = contentDiv.innerHTML.trim() === 'Models content' ?
                                 '<div class="w3-panel w3-pale-blue"><p>Models will be displayed here</p></div>' :
                                 contentDiv.innerHTML;
@@ -157,12 +143,50 @@
 
             Events.addDelegate(document, 'click', '[data-action="filter-projects"]', (e, target) => {
                 e.preventDefault();
-                const filterInput = DOM.getElement('[data-action="filter-projects"]');
-                if (filterInput) {
-                    filterInput.focus();
-                }
+                const treeItem = target.closest('.tree-item');
+                const type = treeItem ? treeItem.dataset.type : 'project';
+                
+                Modal.show(`filter-${type}`, {
+                    title: `Filter ${type}s`,
+                    type: 'filter',
+                    width: '400px',
+                    position: {
+                        x: e.clientX,
+                        y: e.clientY + 10
+                    },
+                    content: `
+                        <form class="w3-container w3-padding-16" data-action="filter-form">
+                            <div class="w3-row-padding">
+                                <div class="w3-col m12">
+                                    <input class="w3-input" type="text" name="search" placeholder="Search...">
+                                </div>
+                            </div>
+                            <div class="w3-row-padding w3-margin-top">
+                                <div class="w3-col m12">
+                                    <label>Status</label>
+                                    <select class="w3-select" name="status">
+                                        <option value="">All</option>
+                                        <option value="active">Active</option>
+                                        <option value="archived">Archived</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="w3-padding-16">
+                                <button type="submit" class="w3-button w3-blue">Apply Filter</button>
+                                <button type="button" class="w3-button" data-action="clear-filter">Clear</button>
+                            </div>
+                        </form>
+                    `
+                }).catch(error => {
+                    console.error('Error showing filter modal:', error);
+                    NotificationUI.show({
+                        message: `Error showing filter dialog: ${error.message}`,
+                        type: 'error',
+                        duration: 5000
+                    });
+                });
             });
-            
+
             Events.addDelegate(document, 'click', '[data-action="add-project"]', (e, target) => {
                 e.preventDefault();
                 const addButton = DOM.getElement('#addProjectBtn');
@@ -176,7 +200,7 @@
             NotificationUI.show({
                 message: `Dashboard initialization error: ${error.message}`,
                 type: 'error',
-                duration: 0, // Show until dismissed
+                duration: 0,
                 closeable: true
             });
         }

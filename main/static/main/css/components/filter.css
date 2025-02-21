@@ -1,5 +1,4 @@
 /* components/filters.css */
-/* Filter component styles - extends w3.css */
 
 /* Filter container */
 .filter-bar {
@@ -16,11 +15,11 @@
 }
 
 .filter-input input {
-    padding-right: 32px; /* Space for clear button */
+    padding-right: 32px;
 }
 
-/* Clear button */
-.clear-filter {
+/* Clear button - only show in filter input context */
+.filter-input .clear-filter {
     position: absolute;
     right: 8px;
     top: 50%;
@@ -34,7 +33,7 @@
 }
 
 /* Show clear button when input has content */
-.w3-input:not(:placeholder-shown) ~ .clear-filter {
+.filter-input .w3-input:not(:placeholder-shown) ~ .clear-filter {
     display: block;
 }
 

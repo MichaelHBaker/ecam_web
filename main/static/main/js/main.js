@@ -6,6 +6,7 @@ import { DOM } from './dom.js';
 import { Events } from './events.js';
 import { CRUD } from './crud.js';
 import { API } from './api.js';
+import { Modal } from './modals.js';
 import { NotificationUI, TreeUI, StatusUI } from './ui.js';
 
 class DashboardManager {
@@ -37,13 +38,6 @@ class DashboardManager {
         try {
             StatusUI.show('Initializing dashboard...', { id: 'init' });
             
-            // Initialize core components
-            Events.initialize();
-            await this.initializeTree();
-            this.initializeFilters();
-            this.initializeForms();
-            this.initializeModals();
-
             // Set up event subscriptions
             this.setupSubscriptions();
             
@@ -532,6 +526,7 @@ export {
     API,
     NotificationUI,
     TreeUI,
+    Modal,
     StatusUI,
     Dashboard
 };

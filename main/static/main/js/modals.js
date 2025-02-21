@@ -3,6 +3,7 @@
 
 import { State } from './state.js';
 import { NotificationUI } from './ui.js';
+import { DOM } from './dom.js';
 
 const MODALS_STATE_KEY = 'modals_state';
 
@@ -39,6 +40,40 @@ class ModalManager {
     }
 
     /**
+     * Creates a new modal element
+     * @private
+     * @param {string} modalId - Modal identifier
+     * @param {Object} config - Modal configuration
+     * @returns {HTMLElement} Created modal element
+     */
+    createModalElement(modalId, config) {
+        const modalElement = DOM.createElement('div', {
+            attributes: {
+                id: `id_modal-${modalId}`,
+                class: 'w3-modal',
+                'data-modal-type': config.type || 'default'
+            }
+        });
+
+        const content = config.content || '';
+        modalElement.innerHTML = `
+            <div class="w3-modal-content w3-card-4 w3-animate-top">
+                ${config.showCloseButton ? `
+                    <div class="w3-bar w3-light-grey">
+                        <span class="w3-bar-item">${config.title || ''}</span>
+                        <button class="w3-bar-item w3-button w3-right modal-close">×</button>
+                    </div>
+                ` : ''}
+                <div class="modal-body w3-container">
+                    ${content}
+                </div>
+            </div>
+        `;
+
+        return modalElement;
+    }
+
+    /**
      * Initialize global event listeners
      * @private
      */
@@ -48,22 +83,25 @@ class ModalManager {
     }
 
     /**
-     * Shows a modal with enhanced functionality
-     * @param {string} modalId - Modal identifier
-     * @param {Object} options - Modal options
-     * @returns {Promise<void>}
-     */
+         * Shows a modal with enhanced functionality
+         * @param {string} modalId - Modal identifier
+         * @param {Object} options - Modal options
+         * @returns {Promise<string>} Instance ID
+         */
     async show(modalId, options = {}) {
         try {
-            const modal = document.getElementById(`id_modal-${modalId}`);
+            let modal = document.getElementById(`id_modal-${modalId}`);
+            
+            // Create modal if it doesn't exist
             if (!modal) {
-                throw new Error(`Modal not found: ${modalId}`);
+                modal = this.createModalElement(modalId, options);
+                document.body.appendChild(modal);
             }
-
+    
             // Generate instance ID
             const instanceId = `modal-${modalId}-${Date.now()}`;
             modal.dataset.instanceId = instanceId;
-
+    
             // Apply options
             const config = {
                 closeOnEscape: true,
@@ -77,7 +115,7 @@ class ModalManager {
                 height: 'auto',
                 ...options
             };
-
+    
             // Store instance data
             modalInstances.set(instanceId, {
                 id: modalId,
@@ -91,26 +129,59 @@ class ModalManager {
                     size: { width: 0, height: 0 }
                 }
             });
-
+    
             // Set up modal
             await this.setupModal(modal, instanceId);
-
+    
+            // Show modal with position handling
+            if (typeof config.position === 'object' && config.position.x !== undefined && config.position.y !== undefined) {
+                // Handle dropdown-style positioning
+                const viewportHeight = window.innerHeight;
+                const viewportWidth = window.innerWidth;
+                const modalContent = modal.querySelector('.w3-modal-content');
+                
+                // Show to measure
+                modal.style.display = 'block';
+                modalContent.style.opacity = '0';
+                
+                const modalRect = modalContent.getBoundingClientRect();
+                const modalHeight = modalRect.height;
+                const modalWidth = modalRect.width;
+                
+                // Calculate position
+                let { x, y } = config.position;
+                
+                // Adjust for viewport
+                if (y + modalHeight > viewportHeight) {
+                    y = Math.max(0, y - modalHeight);
+                }
+                if (x + modalWidth > viewportWidth) {
+                    x = Math.max(0, x - modalWidth);
+                }
+                
+                // Update position
+                modalContent.style.position = 'fixed';
+                modalContent.style.top = `${y}px`;
+                modalContent.style.left = `${x}px`;
+                modalContent.style.transform = 'none';
+                modalContent.style.opacity = '';
+            }
+    
             // Show modal
             await this.animateModal(modal, 'show');
-
+    
             // Update state
             this.activeModals.add(instanceId);
             this.updateModalState(instanceId, 'shown');
-
-            // Return instance ID for reference
+    
             return instanceId;
-
+    
         } catch (error) {
             this.handleError('Show Modal Error', error);
             throw error;
         }
     }
-
+        
     /**
      * Hides a modal with cleanup
      * @param {string} modalId - Modal identifier
@@ -121,27 +192,46 @@ class ModalManager {
         try {
             const modal = document.getElementById(`id_modal-${modalId}`);
             if (!modal) return;
-
+    
             const instanceId = modal.dataset.instanceId;
             if (!instanceId) return;
-
+    
             const instance = modalInstances.get(instanceId);
             if (!instance) return;
-
+    
             // Animate out
             await this.animateModal(modal, 'hide');
-
+    
             // Clean up
             this.cleanupModalInstance(instanceId);
-
+    
+            // Remove from DOM if dynamically created
+            if (instance.config.dynamic) {
+                modal.remove();
+            } else {
+                // Reset modal state
+                modal.style.display = 'none';
+                modal.style.backgroundColor = '';
+                const content = modal.querySelector('.w3-modal-content');
+                if (content) {
+                    content.style = '';
+                }
+            }
+    
             // Update state
             this.activeModals.delete(instanceId);
             this.updateModalState(instanceId, 'hidden');
-
-            // Remove instance data
+    
+            // Clean up instance data
             delete modal.dataset.instanceId;
             modalInstances.delete(instanceId);
-
+    
+            // Check if this was the last modal
+            if (this.activeModals.size === 0) {
+                document.body.style.overflow = '';
+                document.body.style.pointerEvents = '';
+            }
+    
         } catch (error) {
             this.handleError('Hide Modal Error', error);
         }
@@ -234,36 +324,54 @@ class ModalManager {
                 resolve();
                 return;
             }
-
+    
             const content = modal.querySelector('.w3-modal-content');
             if (!content) {
                 resolve();
                 return;
             }
-
+    
             const handleTransitionEnd = () => {
                 content.removeEventListener('transitionend', handleTransitionEnd);
                 resolve();
             };
-
+    
             content.addEventListener('transitionend', handleTransitionEnd);
-
+    
             if (action === 'show') {
                 modal.style.display = 'block';
+                modal.style.backgroundColor = 'rgba(0,0,0,0.4)';
+                
+                // Set pointer-events only on the modal
+                document.body.style.pointerEvents = 'none';
+                modal.style.pointerEvents = 'auto';
+                content.style.pointerEvents = 'auto';
+                
                 requestAnimationFrame(() => {
                     content.classList.add('w3-show');
                     content.classList.remove('w3-hide');
+                    content.style.opacity = '1';
                 });
             } else {
                 content.classList.remove('w3-show');
                 content.classList.add('w3-hide');
-                content.addEventListener('transitionend', () => {
+                content.style.opacity = '0';
+                
+                modal.style.backgroundColor = 'transparent';
+                
+                // Restore pointer-events when all modals are closed
+                if (this.activeModals.size <= 1) {
+                    document.body.style.pointerEvents = '';
+                }
+                
+                setTimeout(() => {
                     modal.style.display = 'none';
-                });
+                    resolve();
+                }, 300);
             }
         });
     }
-
+    
     /**
      * Updates modal state
      * @private

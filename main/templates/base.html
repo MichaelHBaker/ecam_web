@@ -46,16 +46,17 @@
 
     <!-- Initialize State -->
     <script type="module">
-        import { State } from "{% static 'main/js/state.js' %}";
-        import { Events } from "{% static 'main/js/events.js' %}";
-        import { NotificationUI } from "{% static 'main/js/ui.js' %}";
-
+        import { DOM, NotificationUI, Events, TreeUI, Modal, Dashboard } from '/static/main/js/main.js';
+        
         // Initialize base state
         State.set('app_state', {
             initialized: true,
             lastUpdate: new Date(),
             currentPage: window.location.pathname
         });
+
+        // Initialize DOM first
+        DOM.initialize();
 
         // Initialize events
         Events.initialize();

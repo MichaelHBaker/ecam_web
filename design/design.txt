@@ -1,3 +1,7 @@
+
+done
+    "ui, state, modals, main, events, dom, api
+
 changes
     client side rendering (reactive), tree_item.html is gone
         observables

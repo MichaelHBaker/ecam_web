@@ -1,9 +1,9 @@
 // modals.js
-// Enhanced modal management and interaction utilities
+// Enhanced modal management with proper initialization and safety checks
 
 import { State } from './state.js';
-import { NotificationUI } from './ui.js';
 import { DOM } from './dom.js';
+import { NotificationUI } from './ui.js';
 
 const MODALS_STATE_KEY = 'modals_state';
 
@@ -14,63 +14,67 @@ const MODALS_STATE_KEY = 'modals_state';
 const modalInstances = new Map();
 
 /**
- * Modal Manager Class
+ * Modal Manager Class with enhanced initialization and error handling
  */
 class ModalManager {
     constructor() {
+        this.initialized = false;
         this.activeModals = new Set();
         this.observers = new Map();
         this.handlers = new Map();
         this.zIndexBase = 1000;
-        
-        // Initialize modal state
-        State.set(MODALS_STATE_KEY, {
-            activeModals: [],
-            lastAction: null,
-            error: null
-        });
-
-        // Bind methods
-        this.handleKeyPress = this.handleKeyPress.bind(this);
-        this.handleOutsideClick = this.handleOutsideClick.bind(this);
-        this.handleResize = this.debounce(this.handleResize.bind(this), 250);
-
-        // Set up global event listeners
-        this.initializeGlobalListeners();
     }
 
     /**
-     * Creates a new modal element
-     * @private
-     * @param {string} modalId - Modal identifier
-     * @param {Object} config - Modal configuration
-     * @returns {HTMLElement} Created modal element
+     * Initialize modal manager with dependency checks
+     * @returns {Promise<void>}
      */
-    createModalElement(modalId, config) {
-        const modalElement = DOM.createElement('div', {
-            attributes: {
-                id: `id_modal-${modalId}`,
-                class: 'w3-modal',
-                'data-modal-type': config.type || 'default'
+    async initialize() {
+        if (this.initialized) {
+            console.warn('ModalManager already initialized');
+            return;
+        }
+
+        try {
+            // Check dependencies
+            if (!State.isInitialized()) {
+                throw new Error('State must be initialized before ModalManager');
             }
-        });
+            if (!DOM.isInitialized()) {
+                throw new Error('DOM must be initialized before ModalManager');
+            }
 
-        const content = config.content || '';
-        modalElement.innerHTML = `
-            <div class="w3-modal-content w3-card-4 w3-animate-top">
-                ${config.showCloseButton ? `
-                    <div class="w3-bar w3-light-grey">
-                        <span class="w3-bar-item">${config.title || ''}</span>
-                        <button class="w3-bar-item w3-button w3-right modal-close">×</button>
-                    </div>
-                ` : ''}
-                <div class="modal-body w3-container">
-                    ${content}
-                </div>
-            </div>
-        `;
+            // Initialize modal state
+            State.set(MODALS_STATE_KEY, {
+                activeModals: [],
+                lastAction: null,
+                error: null,
+                lastUpdate: new Date()
+            });
 
-        return modalElement;
+            // Bind methods
+            this.handleKeyPress = this.handleKeyPress.bind(this);
+            this.handleOutsideClick = this.handleOutsideClick.bind(this);
+            this.handleResize = this.debounce(this.handleResize.bind(this), 250);
+
+            // Set up global event listeners
+            this.initializeGlobalListeners();
+
+            this.initialized = true;
+            console.log('ModalManager initialized');
+
+        } catch (error) {
+            this.handleError('Initialization Error', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Check if modal manager is initialized
+     * @returns {boolean}
+     */
+    isInitialized() {
+        return this.initialized;
     }
 
     /**
@@ -78,17 +82,65 @@ class ModalManager {
      * @private
      */
     initializeGlobalListeners() {
-        document.addEventListener('keydown', this.handleKeyPress);
-        window.addEventListener('resize', this.handleResize);
+        try {
+            document.addEventListener('keydown', this.handleKeyPress);
+            window.addEventListener('resize', this.handleResize);
+        } catch (error) {
+            this.handleError('Event Listener Error', error);
+        }
     }
 
     /**
-         * Shows a modal with enhanced functionality
-         * @param {string} modalId - Modal identifier
-         * @param {Object} options - Modal options
-         * @returns {Promise<string>} Instance ID
-         */
+     * Creates a new modal element with error handling
+     * @private
+     * @param {string} modalId - Modal identifier
+     * @param {Object} config - Modal configuration
+     * @returns {HTMLElement} Created modal element
+     */
+    createModalElement(modalId, config) {
+        try {
+            const modalElement = DOM.createElement('div', {
+                attributes: {
+                    id: `id_modal-${modalId}`,
+                    class: 'w3-modal',
+                    'data-modal-type': config.type || 'default'
+                }
+            });
+
+            const content = config.content || '';
+            modalElement.innerHTML = `
+                <div class="w3-modal-content w3-card-4 w3-animate-top">
+                    ${config.showCloseButton ? `
+                        <div class="w3-bar w3-light-grey">
+                            <span class="w3-bar-item">${config.title || ''}</span>
+                            <button class="w3-bar-item w3-button w3-right modal-close">×</button>
+                        </div>
+                    ` : ''}
+                    <div class="modal-body w3-container">
+                        ${content}
+                    </div>
+                </div>
+            `;
+
+            return modalElement;
+
+        } catch (error) {
+            this.handleError('Create Modal Element Error', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Shows a modal with enhanced error handling
+     * @param {string} modalId - Modal identifier
+     * @param {Object} options - Modal options
+     * @returns {Promise<string>} Instance ID
+     */
     async show(modalId, options = {}) {
+        if (!this.initialized) {
+            throw new Error('ModalManager must be initialized before use');
+        }
+
         try {
             let modal = document.getElementById(`id_modal-${modalId}`);
             
@@ -97,11 +149,11 @@ class ModalManager {
                 modal = this.createModalElement(modalId, options);
                 document.body.appendChild(modal);
             }
-    
+
             // Generate instance ID
             const instanceId = `modal-${modalId}-${Date.now()}`;
             modal.dataset.instanceId = instanceId;
-    
+
             // Apply options
             const config = {
                 closeOnEscape: true,
@@ -115,7 +167,7 @@ class ModalManager {
                 height: 'auto',
                 ...options
             };
-    
+
             // Store instance data
             modalInstances.set(instanceId, {
                 id: modalId,
@@ -129,59 +181,32 @@ class ModalManager {
                     size: { width: 0, height: 0 }
                 }
             });
-    
+
             // Set up modal
             await this.setupModal(modal, instanceId);
-    
+
             // Show modal with position handling
-            if (typeof config.position === 'object' && config.position.x !== undefined && config.position.y !== undefined) {
-                // Handle dropdown-style positioning
-                const viewportHeight = window.innerHeight;
-                const viewportWidth = window.innerWidth;
-                const modalContent = modal.querySelector('.w3-modal-content');
+            if (typeof config.position === 'object' && 
+                config.position.x !== undefined && 
+                config.position.y !== undefined) {
                 
-                // Show to measure
-                modal.style.display = 'block';
-                modalContent.style.opacity = '0';
-                
-                const modalRect = modalContent.getBoundingClientRect();
-                const modalHeight = modalRect.height;
-                const modalWidth = modalRect.width;
-                
-                // Calculate position
-                let { x, y } = config.position;
-                
-                // Adjust for viewport
-                if (y + modalHeight > viewportHeight) {
-                    y = Math.max(0, y - modalHeight);
-                }
-                if (x + modalWidth > viewportWidth) {
-                    x = Math.max(0, x - modalWidth);
-                }
-                
-                // Update position
-                modalContent.style.position = 'fixed';
-                modalContent.style.top = `${y}px`;
-                modalContent.style.left = `${x}px`;
-                modalContent.style.transform = 'none';
-                modalContent.style.opacity = '';
+                await this.positionModal(modal, config.position);
             }
-    
+
             // Show modal
             await this.animateModal(modal, 'show');
-    
+
             // Update state
             this.activeModals.add(instanceId);
             this.updateModalState(instanceId, 'shown');
-    
+
             return instanceId;
-    
+
         } catch (error) {
             this.handleError('Show Modal Error', error);
             throw error;
         }
     }
-        
     /**
      * Hides a modal with cleanup
      * @param {string} modalId - Modal identifier
@@ -189,22 +214,26 @@ class ModalManager {
      * @returns {Promise<void>}
      */
     async hide(modalId, options = {}) {
+        if (!this.initialized) {
+            throw new Error('ModalManager must be initialized before use');
+        }
+
         try {
             const modal = document.getElementById(`id_modal-${modalId}`);
             if (!modal) return;
-    
+
             const instanceId = modal.dataset.instanceId;
             if (!instanceId) return;
-    
+
             const instance = modalInstances.get(instanceId);
             if (!instance) return;
-    
+
             // Animate out
             await this.animateModal(modal, 'hide');
-    
+
             // Clean up
-            this.cleanupModalInstance(instanceId);
-    
+            await this.cleanupModalInstance(instanceId);
+
             // Remove from DOM if dynamically created
             if (instance.config.dynamic) {
                 modal.remove();
@@ -217,23 +246,24 @@ class ModalManager {
                     content.style = '';
                 }
             }
-    
+
             // Update state
             this.activeModals.delete(instanceId);
             this.updateModalState(instanceId, 'hidden');
-    
+
             // Clean up instance data
             delete modal.dataset.instanceId;
             modalInstances.delete(instanceId);
-    
+
             // Check if this was the last modal
             if (this.activeModals.size === 0) {
                 document.body.style.overflow = '';
                 document.body.style.pointerEvents = '';
             }
-    
+
         } catch (error) {
             this.handleError('Hide Modal Error', error);
+            throw error;
         }
     }
 
@@ -244,33 +274,37 @@ class ModalManager {
      * @param {string} instanceId - Instance identifier
      */
     async setupModal(modal, instanceId) {
+        if (!this.initialized) {
+            throw new Error('ModalManager must be initialized before use');
+        }
+
         const instance = modalInstances.get(instanceId);
         if (!instance) return;
 
         try {
             // Set up modal structure
-            this.setupModalStructure(modal, instance.config);
+            await this.setupModalStructure(modal, instance.config);
 
             // Set up observers
-            this.setupResizeObserver(modal, instanceId);
+            await this.setupResizeObserver(modal, instanceId);
 
             // Set up event handlers
-            this.setupModalEventHandlers(modal, instanceId);
+            await this.setupModalEventHandlers(modal, instanceId);
 
             // Position modal
-            this.positionModal(modal, instance.config.position);
+            await this.positionModal(modal, instance.config.position);
 
             // Set initial size
-            this.setModalSize(modal, instance.config);
+            await this.setModalSize(modal, instance.config);
 
             // Set up draggable if enabled
             if (instance.config.draggable) {
-                this.setupDraggable(modal, instanceId);
+                await this.setupDraggable(modal, instanceId);
             }
 
             // Set up resizable if enabled
             if (instance.config.resizable) {
-                this.setupResizable(modal, instanceId);
+                await this.setupResizable(modal, instanceId);
             }
 
             // Update z-index
@@ -283,39 +317,45 @@ class ModalManager {
     }
 
     /**
-     * Sets up modal DOM structure
+     * Sets up modal DOM structure with error handling
      * @private
      */
-    setupModalStructure(modal, config) {
-        // Ensure modal has required structure
-        if (!modal.querySelector('.w3-modal-content')) {
-            const content = modal.innerHTML;
-            modal.innerHTML = `
-                <div class="w3-modal-content w3-card-4 w3-animate-top">
-                    ${config.showCloseButton ? `
-                        <div class="w3-bar w3-light-grey">
-                            <span class="w3-bar-item">${config.title || ''}</span>
-                            <button class="w3-bar-item w3-button w3-right modal-close">×</button>
+    async setupModalStructure(modal, config) {
+        try {
+            // Ensure modal has required structure
+            if (!modal.querySelector('.w3-modal-content')) {
+                const content = modal.innerHTML;
+                modal.innerHTML = `
+                    <div class="w3-modal-content w3-card-4 w3-animate-top">
+                        ${config.showCloseButton ? `
+                            <div class="w3-bar w3-light-grey">
+                                <span class="w3-bar-item">${config.title || ''}</span>
+                                <button class="w3-bar-item w3-button w3-right modal-close">×</button>
+                            </div>
+                        ` : ''}
+                        <div class="modal-body w3-container">
+                            ${content}
                         </div>
-                    ` : ''}
-                    <div class="modal-body w3-container">
-                        ${content}
                     </div>
-                </div>
-            `;
-        }
+                `;
+            }
 
-        // Add necessary classes
-        modal.classList.add('w3-modal');
-        
-        // Add data attributes
-        modal.dataset.modalType = config.type || 'default';
-        if (config.draggable) modal.dataset.draggable = 'true';
-        if (config.resizable) modal.dataset.resizable = 'true';
+            // Add necessary classes
+            modal.classList.add('w3-modal');
+            
+            // Add data attributes
+            modal.dataset.modalType = config.type || 'default';
+            if (config.draggable) modal.dataset.draggable = 'true';
+            if (config.resizable) modal.dataset.resizable = 'true';
+
+        } catch (error) {
+            this.handleError('Modal Structure Setup Error', error);
+            throw error;
+        }
     }
 
     /**
-     * Handles modal animation
+     * Handles modal animation with error handling
      * @private
      */
     async animateModal(modal, action) {
@@ -324,70 +364,78 @@ class ModalManager {
                 resolve();
                 return;
             }
-    
+
             const content = modal.querySelector('.w3-modal-content');
             if (!content) {
                 resolve();
                 return;
             }
-    
-            const handleTransitionEnd = () => {
-                content.removeEventListener('transitionend', handleTransitionEnd);
-                resolve();
-            };
-    
-            content.addEventListener('transitionend', handleTransitionEnd);
-    
-            if (action === 'show') {
-                modal.style.display = 'block';
-                modal.style.backgroundColor = 'rgba(0,0,0,0.4)';
-                
-                // Set pointer-events only on the modal
-                document.body.style.pointerEvents = 'none';
-                modal.style.pointerEvents = 'auto';
-                content.style.pointerEvents = 'auto';
-                
-                requestAnimationFrame(() => {
-                    content.classList.add('w3-show');
-                    content.classList.remove('w3-hide');
-                    content.style.opacity = '1';
-                });
-            } else {
-                content.classList.remove('w3-show');
-                content.classList.add('w3-hide');
-                content.style.opacity = '0';
-                
-                modal.style.backgroundColor = 'transparent';
-                
-                // Restore pointer-events when all modals are closed
-                if (this.activeModals.size <= 1) {
-                    document.body.style.pointerEvents = '';
-                }
-                
-                setTimeout(() => {
-                    modal.style.display = 'none';
+
+            try {
+                const handleTransitionEnd = () => {
+                    content.removeEventListener('transitionend', handleTransitionEnd);
                     resolve();
-                }, 300);
+                };
+
+                content.addEventListener('transitionend', handleTransitionEnd);
+
+                if (action === 'show') {
+                    modal.style.display = 'block';
+                    modal.style.backgroundColor = 'rgba(0,0,0,0.4)';
+                    
+                    // Set pointer-events only on the modal
+                    document.body.style.pointerEvents = 'none';
+                    modal.style.pointerEvents = 'auto';
+                    content.style.pointerEvents = 'auto';
+                    
+                    requestAnimationFrame(() => {
+                        content.classList.add('w3-show');
+                        content.classList.remove('w3-hide');
+                        content.style.opacity = '1';
+                    });
+                } else {
+                    content.classList.remove('w3-show');
+                    content.classList.add('w3-hide');
+                    content.style.opacity = '0';
+                    
+                    modal.style.backgroundColor = 'transparent';
+                    
+                    // Restore pointer-events when all modals are closed
+                    if (this.activeModals.size <= 1) {
+                        document.body.style.pointerEvents = '';
+                    }
+                    
+                    setTimeout(() => {
+                        modal.style.display = 'none';
+                        resolve();
+                    }, 300);
+                }
+
+            } catch (error) {
+                this.handleError('Modal Animation Error', error);
+                resolve(); // Resolve promise even on error to prevent hanging
             }
         });
     }
-    
+
     /**
-     * Updates modal state
+     * Updates modal state with error handling
      * @private
      */
     updateModalState(instanceId, action, data = {}) {
-        const currentState = State.get(MODALS_STATE_KEY);
-        
-        State.update(MODALS_STATE_KEY, {
-            activeModals: Array.from(this.activeModals),
-            lastAction: {
-                instanceId,
-                action,
-                timestamp: new Date(),
-                data
-            }
-        });
+        try {
+            State.update(MODALS_STATE_KEY, {
+                activeModals: Array.from(this.activeModals),
+                lastAction: {
+                    instanceId,
+                    action,
+                    timestamp: new Date(),
+                    data
+                }
+            });
+        } catch (error) {
+            this.handleError('Modal State Update Error', error);
+        }
     }
 
     /**
@@ -422,62 +470,76 @@ class ModalManager {
             }
         });
     }
-
-// modals.js - Part 2
-// Event handling, positioning, and size management
-
     /**
-     * Sets up modal event handlers
+     * Sets up modal event handlers with safety checks
      * @private
      * @param {HTMLElement} modal - Modal element
      * @param {string} instanceId - Instance identifier
      */
-    setupModalEventHandlers(modal, instanceId) {
+    async setupModalEventHandlers(modal, instanceId) {
         const instance = modalInstances.get(instanceId);
         if (!instance) return;
 
-        // Close button handler
-        const closeButton = modal.querySelector('.modal-close');
-        if (closeButton && instance.config.showCloseButton) {
-            const closeHandler = (e) => {
-                e.preventDefault();
-                this.hide(instance.id);
-            };
-            closeButton.addEventListener('click', closeHandler);
-            instance.handlers.add({ element: closeButton, type: 'click', handler: closeHandler });
-        }
-
-        // Outside click handler
-        if (instance.config.closeOnOutsideClick) {
-            const outsideClickHandler = (e) => {
-                if (e.target === modal) {
+        try {
+            // Close button handler
+            const closeButton = modal.querySelector('.modal-close');
+            if (closeButton && instance.config.showCloseButton) {
+                const closeHandler = (e) => {
+                    e.preventDefault();
                     this.hide(instance.id);
-                }
-            };
-            modal.addEventListener('click', outsideClickHandler);
-            instance.handlers.add({ element: modal, type: 'click', handler: outsideClickHandler });
-        }
+                };
+                closeButton.addEventListener('click', closeHandler);
+                instance.handlers.add({ 
+                    element: closeButton, 
+                    type: 'click', 
+                    handler: closeHandler 
+                });
+            }
 
-        // Form handlers
-        const form = modal.querySelector('form');
-        if (form) {
-            const formSubmitHandler = async (e) => {
-                e.preventDefault();
-                if (instance.config.onSubmit) {
-                    try {
-                        await instance.config.onSubmit(e);
+            // Outside click handler
+            if (instance.config.closeOnOutsideClick) {
+                const outsideClickHandler = (e) => {
+                    if (e.target === modal) {
                         this.hide(instance.id);
-                    } catch (error) {
-                        this.handleError('Form Submit Error', error);
                     }
-                }
-            };
-            form.addEventListener('submit', formSubmitHandler);
-            instance.handlers.add({ element: form, type: 'submit', handler: formSubmitHandler });
-        }
+                };
+                modal.addEventListener('click', outsideClickHandler);
+                instance.handlers.add({ 
+                    element: modal, 
+                    type: 'click', 
+                    handler: outsideClickHandler 
+                });
+            }
 
-        // Focus trap
-        this.setupFocusTrap(modal, instanceId);
+            // Form handlers
+            const form = modal.querySelector('form');
+            if (form) {
+                const formSubmitHandler = async (e) => {
+                    e.preventDefault();
+                    if (instance.config.onSubmit) {
+                        try {
+                            await instance.config.onSubmit(e);
+                            this.hide(instance.id);
+                        } catch (error) {
+                            this.handleError('Form Submit Error', error);
+                        }
+                    }
+                };
+                form.addEventListener('submit', formSubmitHandler);
+                instance.handlers.add({ 
+                    element: form, 
+                    type: 'submit', 
+                    handler: formSubmitHandler 
+                });
+            }
+
+            // Focus trap
+            await this.setupFocusTrap(modal, instanceId);
+
+        } catch (error) {
+            this.handleError('Event Handler Setup Error', error);
+            throw error;
+        }
     }
 
     /**
@@ -486,23 +548,32 @@ class ModalManager {
      * @param {HTMLElement} modal - Modal element
      * @param {string} instanceId - Instance identifier
      */
-    setupResizeObserver(modal, instanceId) {
+    async setupResizeObserver(modal, instanceId) {
         const instance = modalInstances.get(instanceId);
         if (!instance) return;
 
-        const content = modal.querySelector('.w3-modal-content');
-        if (!content) return;
+        try {
+            const content = modal.querySelector('.w3-modal-content');
+            if (!content) return;
 
-        const resizeObserver = new ResizeObserver(entries => {
-            for (const entry of entries) {
-                const { width, height } = entry.contentRect;
-                instance.state.size = { width, height };
-                this.updateModalState(instanceId, 'resized', { width, height });
-            }
-        });
+            const resizeObserver = new ResizeObserver(entries => {
+                try {
+                    for (const entry of entries) {
+                        const { width, height } = entry.contentRect;
+                        instance.state.size = { width, height };
+                        this.updateModalState(instanceId, 'resized', { width, height });
+                    }
+                } catch (error) {
+                    this.handleError('Resize Observer Error', error);
+                }
+            });
 
-        resizeObserver.observe(content);
-        instance.observers.add(resizeObserver);
+            resizeObserver.observe(content);
+            instance.observers.add(resizeObserver);
+
+        } catch (error) {
+            this.handleError('Resize Observer Setup Error', error);
+        }
     }
 
     /**
@@ -511,99 +582,153 @@ class ModalManager {
      * @param {HTMLElement} modal - Modal element
      * @param {string} instanceId - Instance identifier
      */
-    setupFocusTrap(modal, instanceId) {
+    async setupFocusTrap(modal, instanceId) {
         const instance = modalInstances.get(instanceId);
         if (!instance) return;
 
-        const focusableElements = modal.querySelectorAll(
-            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        );
+        try {
+            const focusableElements = modal.querySelectorAll(
+                'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+            );
 
-        if (focusableElements.length === 0) return;
+            if (focusableElements.length === 0) return;
 
-        const firstFocusable = focusableElements[0];
-        const lastFocusable = focusableElements[focusableElements.length - 1];
+            const firstFocusable = focusableElements[0];
+            const lastFocusable = focusableElements[focusableElements.length - 1];
 
-        const trapFocusHandler = (e) => {
-            if (e.key === 'Tab') {
-                if (e.shiftKey) {
-                    if (document.activeElement === firstFocusable) {
-                        e.preventDefault();
-                        lastFocusable.focus();
-                    }
-                } else {
-                    if (document.activeElement === lastFocusable) {
-                        e.preventDefault();
-                        firstFocusable.focus();
+            const trapFocusHandler = (e) => {
+                if (e.key === 'Tab') {
+                    if (e.shiftKey) {
+                        if (document.activeElement === firstFocusable) {
+                            e.preventDefault();
+                            lastFocusable.focus();
+                        }
+                    } else {
+                        if (document.activeElement === lastFocusable) {
+                            e.preventDefault();
+                            firstFocusable.focus();
+                        }
                     }
                 }
-            }
-        };
+            };
 
-        modal.addEventListener('keydown', trapFocusHandler);
-        instance.handlers.add({ element: modal, type: 'keydown', handler: trapFocusHandler });
+            modal.addEventListener('keydown', trapFocusHandler);
+            instance.handlers.add({ 
+                element: modal, 
+                type: 'keydown', 
+                handler: trapFocusHandler 
+            });
 
-        // Focus first element when modal opens
-        setTimeout(() => firstFocusable.focus(), 100);
-    }
+            // Focus first element when modal opens
+            setTimeout(() => firstFocusable.focus(), 100);
 
-    /**
-     * Positions modal on screen
-     * @private
-     * @param {HTMLElement} modal - Modal element
-     * @param {string} position - Position preference
-     */
-    positionModal(modal, position = 'center') {
-        const content = modal.querySelector('.w3-modal-content');
-        if (!content) return;
-
-        content.style.transition = 'all 0.3s ease-in-out';
-
-        switch (position) {
-            case 'center':
-                content.style.top = '50%';
-                content.style.left = '50%';
-                content.style.transform = 'translate(-50%, -50%)';
-                break;
-            case 'top':
-                content.style.top = '20px';
-                content.style.left = '50%';
-                content.style.transform = 'translateX(-50%)';
-                break;
-            case 'bottom':
-                content.style.bottom = '20px';
-                content.style.left = '50%';
-                content.style.transform = 'translateX(-50%)';
-                break;
-            default:
-                if (typeof position === 'object' && position.x !== undefined && position.y !== undefined) {
-                    content.style.top = `${position.y}px`;
-                    content.style.left = `${position.x}px`;
-                    content.style.transform = 'none';
-                }
+        } catch (error) {
+            this.handleError('Focus Trap Setup Error', error);
         }
     }
 
     /**
-     * Sets modal size
+     * Positions modal on screen with error handling
+     * @private
+     * @param {HTMLElement} modal - Modal element
+     * @param {string|Object} position - Position preference
+     */
+    async positionModal(modal, position = 'center') {
+        try {
+            const content = modal.querySelector('.w3-modal-content');
+            if (!content) return;
+
+            content.style.transition = 'all 0.3s ease-in-out';
+
+            if (typeof position === 'object' && 
+                position.x !== undefined && 
+                position.y !== undefined) {
+                // Show to measure
+                modal.style.display = 'block';
+                content.style.opacity = '0';
+                
+                const modalRect = content.getBoundingClientRect();
+                const modalHeight = modalRect.height;
+                const modalWidth = modalRect.width;
+                
+                // Calculate position with viewport constraints
+                const maxX = window.innerWidth - modalWidth;
+                const maxY = window.innerHeight - modalHeight;
+                
+                const x = Math.max(0, Math.min(position.x, maxX));
+                const y = Math.max(0, Math.min(position.y, maxY));
+                
+                content.style.position = 'fixed';
+                content.style.top = `${y}px`;
+                content.style.left = `${x}px`;
+                content.style.transform = 'none';
+                content.style.opacity = '';
+            } else {
+                switch (position) {
+                    case 'center':
+                        content.style.top = '50%';
+                        content.style.left = '50%';
+                        content.style.transform = 'translate(-50%, -50%)';
+                        break;
+                    case 'top':
+                        content.style.top = '20px';
+                        content.style.left = '50%';
+                        content.style.transform = 'translateX(-50%)';
+                        break;
+                    case 'bottom':
+                        content.style.bottom = '20px';
+                        content.style.left = '50%';
+                        content.style.transform = 'translateX(-50%)';
+                        break;
+                }
+            }
+
+        } catch (error) {
+            this.handleError('Modal Positioning Error', error);
+        }
+    }
+
+    /**
+     * Sets modal size with error handling
      * @private
      * @param {HTMLElement} modal - Modal element
      * @param {Object} config - Size configuration
      */
-    setModalSize(modal, config) {
-        const content = modal.querySelector('.w3-modal-content');
-        if (!content) return;
+    async setModalSize(modal, config) {
+        try {
+            const content = modal.querySelector('.w3-modal-content');
+            if (!content) return;
 
-        const { width, height, minWidth, minHeight, maxWidth, maxHeight } = config;
+            const { width, height, minWidth, minHeight, maxWidth, maxHeight } = config;
 
-        if (width !== 'auto') content.style.width = typeof width === 'number' ? `${width}px` : width;
-        if (height !== 'auto') content.style.height = typeof height === 'number' ? `${height}px` : height;
-        
-        if (minWidth) content.style.minWidth = typeof minWidth === 'number' ? `${minWidth}px` : minWidth;
-        if (minHeight) content.style.minHeight = typeof minHeight === 'number' ? `${minHeight}px` : minHeight;
-        
-        if (maxWidth) content.style.maxWidth = typeof maxWidth === 'number' ? `${maxWidth}px` : maxWidth;
-        if (maxHeight) content.style.maxHeight = typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight;
+            if (width !== 'auto') {
+                content.style.width = typeof width === 'number' ? `${width}px` : width;
+            }
+            if (height !== 'auto') {
+                content.style.height = typeof height === 'number' ? `${height}px` : height;
+            }
+            
+            if (minWidth) {
+                content.style.minWidth = typeof minWidth === 'number' ? 
+                    `${minWidth}px` : minWidth;
+            }
+            if (minHeight) {
+                content.style.minHeight = typeof minHeight === 'number' ? 
+                    `${minHeight}px` : minHeight;
+            }
+            
+            if (maxWidth) {
+                content.style.maxWidth = typeof maxWidth === 'number' ? 
+                    `${maxWidth}px` : maxWidth;
+            }
+            if (maxHeight) {
+                content.style.maxHeight = typeof maxHeight === 'number' ? 
+                    `${maxHeight}px` : maxHeight;
+            }
+
+        } catch (error) {
+            this.handleError('Modal Size Error', error);
+        }
     }
 
     /**
@@ -612,69 +737,63 @@ class ModalManager {
      * @param {HTMLElement} modal - Modal element
      */
     updateModalZIndex(modal) {
-        const modalArray = Array.from(this.activeModals.values());
-        const index = modalArray.indexOf(modal.dataset.instanceId);
-        
-        if (index !== -1) {
-            modal.style.zIndex = this.zIndexBase + (index * 10);
+        try {
+            const modalArray = Array.from(this.activeModals.values());
+            const index = modalArray.indexOf(modal.dataset.instanceId);
+            
+            if (index !== -1) {
+                modal.style.zIndex = this.zIndexBase + (index * 10);
+            }
+        } catch (error) {
+            this.handleError('Z-Index Update Error', error);
         }
     }
-
     /**
-     * Handles key press events
+     * Handles key press events with safety checks
      * @private
      * @param {KeyboardEvent} event - Keyboard event
      */
     handleKeyPress(event) {
-        if (event.key === 'Escape') {
-            const modalArray = Array.from(this.activeModals).reverse();
-            for (const instanceId of modalArray) {
-                const instance = modalInstances.get(instanceId);
-                if (instance && instance.config.closeOnEscape) {
-                    this.hide(instance.id);
-                    break;
+        if (!this.initialized) return;
+
+        try {
+            if (event.key === 'Escape') {
+                const modalArray = Array.from(this.activeModals).reverse();
+                for (const instanceId of modalArray) {
+                    const instance = modalInstances.get(instanceId);
+                    if (instance && instance.config.closeOnEscape) {
+                        this.hide(instance.id);
+                        break;
+                    }
                 }
             }
+        } catch (error) {
+            this.handleError('Key Press Handler Error', error);
         }
     }
 
     /**
-     * Handles outside click events
-     * @private
-     * @param {MouseEvent} event - Mouse event
-     */
-    handleOutsideClick(event) {
-        const modalArray = Array.from(this.activeModals).reverse();
-        for (const instanceId of modalArray) {
-            const instance = modalInstances.get(instanceId);
-            if (instance && instance.config.closeOnOutsideClick) {
-                const modal = document.getElementById(`id_modal-${instance.id}`);
-                if (modal && event.target === modal) {
-                    this.hide(instance.id);
-                    break;
-                }
-            }
-        }
-    }
-
-    /**
-     * Handles window resize events
+     * Handles window resize events with debouncing
      * @private
      */
     handleResize() {
-        this.activeModals.forEach(instanceId => {
-            const instance = modalInstances.get(instanceId);
-            if (instance) {
-                const modal = document.getElementById(`id_modal-${instance.id}`);
-                if (modal) {
-                    this.positionModal(modal, instance.config.position);
-                    this.setModalSize(modal, instance.config);
+        if (!this.initialized) return;
+
+        try {
+            this.activeModals.forEach(instanceId => {
+                const instance = modalInstances.get(instanceId);
+                if (instance) {
+                    const modal = document.getElementById(`id_modal-${instance.id}`);
+                    if (modal) {
+                        this.positionModal(modal, instance.config.position);
+                        this.setModalSize(modal, instance.config);
+                    }
                 }
-            }
-        });
+            });
+        } catch (error) {
+            this.handleError('Resize Handler Error', error);
+        }
     }
-// modals.js - Part 3
-// Draggable, resizable functionality and cleanup
 
     /**
      * Sets up draggable functionality
@@ -682,92 +801,95 @@ class ModalManager {
      * @param {HTMLElement} modal - Modal element
      * @param {string} instanceId - Instance identifier
      */
-    setupDraggable(modal, instanceId) {
+    async setupDraggable(modal, instanceId) {
         const instance = modalInstances.get(instanceId);
         if (!instance) return;
 
-        const content = modal.querySelector('.w3-modal-content');
-        if (!content) return;
+        try {
+            const content = modal.querySelector('.w3-modal-content');
+            if (!content) return;
 
-        // Add drag handle
-        const header = content.querySelector('.w3-bar') || content.firstElementChild;
-        if (header) {
-            header.style.cursor = 'move';
-            header.classList.add('modal-drag-handle');
-        }
-
-        let isDragging = false;
-        let currentX;
-        let currentY;
-        let initialX;
-        let initialY;
-
-        const dragStart = (e) => {
-            if (e.target.closest('.modal-close')) return;
-            
-            const touch = e.type === 'touchstart' ? e.touches[0] : e;
-            initialX = touch.clientX - instance.state.position.x;
-            initialY = touch.clientY - instance.state.position.y;
-
-            if (e.target === header || e.target.closest('.modal-drag-handle')) {
-                isDragging = true;
-                header.classList.add('dragging');
+            // Add drag handle
+            const header = content.querySelector('.w3-bar') || content.firstElementChild;
+            if (header) {
+                header.style.cursor = 'move';
+                header.classList.add('modal-drag-handle');
             }
-        };
 
-        const dragEnd = () => {
-            isDragging = false;
-            header.classList.remove('dragging');
-            
-            // Update state
-            this.updateModalState(instanceId, 'dragend', {
-                position: instance.state.position
-            });
-        };
+            let isDragging = false;
+            let currentX;
+            let currentY;
+            let initialX;
+            let initialY;
 
-        const drag = (e) => {
-            if (!isDragging) return;
+            const dragStart = (e) => {
+                if (e.target.closest('.modal-close')) return;
+                
+                const touch = e.type === 'touchstart' ? e.touches[0] : e;
+                initialX = touch.clientX - instance.state.position.x;
+                initialY = touch.clientY - instance.state.position.y;
 
-            e.preventDefault();
-            const touch = e.type === 'touchmove' ? e.touches[0] : e;
+                if (e.target === header || e.target.closest('.modal-drag-handle')) {
+                    isDragging = true;
+                    header.classList.add('dragging');
+                }
+            };
 
-            currentX = touch.clientX - initialX;
-            currentY = touch.clientY - initialY;
+            const dragEnd = () => {
+                isDragging = false;
+                header.classList.remove('dragging');
+                
+                this.updateModalState(instanceId, 'dragend', {
+                    position: instance.state.position
+                });
+            };
 
-            // Boundary checking
-            const modalRect = content.getBoundingClientRect();
-            const parentRect = modal.getBoundingClientRect();
+            const drag = (e) => {
+                if (!isDragging) return;
 
-            currentX = Math.max(0, Math.min(currentX, parentRect.width - modalRect.width));
-            currentY = Math.max(0, Math.min(currentY, parentRect.height - modalRect.height));
+                e.preventDefault();
+                const touch = e.type === 'touchmove' ? e.touches[0] : e;
 
-            // Update position
-            instance.state.position = { x: currentX, y: currentY };
-            content.style.transform = `translate(${currentX}px, ${currentY}px)`;
+                currentX = touch.clientX - initialX;
+                currentY = touch.clientY - initialY;
 
-            // Update state
-            this.updateModalState(instanceId, 'dragging', {
-                position: instance.state.position
-            });
-        };
+                // Boundary checking
+                const modalRect = content.getBoundingClientRect();
+                const parentRect = modal.getBoundingClientRect();
 
-        // Add event listeners
-        header.addEventListener('mousedown', dragStart);
-        header.addEventListener('touchstart', dragStart);
-        document.addEventListener('mousemove', drag);
-        document.addEventListener('touchmove', drag);
-        document.addEventListener('mouseup', dragEnd);
-        document.addEventListener('touchend', dragEnd);
+                currentX = Math.max(0, Math.min(currentX, parentRect.width - modalRect.width));
+                currentY = Math.max(0, Math.min(currentY, parentRect.height - modalRect.height));
 
-        // Store handlers for cleanup
-        instance.handlers.add(
-            { element: header, type: 'mousedown', handler: dragStart },
-            { element: header, type: 'touchstart', handler: dragStart },
-            { element: document, type: 'mousemove', handler: drag },
-            { element: document, type: 'touchmove', handler: drag },
-            { element: document, type: 'mouseup', handler: dragEnd },
-            { element: document, type: 'touchend', handler: dragEnd }
-        );
+                // Update position
+                instance.state.position = { x: currentX, y: currentY };
+                content.style.transform = `translate(${currentX}px, ${currentY}px)`;
+
+                this.updateModalState(instanceId, 'dragging', {
+                    position: instance.state.position
+                });
+            };
+
+            // Add event listeners
+            header.addEventListener('mousedown', dragStart);
+            header.addEventListener('touchstart', dragStart);
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('touchmove', drag);
+            document.addEventListener('mouseup', dragEnd);
+            document.addEventListener('touchend', dragEnd);
+
+            // Store handlers for cleanup
+            instance.handlers.add(
+                { element: header, type: 'mousedown', handler: dragStart },
+                { element: header, type: 'touchstart', handler: dragStart },
+                { element: document, type: 'mousemove', handler: drag },
+                { element: document, type: 'touchmove', handler: drag },
+                { element: document, type: 'mouseup', handler: dragEnd },
+                { element: document, type: 'touchend', handler: dragEnd }
+            );
+
+        } catch (error) {
+            this.handleError('Draggable Setup Error', error);
+        }
     }
 
     /**
@@ -776,143 +898,150 @@ class ModalManager {
      * @param {HTMLElement} modal - Modal element
      * @param {string} instanceId - Instance identifier
      */
-    setupResizable(modal, instanceId) {
+    async setupResizable(modal, instanceId) {
         const instance = modalInstances.get(instanceId);
         if (!instance) return;
 
-        const content = modal.querySelector('.w3-modal-content');
-        if (!content) return;
+        try {
+            const content = modal.querySelector('.w3-modal-content');
+            if (!content) return;
 
-        // Add resize handles
-        const handles = ['n', 'e', 's', 'w', 'ne', 'se', 'sw', 'nw'].map(dir => {
-            const handle = document.createElement('div');
-            handle.className = `resize-handle resize-${dir}`;
-            handle.style.position = 'absolute';
-            handle.style.width = handle.style.height = '10px';
-            handle.style.background = 'transparent';
-            handle.style.cursor = `${dir}-resize`;
-            content.appendChild(handle);
-            return handle;
-        });
-
-        let isResizing = false;
-        let currentHandle = null;
-        let startX, startY, startWidth, startHeight;
-
-        const resizeStart = (e, handle) => {
-            if (e.button !== 0) return; // Left click only
-
-            isResizing = true;
-            currentHandle = handle;
-            startX = e.clientX;
-            startY = e.clientY;
-
-            const rect = content.getBoundingClientRect();
-            startWidth = rect.width;
-            startHeight = rect.height;
-
-            document.body.style.cursor = window.getComputedStyle(handle).cursor;
-            content.classList.add('resizing');
-        };
-
-        const resizeEnd = () => {
-            isResizing = false;
-            currentHandle = null;
-            document.body.style.cursor = '';
-            content.classList.remove('resizing');
-
-            // Update state
-            this.updateModalState(instanceId, 'resizeend', {
-                size: instance.state.size
+            // Add resize handles
+            const handles = ['n', 'e', 's', 'w', 'ne', 'se', 'sw', 'nw'].map(dir => {
+                const handle = DOM.createElement('div', {
+                    className: `resize-handle resize-${dir}`,
+                    attributes: {
+                        style: `
+                            position: absolute;
+                            width: 10px;
+                            height: 10px;
+                            background: transparent;
+                            cursor: ${dir}-resize;
+                        `
+                    }
+                });
+                content.appendChild(handle);
+                return handle;
             });
-        };
 
-        const resize = (e) => {
-            if (!isResizing) return;
+            let isResizing = false;
+            let currentHandle = null;
+            let startX, startY, startWidth, startHeight;
 
-            e.preventDefault();
+            const resizeStart = (e, handle) => {
+                if (e.button !== 0) return; // Left click only
 
-            const dx = e.clientX - startX;
-            const dy = e.clientY - startY;
-            const direction = currentHandle.className.split('resize-')[1];
+                isResizing = true;
+                currentHandle = handle;
+                startX = e.clientX;
+                startY = e.clientY;
 
-            let newWidth = startWidth;
-            let newHeight = startHeight;
+                const rect = content.getBoundingClientRect();
+                startWidth = rect.width;
+                startHeight = rect.height;
 
-            // Calculate new size based on direction
-            switch (direction) {
-                case 'e':
-                case 'ne':
-                case 'se':
-                    newWidth = startWidth + dx;
-                    break;
-                case 'w':
-                case 'nw':
-                case 'sw':
-                    newWidth = startWidth - dx;
-                    content.style.left = `${e.clientX}px`;
-                    break;
-            }
+                document.body.style.cursor = window.getComputedStyle(handle).cursor;
+                content.classList.add('resizing');
+            };
 
-            switch (direction) {
-                case 'n':
-                case 'ne':
-                case 'nw':
-                    newHeight = startHeight - dy;
-                    content.style.top = `${e.clientY}px`;
-                    break;
-                case 's':
-                case 'se':
-                case 'sw':
-                    newHeight = startHeight + dy;
-                    break;
-            }
+            const resizeEnd = () => {
+                isResizing = false;
+                currentHandle = null;
+                document.body.style.cursor = '';
+                content.classList.remove('resizing');
 
-            // Apply minimum and maximum sizes
-            const { minWidth, minHeight, maxWidth, maxHeight } = instance.config;
-            newWidth = Math.max(minWidth || 200, Math.min(maxWidth || 800, newWidth));
-            newHeight = Math.max(minHeight || 100, Math.min(maxHeight || 600, newHeight));
+                this.updateModalState(instanceId, 'resizeend', {
+                    size: instance.state.size
+                });
+            };
 
-            // Update size
-            content.style.width = `${newWidth}px`;
-            content.style.height = `${newHeight}px`;
+            const resize = (e) => {
+                if (!isResizing) return;
 
-            // Update state
-            instance.state.size = { width: newWidth, height: newHeight };
-            this.updateModalState(instanceId, 'resizing', {
-                size: instance.state.size
+                e.preventDefault();
+
+                const dx = e.clientX - startX;
+                const dy = e.clientY - startY;
+                const direction = currentHandle.className.split('resize-')[1];
+
+                let newWidth = startWidth;
+                let newHeight = startHeight;
+
+                // Calculate new size based on direction
+                switch (direction) {
+                    case 'e':
+                    case 'ne':
+                    case 'se':
+                        newWidth = startWidth + dx;
+                        break;
+                    case 'w':
+                    case 'nw':
+                    case 'sw':
+                        newWidth = startWidth - dx;
+                        content.style.left = `${e.clientX}px`;
+                        break;
+                }
+
+                switch (direction) {
+                    case 'n':
+                    case 'ne':
+                    case 'nw':
+                        newHeight = startHeight - dy;
+                        content.style.top = `${e.clientY}px`;
+                        break;
+                    case 's':
+                    case 'se':
+                    case 'sw':
+                        newHeight = startHeight + dy;
+                        break;
+                }
+
+                // Apply minimum and maximum sizes
+                const { minWidth, minHeight, maxWidth, maxHeight } = instance.config;
+                newWidth = Math.max(minWidth || 200, Math.min(maxWidth || 800, newWidth));
+                newHeight = Math.max(minHeight || 100, Math.min(maxHeight || 600, newHeight));
+
+                // Update size
+                content.style.width = `${newWidth}px`;
+                content.style.height = `${newHeight}px`;
+
+                // Update state
+                instance.state.size = { width: newWidth, height: newHeight };
+                this.updateModalState(instanceId, 'resizing', {
+                    size: instance.state.size
+                });
+            };
+
+            // Add event listeners to handles
+            handles.forEach(handle => {
+                handle.addEventListener('mousedown', (e) => resizeStart(e, handle));
+                instance.handlers.add({
+                    element: handle,
+                    type: 'mousedown',
+                    handler: (e) => resizeStart(e, handle)
+                });
             });
-        };
 
-        // Add event listeners to handles
-        handles.forEach(handle => {
-            handle.addEventListener('mousedown', (e) => resizeStart(e, handle));
-        });
+            document.addEventListener('mousemove', resize);
+            document.addEventListener('mouseup', resizeEnd);
 
-        document.addEventListener('mousemove', resize);
-        document.addEventListener('mouseup', resizeEnd);
+            // Store handlers for cleanup
+            instance.handlers.add(
+                { element: document, type: 'mousemove', handler: resize },
+                { element: document, type: 'mouseup', handler: resizeEnd }
+            );
 
-        // Store handlers for cleanup
-        instance.handlers.add(
-            { element: document, type: 'mousemove', handler: resize },
-            { element: document, type: 'mouseup', handler: resizeEnd }
-        );
-
-        handles.forEach(handle => {
-            instance.handlers.add({
-                element: handle,
-                type: 'mousedown',
-                handler: (e) => resizeStart(e, handle)
-            });
-        });
+        } catch (error) {
+            this.handleError('Resizable Setup Error', error);
+        }
     }
 
     /**
-     * Cleans up modal instance resources
+     * Clean up modal instance resources
      * @private
      * @param {string} instanceId - Instance identifier
      */
-    cleanupModalInstance(instanceId) {
+    async cleanupModalInstance(instanceId) {
         const instance = modalInstances.get(instanceId);
         if (!instance) return;
 
@@ -959,6 +1088,8 @@ class ModalManager {
      * Destroys the modal manager and cleans up resources
      */
     destroy() {
+        if (!this.initialized) return;
+
         try {
             // Clean up all modal instances
             modalInstances.forEach((instance, instanceId) => {
@@ -977,6 +1108,8 @@ class ModalManager {
 
             // Reset state
             State.remove(MODALS_STATE_KEY);
+
+            this.initialized = false;
 
         } catch (error) {
             this.handleError('Destroy Error', error);

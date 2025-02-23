@@ -9,6 +9,7 @@ class StateManager {
         this._frozen = new Set();
         this._batchUpdates = new Map();
         this._isInBatch = false;
+        this.initialized = true;
 
         // Constants
         this.MAX_HISTORY_SIZE = 50;
@@ -19,6 +20,10 @@ class StateManager {
         this._addToHistory = this._addToHistory.bind(this);
         this.startBatch = this.startBatch.bind(this);
         this.endBatch = this.endBatch.bind(this);
+    }
+
+    isInitialized() {
+        return this.initialized;
     }
 
     /**

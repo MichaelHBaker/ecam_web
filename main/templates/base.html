@@ -43,35 +43,112 @@
         <h5>Footer</h5>
         <p>Copyright © {{ year }}</p>
     </footer>
+    
+    {% block extra_js %}
 
-    <!-- Initialize State -->
     <script type="module">
-        import { DOM, NotificationUI, Events, TreeUI, Modal, Dashboard } from '/static/main/js/main.js';
-        
-        // Initialize base state
-        State.set('app_state', {
-            initialized: true,
-            lastUpdate: new Date(),
-            currentPage: window.location.pathname
-        });
+    // First import State as other modules depend on it
+    import { State } from '/static/main/js/state.js';
 
-        // Initialize DOM first
-        DOM.initialize();
+    // Import core utilities
+    import { DOM } from '/static/main/js/dom.js';           // DOM manipulation
+    import { Events } from '/static/main/js/events.js';     // Event handling
+    import { API } from '/static/main/js/api.js';          // API communication
 
-        // Initialize events
-        Events.initialize();
+    // Import UI managers
+    import { 
+        NotificationUI, 
+        StatusUI, 
+        TreeUI 
+    } from '/static/main/js/ui.js';                       // UI components
 
-        // Global error handler
-        window.addEventListener('error', (event) => {
+    // Import additional managers
+    import { Modal } from '/static/main/js/modals.js';     // Modal windows
+    import { Forms } from '/static/main/js/forms.js';      // Form handling
+    import { CRUD } from '/static/main/js/crud.js';        // Data operations
+
+    /**
+    * Core initialization function
+    * Handles initializing all managers in the correct order
+    */
+    async function initializeCore() {
+        try {
+            // Set initial application state
+            State.set('app_state', {
+                initialized: false,
+                lastUpdate: new Date(),
+                currentPage: window.location.pathname
+            });
+
+            // First Layer: Core Utilities
+            // These provide fundamental functionality other modules depend on
+            await DOM.initialize();    // Initialize DOM utilities first
+            await API.initialize();    // Then API services
+            await Events.initialize(); // Then event handling
+
+            // Second Layer: UI Managers
+            // These provide user interface functionality
+            await NotificationUI.initialize();  // Notifications
+            await StatusUI.initialize();        // Status messages
+            await Modal.initialize();           // Modal windows
+
+            // Third Layer: Business Logic Managers
+            // These handle application-specific operations
+            await Forms.initialize();  // Form handling
+            await CRUD.initialize();   // Data operations
+            await TreeUI.initialize(); // Tree structure UI
+
+            // Update application state to reflect successful initialization
+            State.update('app_state', {
+                initialized: true,
+                lastUpdate: new Date()
+            });
+
+            // Dispatch event for page-specific code to know core is ready
+            window.dispatchEvent(new CustomEvent('core:initialized'));
+
+        } catch (error) {
+            // Log error for debugging
+            console.error('Core initialization failed:', error);
+
+            // Show user-friendly error message
             NotificationUI.show({
-                message: `Error: ${event.message}`,
+                message: `Initialization failed: ${error.message}`,
                 type: 'error',
                 duration: 5000
             });
-        });
-    </script>
+        }
+    }
 
-    {% block extra_js %}
+    // Wait for DOM to be ready before initializing
+    // This ensures all HTML elements exist before we try to interact with them
+    document.addEventListener('DOMContentLoaded', initializeCore);
+
+    // Global error handler for uncaught errors
+    window.addEventListener('error', (event) => {
+        // Show user-friendly error message for any uncaught errors
+        NotificationUI.show({
+            message: `Error: ${event.message}`,
+            type: 'error',
+            duration: 5000
+        });
+    });
+
+    // Optional: Handle unhandled promise rejections
+    window.addEventListener('unhandledrejection', (event) => {
+        NotificationUI.show({
+            message: `Async Error: ${event.reason}`,
+            type: 'error',
+            duration: 5000
+        });
+    });
+
+    // Optional: Log when initialization is complete
+    window.addEventListener('core:initialized', () => {
+        console.log('Core initialization complete:', new Date());
+    });
+    </script>
+   
     {% endblock %}
 </body>
 </html>

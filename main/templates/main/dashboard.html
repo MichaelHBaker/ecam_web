@@ -74,8 +74,15 @@
 {% endblock %}
 
 {% block extra_js %}
+
 <script type="module">
 
+    <!-- Initialize State -->
+    import { 
+        DOM,  
+        Events, 
+        Dashboard
+    } from '/static/main/js/main.js';
 
     document.addEventListener('DOMContentLoaded', async () => {
         try {

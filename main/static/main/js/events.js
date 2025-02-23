@@ -1,67 +1,279 @@
 // events.js
-// Enhanced event management and delegation module
-
-import { State } from './state.js';
-import { NotificationUI } from './ui.js';
+// Enhanced event management with proper initialization safety
 
 const EVENTS_STATE_KEY = 'events_state';
 
-/**
- * Enhanced event delegation and management class
- */
+import { State } from './state.js';
+import { DOM } from './dom.js';
+
 class EventManager {
     constructor() {
-        this.handlers = new Map();
+        // Private state
         this.initialized = false;
-        this.debounceTimers = new Map();
+        this.handlers = new Map();
+        this.delegatedEvents = new Map();
+        this.boundHandlers = new WeakMap();
         
-        // Bind methods
-        this.handleTreeClick = this.handleTreeClick.bind(this);
-        this.handleFormSubmit = this.handleFormSubmit.bind(this);
+        // Bind handlers
         this.handleGlobalClick = this.handleGlobalClick.bind(this);
-        this.handleKeyboardShortcuts = this.handleKeyboardShortcuts.bind(this);
+        this.handleKeyPress = this.handleKeyPress.bind(this);
         this.handleWindowResize = this.debounce(this.handleWindowResize.bind(this), 250);
     }
 
     /**
-     * Initialize event listeners with error handling
+     * Initialize event manager with dependency checking
+     * @returns {Promise<void>}
      */
-    initialize() {
-        if (this.initialized) return;
+    async initialize() {
+        if (this.initialized) {
+            console.warn('Event manager already initialized');
+            return;
+        }
 
         try {
+            // Verify dependencies are initialized
+            if (!State.isInitialized()) {
+                throw new Error('State must be initialized before Events');
+            }
+            if (!DOM.isInitialized()) {
+                throw new Error('DOM must be initialized before Events');
+            }
+
             // Initialize event state
             State.set(EVENTS_STATE_KEY, {
                 activeHandlers: new Set(),
+                delegatedEvents: new Set(),  // Add this
                 lastEvent: null,
-                error: null
+                error: null,
+                lastUpdate: new Date()
             });
 
-            // Tree item click delegation
-            document.addEventListener('click', this.handleTreeClick, { passive: false });
-
-            // Form submission delegation
-            document.addEventListener('submit', this.handleFormSubmit);
-
-            // Global click handler for dropdowns, modals, etc.
+            // Setup global listeners
             document.addEventListener('click', this.handleGlobalClick);
-
-            // Window resize handler
+            document.addEventListener('keydown', this.handleKeyPress);
             window.addEventListener('resize', this.handleWindowResize);
 
-            // Keyboard shortcuts
-            document.addEventListener('keydown', this.handleKeyboardShortcuts);
-
             this.initialized = true;
-            this.updateEventState('initialized');
+            console.log('Event manager initialized');
+            
         } catch (error) {
-            this.handleError('Initialization Error', error);
+            console.error('Event manager initialization failed:', error);
             throw error;
         }
     }
 
     /**
-     * Create a debounced function
+     * Check if event manager is initialized
+     * @returns {boolean}
+     */
+    isInitialized() {
+        return this.initialized;
+    }
+
+    /**
+     * Add event listener with cleanup capability
+     * @param {HTMLElement} element - Target element
+     * @param {string} eventType - Event type
+     * @param {Function} handler - Event handler
+     * @param {Object} options - Event options
+     * @returns {Function} Cleanup function
+     */
+    on(element, eventType, handler, options = {}) {
+        if (!this.initialized) {
+            throw new Error('Event manager must be initialized before use');
+        }
+
+        try {
+            // Create bound handler
+            const boundHandler = handler.bind(element);
+            this.boundHandlers.set(handler, boundHandler);
+
+            // Add listener
+            element.addEventListener(eventType, boundHandler, options);
+
+            // Track handler
+            const handlerId = this.generateHandlerId(element, eventType);
+            this.handlers.set(handlerId, {
+                element,
+                eventType,
+                handler: boundHandler,
+                options
+            });
+
+            // Update state
+            this.updateEventState('handlerAdded', { handlerId });
+
+            // Return cleanup function
+            return () => this.off(element, eventType, handler);
+
+        } catch (error) {
+            this.handleError('AddEventListener', error);
+            return () => {}; // Return no-op cleanup
+        }
+    }
+
+    /**
+     * Remove event listener
+     * @param {HTMLElement} element - Target element
+     * @param {string} eventType - Event type
+     * @param {Function} handler - Event handler
+     */
+    off(element, eventType, handler) {
+        if (!this.initialized) return;
+
+        try {
+            const boundHandler = this.boundHandlers.get(handler);
+            if (boundHandler) {
+                element.removeEventListener(eventType, boundHandler);
+                this.boundHandlers.delete(handler);
+            }
+
+            const handlerId = this.generateHandlerId(element, eventType);
+            this.handlers.delete(handlerId);
+
+            this.updateEventState('handlerRemoved', { handlerId });
+
+        } catch (error) {
+            this.handleError('RemoveEventListener', error);
+        }
+    }
+
+    /**
+     * Add delegated event handler
+     * @param {HTMLElement} container - Container element
+     * @param {string} eventType - Event type
+     * @param {string} selector - Target selector
+     * @param {Function} handler - Event handler
+     * @returns {Function} Cleanup function
+     */
+    delegate(container, eventType, selector, handler) {
+        if (!this.initialized) {
+            throw new Error('Event manager must be initialized before use');
+        }
+
+        try {
+            const delegateHandler = (event) => {
+                const target = event.target.closest(selector);
+                if (target && container.contains(target)) {
+                    handler.call(target, event, target);
+                }
+            };
+
+            container.addEventListener(eventType, delegateHandler);
+
+            const delegationId = this.generateDelegationId(container, eventType, selector);
+            this.delegatedEvents.set(delegationId, {
+                container,
+                eventType,
+                handler: delegateHandler
+            });
+
+            this.updateEventState('delegationAdded', { delegationId });
+
+            return () => {
+                container.removeEventListener(eventType, delegateHandler);
+                this.delegatedEvents.delete(delegationId);
+                this.updateEventState('delegationRemoved', { delegationId });
+            };
+
+        } catch (error) {
+            this.handleError('AddDelegation', error);
+            return () => {}; // Return no-op cleanup
+        }
+    }
+
+    /**
+     * Handle global click events
+     * @private
+     */
+    handleGlobalClick(event) {
+        try {
+            this.updateEventState('globalClick', {
+                target: event.target,
+                timestamp: new Date()
+            });
+
+            // Handle dropdown menus
+            if (!event.target.closest('.dropdown-toggle')) {
+                document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
+                    menu.classList.remove('show');
+                });
+            }
+
+            // Handle modal backdrop clicks
+            if (event.target.classList.contains('modal')) {
+                event.target.style.display = 'none';
+            }
+
+        } catch (error) {
+            this.handleError('GlobalClick', error);
+        }
+    }
+
+    /**
+     * Handle keyboard events
+     * @private
+     */
+    handleKeyPress(event) {
+        try {
+            // Skip if focusing input elements
+            if (event.target.matches('input, textarea')) return;
+
+            this.updateEventState('keyPress', {
+                key: event.key,
+                modifiers: {
+                    ctrl: event.ctrlKey,
+                    alt: event.altKey,
+                    shift: event.shiftKey
+                }
+            });
+
+            // Handle Escape key
+            if (event.key === 'Escape') {
+                // Close active modal
+                const activeModal = document.querySelector('.modal[style*="display: block"]');
+                if (activeModal) {
+                    activeModal.style.display = 'none';
+                    return;
+                }
+
+                // Close active menu
+                const activeMenu = document.querySelector('.dropdown-menu.show');
+                if (activeMenu) {
+                    activeMenu.classList.remove('show');
+                }
+            }
+
+        } catch (error) {
+            this.handleError('KeyPress', error);
+        }
+    }
+
+    /**
+     * Handle window resize
+     * @private
+     */
+    handleWindowResize() {
+        try {
+            const dimensions = {
+                width: window.innerWidth,
+                height: window.innerHeight
+            };
+
+            this.updateEventState('windowResize', dimensions);
+
+            // Dispatch custom resize event
+            document.dispatchEvent(new CustomEvent('app:resize', {
+                detail: dimensions
+            }));
+
+        } catch (error) {
+            this.handleError('WindowResize', error);
+        }
+    }
+
+    /**
+     * Create debounced function
      * @private
      */
     debounce(func, wait) {
@@ -71,425 +283,21 @@ class EventManager {
             timeout = setTimeout(() => func.apply(this, args), wait);
         };
     }
-    /**
-     * Handle clicks within tree structure with improved delegation
-     * @param {Event} event - Click event
-     */
-    handleTreeClick(event) {
-        try {
-            this.updateEventState('treeClick', { target: event.target });
-            const target = event.target;
-
-            // Handle chevron clicks for expanding/collapsing
-            if (target.closest('.bi-chevron-right, .bi-chevron-down')) {
-                const treeItem = target.closest('.tree-item');
-                if (treeItem) {
-                    const nodeId = treeItem.dataset.nodeId;
-                    if (nodeId) {
-                        this.toggleTreeNode(nodeId);
-                        event.stopPropagation();
-                        return;
-                    }
-                }
-            }
-
-            // Handle action menu clicks
-            if (target.closest('.item-actions')) {
-                const actionButton = target.closest('[data-action]');
-                if (actionButton) {
-                    this.handleActionClick(actionButton, event);
-                    return;
-                }
-            }
-
-            // Handle edit controls
-            if (target.closest('.edit-controls')) {
-                this.handleEditControlClick(target, event);
-            }
-
-        } catch (error) {
-            this.handleError('Tree Click Error', error);
-        }
-    }
 
     /**
-     * Handle form submissions with validation and error handling
-     * @param {Event} event - Submit event
-     */
-    handleFormSubmit(event) {
-        try {
-            this.updateEventState('formSubmit', { form: event.target });
-            const form = event.target;
-            const type = form.dataset.type;
-            const id = form.dataset.id;
-
-            if (type && id) {
-                this.validateAndSubmitForm(event, type, id);
-            }
-        } catch (error) {
-            this.handleError('Form Submit Error', error);
-        }
-    }
-
-    /**
-     * Handle global click events for UI components
-     * @param {Event} event - Click event
-     */
-    handleGlobalClick(event) {
-        try {
-            this.updateEventState('globalClick', { target: event.target });
-
-            // Handle dropdown menus
-            if (!event.target.closest('.dropdown-toggle')) {
-                document.querySelectorAll('.dropdown-menu.show').forEach(menu => {
-                    menu.classList.remove('show');
-                    menu.classList.add('w3-hide');
-                });
-            }
-
-            // Handle modal backdrop clicks
-            if (event.target.classList.contains('modal')) {
-                const modalId = event.target.id;
-                this.handleModalClose(modalId);
-            }
-
-            // Handle outside clicks for active menus
-            if (!event.target.closest('.item-actions')) {
-                document.querySelectorAll('.item-actions .w3-dropdown-content').forEach(menu => {
-                    menu.style.display = 'none';
-                });
-            }
-
-            // Close tooltips
-            if (!event.target.closest('[data-tooltip]')) {
-                document.querySelectorAll('.tooltip.show').forEach(tooltip => {
-                    tooltip.classList.remove('show');
-                });
-            }
-
-        } catch (error) {
-            this.handleError('Global Click Error', error);
-        }
-    }
-    /**
-         * Handle keyboard shortcuts with improved mapping
-         * @param {KeyboardEvent} event - Keyboard event
-         */
-    handleKeyboardShortcuts(event) {
-        try {
-            // Skip if focusing input elements
-            if (event.target.matches('input:not([type="checkbox"]):not([type="radio"]), textarea')) {
-                return;
-            }
-
-            this.updateEventState('keyboardShortcut', { 
-                key: event.key,
-                modifiers: {
-                    ctrl: event.ctrlKey,
-                    alt: event.altKey,
-                    shift: event.shiftKey,
-                    meta: event.metaKey
-                }
-            });
-
-            const modKey = event.metaKey || event.ctrlKey;
-
-            // Enhanced shortcut mapping
-            const shortcuts = {
-                's': {
-                    modKey: true,
-                    handler: () => {
-                        const activeForm = document.querySelector('form.editing');
-                        if (activeForm) {
-                            event.preventDefault();
-                            activeForm.requestSubmit();
-                            return true;
-                        }
-                        return false;
-                    }
-                },
-                'Escape': {
-                    modKey: false,
-                    handler: () => {
-                        const activeEdit = document.querySelector('.edit-controls[style*="display: inline-flex"]');
-                        if (activeEdit) {
-                            const form = activeEdit.closest('form');
-                            const type = form.dataset.type;
-                            const id = form.dataset.id;
-                            this.cancelEdit(event, type, id);
-                            return true;
-                        }
-                        
-                        // Handle modal close
-                        const activeModal = document.querySelector('.modal[style*="display: block"]');
-                        if (activeModal) {
-                            activeModal.style.display = 'none';
-                            return true;
-                        }
-                        
-                        return false;
-                    }
-                },
-                'Enter': {
-                    modKey: false,
-                    handler: () => {
-                        const activeItem = document.querySelector('.tree-item.active');
-                        if (activeItem) {
-                            const editButton = activeItem.querySelector('[data-action="edit"]');
-                            if (editButton) {
-                                editButton.click();
-                                return true;
-                            }
-                        }
-                        return false;
-                    }
-                }
-            };
-
-            // Execute shortcut if conditions match
-            const shortcut = shortcuts[event.key];
-            if (shortcut && shortcut.modKey === modKey) {
-                const handled = shortcut.handler();
-                if (handled) {
-                    event.preventDefault();
-                    this.updateEventState('shortcutExecuted', { key: event.key });
-                }
-            }
-
-        } catch (error) {
-            this.handleError('Keyboard Shortcut Error', error);
-        }
-    }
-
-    /**
-     * Handle window resize events with debouncing
-     */
-    handleWindowResize() {
-        try {
-            const dimensions = {
-                width: window.innerWidth,
-                height: window.innerHeight,
-                timestamp: new Date()
-            };
-
-            this.updateEventState('windowResize', dimensions);
-            
-            // Update modal positions and sizes
-            document.querySelectorAll('.modal-content').forEach(content => {
-                this.adjustModalSize(content);
-            });
-
-            // Update dropdown positions
-            document.querySelectorAll('.w3-dropdown-content.show').forEach(dropdown => {
-                this.adjustDropdownPosition(dropdown);
-            });
-
-            // Update tree view if necessary
-            const treeContainer = document.querySelector('.tree-container');
-            if (treeContainer) {
-                this.adjustTreeContainer(treeContainer);
-            }
-
-        } catch (error) {
-            this.handleError('Window Resize Error', error);
-        }
-    }
-    /**
-         * Adjust modal size based on window size
-         * @private
-         * @param {HTMLElement} modalContent - Modal content element
-         */
-    adjustModalSize(modalContent) {
-        try {
-            const maxHeight = window.innerHeight * 0.9;
-            const maxWidth = window.innerWidth * 0.9;
-            const minHeight = 300;
-            const minWidth = 400;
-            
-            // Calculate dimensions
-            const height = Math.max(minHeight, Math.min(maxHeight, modalContent.scrollHeight));
-            const width = Math.max(minWidth, Math.min(maxWidth, modalContent.scrollWidth));
-            
-            // Apply dimensions with smooth transition
-            modalContent.style.transition = 'all 0.3s ease';
-            modalContent.style.maxHeight = `${height}px`;
-            modalContent.style.maxWidth = `${width}px`;
-            
-            // Center the modal
-            modalContent.style.top = '50%';
-            modalContent.style.left = '50%';
-            modalContent.style.transform = 'translate(-50%, -50%)';
-
-        } catch (error) {
-            this.handleError('Modal Size Adjustment Error', error);
-        }
-    }
-
-    /**
-     * Adjust dropdown menu position
+     * Generate unique handler ID
      * @private
-     * @param {HTMLElement} dropdown - Dropdown element
      */
-    adjustDropdownPosition(dropdown) {
-        try {
-            const rect = dropdown.getBoundingClientRect();
-            const spaceBelow = window.innerHeight - rect.bottom;
-            const spaceAbove = rect.top;
-            const spaceRight = window.innerWidth - rect.right;
-            const spaceLeft = rect.left;
-
-            // Adjust vertical position
-            if (spaceBelow < 100 && spaceAbove > spaceBelow) {
-                dropdown.style.top = 'auto';
-                dropdown.style.bottom = '100%';
-            } else {
-                dropdown.style.top = '100%';
-                dropdown.style.bottom = 'auto';
-            }
-
-            // Adjust horizontal position
-            if (spaceRight < 100 && spaceLeft > spaceRight) {
-                dropdown.style.right = '0';
-                dropdown.style.left = 'auto';
-            } else {
-                dropdown.style.left = '0';
-                dropdown.style.right = 'auto';
-            }
-
-        } catch (error) {
-            this.handleError('Dropdown Position Adjustment Error', error);
-        }
+    generateHandlerId(element, eventType) {
+        return `${element.id || Date.now()}_${eventType}`;
     }
 
     /**
-     * Adjust tree container layout
+     * Generate unique delegation ID
      * @private
-     * @param {HTMLElement} container - Tree container element
      */
-    adjustTreeContainer(container) {
-        try {
-            const windowHeight = window.innerHeight;
-            const headerHeight = document.querySelector('header')?.offsetHeight || 0;
-            const footerHeight = document.querySelector('footer')?.offsetHeight || 0;
-            
-            // Calculate and set maximum height
-            const maxHeight = windowHeight - headerHeight - footerHeight - 40; // 40px padding
-            container.style.maxHeight = `${maxHeight}px`;
-            container.style.overflowY = 'auto';
-
-        } catch (error) {
-            this.handleError('Tree Container Adjustment Error', error);
-        }
-    }
-
-    /**
-     * Handle modal closing
-     * @private
-     * @param {string} modalId - ID of modal to close
-     */
-    handleModalClose(modalId) {
-        try {
-            const modal = document.getElementById(modalId);
-            if (!modal) return;
-
-            // Add closing animation
-            modal.classList.add('w3-animate-opacity');
-            modal.style.opacity = '0';
-
-            // Clean up after animation
-            setTimeout(() => {
-                modal.style.display = 'none';
-                modal.style.opacity = '1';
-                modal.classList.remove('w3-animate-opacity');
-
-                // Reset form if present
-                const form = modal.querySelector('form');
-                if (form) {
-                    form.reset();
-                }
-
-                // Clear file inputs
-                modal.querySelectorAll('input[type="file"]').forEach(input => {
-                    input.value = '';
-                });
-
-                this.updateEventState('modalClosed', { modalId });
-            }, 300);
-
-        } catch (error) {
-            this.handleError('Modal Close Error', error);
-        }
-    }
-    /**
-         * Toggle tree node expansion
-         * @private
-         * @param {string} nodeId - Node identifier
-         */
-    toggleTreeNode(nodeId) {
-        try {
-            const node = document.getElementById(nodeId);
-            const icon = document.getElementById(`id_chevronIcon-${nodeId}`);
-            if (!node || !icon) return;
-
-            const isExpanded = node.classList.contains('w3-show');
-            
-            // Toggle node
-            node.classList.toggle('w3-show');
-            node.classList.toggle('w3-hide');
-            
-            // Update icon
-            icon.className = isExpanded ? 
-                "bi bi-chevron-right" : 
-                "bi bi-chevron-down";
-
-            this.updateEventState('treeNodeToggled', {
-                nodeId,
-                expanded: !isExpanded
-            });
-
-        } catch (error) {
-            this.handleError('Toggle Tree Node Error', error);
-        }
-    }
-
-    /**
-     * Handle tree item action click
-     * @private
-     * @param {HTMLElement} button - Action button
-     * @param {Event} event - Click event
-     */
-    handleActionClick(button, event) {
-        try {
-            const action = button.dataset.action;
-            const treeItem = button.closest('.tree-item');
-            if (!treeItem) return;
-
-            const nodeType = treeItem.dataset.type;
-            const nodeId = treeItem.dataset.id;
-
-            // Prevent default behavior and stop propagation
-            event.preventDefault();
-            event.stopPropagation();
-
-            this.updateEventState('treeAction', {
-                action,
-                nodeType,
-                nodeId
-            });
-
-            // Dispatch custom event for component handling
-            document.dispatchEvent(new CustomEvent('tree:action', {
-                detail: {
-                    action,
-                    type: nodeType,
-                    id: nodeId,
-                    element: treeItem
-                }
-            }));
-
-        } catch (error) {
-            this.handleError('Action Click Error', error);
-        }
+    generateDelegationId(container, eventType, selector) {
+        return `${container.id || Date.now()}_${eventType}_${selector}`;
     }
 
     /**
@@ -497,7 +305,7 @@ class EventManager {
      * @private
      */
     updateEventState(eventType, data = {}) {
-        State.update(EVENTS_STATE_KEY, {
+        State.update('events_state', {
             lastEvent: {
                 type: eventType,
                 timestamp: new Date(),
@@ -507,18 +315,13 @@ class EventManager {
     }
 
     /**
-     * Handle operation errors
+     * Handle errors
      * @private
      */
     handleError(context, error) {
-        console.error(`${context}:`, error);
+        console.error(`Events Error (${context}):`, error);
         
-        NotificationUI.show({
-            message: `${context}: ${error.message}`,
-            type: 'error'
-        });
-
-        State.update(EVENTS_STATE_KEY, {
+        State.update('events_state', {
             error: {
                 context,
                 message: error.message,
@@ -528,65 +331,46 @@ class EventManager {
     }
 
     /**
-     * Destroys the event manager and cleans up resources
+     * Clean up resources
      */
     destroy() {
         if (!this.initialized) return;
 
         try {
-            // Remove document level listeners
-            document.removeEventListener('click', this.handleTreeClick);
-            document.removeEventListener('submit', this.handleFormSubmit);
+            // Remove global listeners
             document.removeEventListener('click', this.handleGlobalClick);
-            document.removeEventListener('keydown', this.handleKeyboardShortcuts);
-
-            // Remove window level listeners
+            document.removeEventListener('keydown', this.handleKeyPress);
             window.removeEventListener('resize', this.handleWindowResize);
 
-            // Clear state
-            State.remove(EVENTS_STATE_KEY);
-
-            // Clear debounce timers
-            this.debounceTimers.forEach(timer => clearTimeout(timer));
-            this.debounceTimers.clear();
-
-            // Reset instance variables
-            this.handlers.clear();
-            this.initialized = false;
-
-            this.updateEventState('destroyed');
-        } catch (error) {
-            this.handleError('Destroy Error', error);
-        }
-    }
-
-     /**
-     * Add event delegation handler
-     * @param {HTMLElement|Document} element - Parent element to attach listener to
-     * @param {string} eventType - Type of event (e.g., 'click')
-     * @param {string} selector - CSS selector for target elements
-     * @param {Function} handler - Event handler function
-     */
-       addDelegate(element, eventType, selector, handler) {
-        try {
-            const wrappedHandler = (event) => {
-                const target = event.target.closest(selector);
-                if (target) {
-                    handler(event, target);
-                }
-            };
-
-            element.addEventListener(eventType, wrappedHandler);
-            
-            // Store handler reference for potential cleanup
-            this.handlers.set(`${eventType}-${selector}`, wrappedHandler);
-            
-            this.updateEventState('delegateAdded', {
-                eventType,
-                selector
+            // Remove all tracked handlers
+            this.handlers.forEach(({ element, eventType, handler, options }) => {
+                element.removeEventListener(eventType, handler, options);
             });
+
+            // Remove all delegated events
+            this.delegatedEvents.forEach(({ container, eventType, handler }) => {
+                container.removeEventListener(eventType, handler);
+            });
+
+            // Clear collections
+            this.handlers.clear();
+            this.delegatedEvents.clear();
+            this.boundHandlers = new WeakMap();
+
+            // Reset state
+            State.update(EVENTS_STATE_KEY, {
+                activeHandlers: new Set(),
+                delegatedEvents: new Set(),  // Add this
+                lastEvent: null,
+                error: null,
+                lastUpdate: new Date()
+            });
+
+            this.initialized = false;
+            console.log('Event manager cleaned up');
+
         } catch (error) {
-            this.handleError('Add Delegate Error', error);
+            this.handleError('Cleanup', error);
         }
     }
 }

@@ -1,13 +1,13 @@
 // main.js
 // Main application integration module
 
-import { State } from './state.js';
-import { DOM } from './dom.js';
-import { Events } from './events.js';
-import { CRUD } from './crud.js';
-import { API } from './api.js';
-import { Modal } from './modals.js';
-import { NotificationUI, TreeUI, StatusUI } from './ui.js';
+import { State } from '/static/main/js/state.js';
+import { DOM } from '/static/main/js/dom.js';
+import { Events } from '/static/main/js/events.js';
+import { CRUD } from '/static/main/js/crud.js';
+import { API } from '/static/main/js/api.js';
+import { Modal } from '/static/main/js/modals.js';
+import { NotificationUI, TreeUI, StatusUI } from '/static/main/js/ui.js';
 
 class DashboardManager {
     constructor() {
@@ -517,6 +517,15 @@ class DashboardManager {
     }
 }
 
+
+// Create singleton instance
+const Dashboard = new DashboardManager();
+
+// Initialize dashboard when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    Dashboard.initialize();
+});
+
 // Export utilities
 export {
     State,
@@ -530,11 +539,3 @@ export {
     StatusUI,
     Dashboard
 };
-
-// Create singleton instance
-const Dashboard = new DashboardManager();
-
-// Initialize dashboard when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-    Dashboard.initialize();
-});

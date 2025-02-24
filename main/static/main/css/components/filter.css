@@ -1,60 +1,42 @@
-/* components/filters.css */
+/* components/filter.css */
 
-/* Filter container */
+/* Filter container - using w3-bar for layout */
 .filter-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
     padding: 8px;
 }
 
-/* Filter input */
+/* Filter input container */
 .filter-input {
-    flex-grow: 1;
     position: relative;
+    flex-grow: 1;
 }
 
-.filter-input input {
-    padding-right: 32px;
-}
-
-/* Clear button - only show in filter input context */
-.filter-input .clear-filter {
+/* Clear button */
+.clear-filter {
     position: absolute;
     right: 8px;
     top: 50%;
     transform: translateY(-50%);
-    cursor: pointer;
-    color: #757575;
     display: none;
-    background: none;
-    border: none;
-    padding: 4px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+}
+
+.clear-filter:hover {
+    opacity: 1;
 }
 
 /* Show clear button when input has content */
-.filter-input .w3-input:not(:placeholder-shown) ~ .clear-filter {
+.w3-input:not(:placeholder-shown) ~ .clear-filter {
     display: block;
 }
 
-/* Active filter indicator */
+/* Active filter state */
 .filter-active .w3-input {
     border-color: #2196F3;
 }
 
-.filter-active::after {
-    content: '';
-    position: absolute;
-    right: 32px;
-    top: 50%;
-    width: 8px;
-    height: 8px;
-    background: #2196F3;
-    border-radius: 50%;
-    transform: translateY(-50%);
-}
-
-/* Filter loading state */
+/* Loading state */
 .filter-loading .w3-input {
     padding-right: 40px;
 }
@@ -70,31 +52,25 @@
     border-top: 2px solid #2196F3;
     border-radius: 50%;
     transform: translateY(-50%);
-    animation: spin 1s linear infinite;
+    animation: w3-spin 1s linear infinite;
 }
 
-/* Filter count badge */
+/* Filter count */
 .filter-count {
-    background: #2196F3;
-    color: white;
     padding: 2px 8px;
     border-radius: 12px;
-    font-size: 0.8em;
-    margin-left: 8px;
+    font-size: 0.85em;
 }
 
 /* Filter options */
 .filter-options {
-    display: flex;
-    align-items: center;
-    gap: 8px;
     margin-left: auto;
 }
 
-/* Responsive adjustments */
+/* Responsive layout */
 @media (max-width: 600px) {
     .filter-bar {
-        flex-wrap: wrap;
+        flex-direction: column;
     }
     
     .filter-options {

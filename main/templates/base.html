@@ -5,22 +5,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{% endblock %}</title>
-    <!-- W3.CSS CSS -->
+    <!-- W3.CSS -->
     <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
-    <!-- bootstrap Icons -->
+    <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
     <!-- Google Icons -->
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-
-    <!-- CodeMirror CSS -->
+    <!-- CodeMirror -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/default.min.css">
-
+    <!-- Custom CSS -->
     <link rel="stylesheet" href="{% static 'main/css/main.css' %}">
     <link rel="shortcut icon" type="image/png" href="{% static 'favicon.ico' %}">
     
-    {% block extra_css %}
-    {% endblock %}
+    {% block extra_css %}{% endblock %}
 </head>
 <body>
     <header class="w3-container">
@@ -43,112 +41,126 @@
         <h5>Footer</h5>
         <p>Copyright © {{ year }}</p>
     </footer>
-    
-    {% block extra_js %}
 
+    <!-- Base JavaScript -->
     <script type="module">
-    // First import State as other modules depend on it
-    import { State } from '/static/main/js/state.js';
+        // Import core modules
+        import { State } from '/static/main/js/state.js';
+        import { DOM } from '/static/main/js/dom.js';
+        import { Events } from '/static/main/js/events.js';
+        import { API } from '/static/main/js/api.js';
+        import { NotificationUI, StatusUI, TreeUI } from '/static/main/js/ui.js';
+        import { Modal } from '/static/main/js/modals.js';
+        import { Forms } from '/static/main/js/forms.js';
+        import { CRUD } from '/static/main/js/crud.js';
 
-    // Import core utilities
-    import { DOM } from '/static/main/js/dom.js';           // DOM manipulation
-    import { Events } from '/static/main/js/events.js';     // Event handling
-    import { API } from '/static/main/js/api.js';          // API communication
+        // Initialize core application
+        Events.addDelegate(document, 'DOMContentLoaded', 'body', async (e, target) => {
+            try {
+                // Initial state setup
+                State.set('app_state', {
+                    initialized: false,
+                    lastUpdate: new Date(),
+                    currentPage: window.location.pathname
+                });
 
-    // Import UI managers
-    import { 
-        NotificationUI, 
-        StatusUI, 
-        TreeUI 
-    } from '/static/main/js/ui.js';                       // UI components
+                // Initialize core utilities
+                await Promise.all([
+                    DOM.initialize(),
+                    API.initialize(),
+                    Events.initialize()
+                ]);
 
-    // Import additional managers
-    import { Modal } from '/static/main/js/modals.js';     // Modal windows
-    import { Forms } from '/static/main/js/forms.js';      // Form handling
-    import { CRUD } from '/static/main/js/crud.js';        // Data operations
+                // Initialize UI components
+                await Promise.all([
+                    NotificationUI.initialize(),
+                    StatusUI.initialize(),
+                    Modal.initialize()
+                ]);
 
-    /**
-    * Core initialization function
-    * Handles initializing all managers in the correct order
-    */
-    async function initializeCore() {
-        try {
-            // Set initial application state
-            State.set('app_state', {
-                initialized: false,
-                lastUpdate: new Date(),
-                currentPage: window.location.pathname
-            });
+                // Initialize business logic
+                await Promise.all([
+                    Forms.initialize(),
+                    CRUD.initialize(),
+                    TreeUI.initialize()
+                ]);
 
-            // First Layer: Core Utilities
-            // These provide fundamental functionality other modules depend on
-            await DOM.initialize();    // Initialize DOM utilities first
-            await API.initialize();    // Then API services
-            await Events.initialize(); // Then event handling
+                // Update state and trigger initialization complete
+                State.update('app_state', {
+                    initialized: true,
+                    lastUpdate: new Date()
+                });
 
-            // Second Layer: UI Managers
-            // These provide user interface functionality
-            await NotificationUI.initialize();  // Notifications
-            await StatusUI.initialize();        // Status messages
-            await Modal.initialize();           // Modal windows
+                Events.trigger('core:initialized');
+                
+                console.log('Core initialization complete:', new Date());
 
-            // Third Layer: Business Logic Managers
-            // These handle application-specific operations
-            await Forms.initialize();  // Form handling
-            await CRUD.initialize();   // Data operations
-            await TreeUI.initialize(); // Tree structure UI
+            } catch (error) {
+                console.error('Core initialization failed:', error);
+                NotificationUI.show({
+                    message: `Initialization failed: ${error.message}`,
+                    type: 'error',
+                    duration: 5000
+                });
+            }
+        });
 
-            // Update application state to reflect successful initialization
-            State.update('app_state', {
-                initialized: true,
-                lastUpdate: new Date()
-            });
+        // Navigation handling
+        Events.addDelegate(document, 'click', '[data-action="navigate"]', async (e, target) => {
+            e.preventDefault();
+            const href = target.getAttribute('href');
+            if (href && href !== '#') {
+                try {
+                    // Show loading state
+                    StatusUI.show('Loading...');
+                    window.location.href = href;
+                } catch (error) {
+                    NotificationUI.show({
+                        message: `Navigation failed: ${error.message}`,
+                        type: 'error',
+                        duration: 5000
+                    });
+                }
+            }
+        });
 
-            // Dispatch event for page-specific code to know core is ready
-            window.dispatchEvent(new CustomEvent('core:initialized'));
-
-        } catch (error) {
-            // Log error for debugging
-            console.error('Core initialization failed:', error);
-
-            // Show user-friendly error message
+        // Global error handling
+        Events.addDelegate(window, 'error', 'body', (e, target) => {
             NotificationUI.show({
-                message: `Initialization failed: ${error.message}`,
+                message: `Error: ${e.error?.message || e.message}`,
                 type: 'error',
                 duration: 5000
             });
-        }
-    }
-
-    // Wait for DOM to be ready before initializing
-    // This ensures all HTML elements exist before we try to interact with them
-    document.addEventListener('DOMContentLoaded', initializeCore);
-
-    // Global error handler for uncaught errors
-    window.addEventListener('error', (event) => {
-        // Show user-friendly error message for any uncaught errors
-        NotificationUI.show({
-            message: `Error: ${event.message}`,
-            type: 'error',
-            duration: 5000
         });
-    });
 
-    // Optional: Handle unhandled promise rejections
-    window.addEventListener('unhandledrejection', (event) => {
-        NotificationUI.show({
-            message: `Async Error: ${event.reason}`,
-            type: 'error',
-            duration: 5000
+        // Unhandled promise rejection handling
+        Events.addDelegate(window, 'unhandledrejection', 'body', (e, target) => {
+            NotificationUI.show({
+                message: `Async Error: ${e.reason?.message || e.reason}`,
+                type: 'error',
+                duration: 5000
+            });
         });
-    });
 
-    // Optional: Log when initialization is complete
-    window.addEventListener('core:initialized', () => {
-        console.log('Core initialization complete:', new Date());
-    });
+        // Online/offline status handling
+        Events.addDelegate(window, 'online', 'body', () => {
+            NotificationUI.show({
+                message: 'Connection restored',
+                type: 'success',
+                duration: 3000
+            });
+        });
+
+        Events.addDelegate(window, 'offline', 'body', () => {
+            NotificationUI.show({
+                message: 'Connection lost',
+                type: 'warning',
+                duration: 0,
+                closeable: true
+            });
+        });
     </script>
-   
-    {% endblock %}
+
+    {% block extra_js %}{% endblock %}
 </body>
 </html>

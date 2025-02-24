@@ -1,6 +1,31 @@
 
-done
-    "ui, state, modals, main, events, dom, api
+event.js
+    Auto Cleanup
+    Add MutationObserver to cleanup handlers for removed elements
+    Add cleanupElementHandlers() method
+    Event Batching
+    add eventQueue and processingEvents flags
+    Add processEventQueue() method
+    Add processEvent() method
+    Add trigger() method
+    Debug Tools
+    Add debug flag and eventLog array
+    Add enableDebug() method
+    Add logEvent() method
+    Add getEventLog() method
+    Keyboard Shortcuts
+    Add shortcuts Map
+    Add registerShortcut() method
+    Add normalizeKeys() method
+    Enhance handleKeyPress()
+    Event Throttling
+    Add throttle() method for high-frequency events
+    Error Recovery
+    Add recoverFromError() method
+    Re-bind handlers
+    Re-attach listeners
+    Re-initialize observer
+
 
 changes
     client side rendering (reactive), tree_item.html is gone

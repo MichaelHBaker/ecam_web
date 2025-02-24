@@ -30,10 +30,6 @@ class FormManager {
         this.validationRules = null;
         this.fieldDependencies = null;
 
-        // Bind methods
-        this.handleSubmit = this.handleSubmit.bind(this);
-        this.handleFieldChange = this.handleFieldChange.bind(this);
-        this.handleFieldBlur = this.handleFieldBlur.bind(this);
     }
 
     /**
@@ -78,7 +74,12 @@ class FormManager {
 
             // Initialize state
             await this.initializeState();
-            
+
+            // Bind methods
+            this.handleSubmit = this.handleSubmit.bind(this);
+            this.handleFieldChange = this.handleFieldChange.bind(this);
+            this.handleFieldBlur = this.handleFieldBlur.bind(this);
+
             // Load field definitions
             await this.loadFieldDefinitions();
 

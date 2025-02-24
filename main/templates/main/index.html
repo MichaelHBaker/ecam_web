@@ -4,28 +4,80 @@
 {% block title %}Login{% endblock %}
 
 {% block content %}
-    <div class="w3-container w3-padding-64">
-        <div class="w3-card-4 w3-white" style="max-width: 500px; margin: 0 auto;">
-            <div class="w3-container w3-blue">
-                <h2>Login</h2>
-            </div>
-
-            <form method="post" class="w3-container w3-padding-16">
-                {% csrf_token %}
-                <div class="w3-section">
-                    <label><b>Username</b></label>
-                    <input class="w3-input w3-border" type="text" name="username" required>
-                </div>
-                <div class="w3-section">
-                    <label><b>Password</b></label>
-                    <input class="w3-input w3-border" type="password" name="password" required>
-                </div>
-                <button type="submit" class="w3-button w3-blue w3-section">Login</button>
-            </form>
+<div class="w3-container w3-padding-64">
+    <div class="w3-card-4 w3-white" style="max-width: 500px; margin: 0 auto;">
+        <div class="w3-container w3-blue">
+            <h2>Login</h2>
         </div>
+
+        <form id="loginForm" method="post" class="w3-container w3-padding-16">
+            {% csrf_token %}
+            <div class="w3-section">
+                <label><b>Username</b></label>
+                <input class="w3-input w3-border" type="text" name="username" required>
+            </div>
+            <div class="w3-section">
+                <label><b>Password</b></label>
+                <input class="w3-input w3-border" type="password" name="password" required>
+            </div>
+            <button type="submit" class="w3-button w3-blue w3-section">Login</button>
+        </form>
     </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
+<script type="module">
+    document.addEventListener('DOMContentLoaded', () => {
+        const loginForm = document.getElementById('loginForm');
+        if (!loginForm) return;
 
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const submitButton = loginForm.querySelector('button[type="submit"]');
+            
+            try {
+                // Show loading state
+                submitButton.disabled = true;
+                submitButton.innerHTML = '<i class="bi bi-arrow-repeat w3-spin"></i> Logging in...';
+
+                const formData = new FormData(loginForm);
+                const response = await fetch(loginForm.action, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+                    }
+                });
+
+                if (response.ok) {
+                    // Redirect to dashboard on successful login
+                    window.location.href = '/dashboard/';
+                } else {
+                    throw new Error('Invalid credentials');
+                }
+
+            } catch (error) {
+                console.error('Login error:', error);
+                // Show error message
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'w3-panel w3-pale-red';
+                errorDiv.innerHTML = `<p>${error.message || 'Login failed. Please try again.'}</p>`;
+                
+                const container = loginForm.closest('.w3-container');
+                container.insertBefore(errorDiv, loginForm);
+
+                // Remove error message after 5 seconds
+                setTimeout(() => {
+                    errorDiv.remove();
+                }, 5000);
+
+            } finally {
+                // Reset button state
+                submitButton.disabled = false;
+                submitButton.textContent = 'Login';
+            }
+        });
+    });
+</script>
 {% endblock %}

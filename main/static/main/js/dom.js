@@ -258,62 +258,7 @@ class DOMUtilities {
             return element;
         }
     }
-    /**
-     * Add delegated event listener
-     * @param {HTMLElement|Document} context - Context element
-     * @param {string} eventType - Event type
-     * @param {string} selector - Delegate selector
-     * @param {Function} handler - Event handler
-     * @param {Object} options - Event listener options
-     * @returns {Function} Remove listener function
-     */
-    addDelegate(context, eventType, selector, handler, options = {}) {
-        if (!this.initialized) {
-            throw new Error('DOM utilities must be initialized before use');
-        }
-
-        try {
-            const listener = (event) => {
-                const target = event.target.closest(selector);
-                if (target) {
-                    handler.call(target, event, target);
-                }
-            };
-
-            context.addEventListener(eventType, listener, options);
-
-            // Track in state
-            State.update('dom_state', {
-                eventDelegates: [
-                    ...(State.get('dom_state')?.eventDelegates || []),
-                    {
-                        context: context === document ? 'document' : context.id || 'unknown',
-                        eventType,
-                        selector,
-                        timestamp: new Date()
-                    }
-                ]
-            });
-
-            // Return remove function
-            return () => {
-                context.removeEventListener(eventType, listener, options);
-                
-                const currentDelegates = State.get('dom_state')?.eventDelegates || [];
-                State.update('dom_state', {
-                    eventDelegates: currentDelegates.filter(d => 
-                        d.context !== (context === document ? 'document' : context.id) ||
-                        d.eventType !== eventType ||
-                        d.selector !== selector
-                    )
-                });
-            };
-        } catch (error) {
-            console.error('Error adding delegate:', error);
-            return () => {}; // Return no-op function
-        }
-    }
-
+    
     /**
      * Sets up focus trap for modal or dropdown
      * @param {HTMLElement} element - Container element

@@ -19,11 +19,7 @@ class TreeItemManager {
         // Operation tracking
         this.activeOperations = new Set();
         this.operationTimers = new Map();
-        
-        // Bind methods
-        this.handleSubmit = this.handleSubmit.bind(this);
-        this.handleCancel = this.handleCancel.bind(this);
-        this.handleOperationTimeout = this.handleOperationTimeout.bind(this);
+       
     }
 
     /**
@@ -68,6 +64,11 @@ class TreeItemManager {
             if (!TreeUI.isInitialized()) {
                 throw new Error('TreeUI must be initialized before CRUD Manager');
             }
+
+            // Now bind methods after they're defined
+            this.handleSubmit = this.handleSubmit.bind(this);
+            this.handleCancel = this.handleCancel.bind(this);
+            this.handleOperationTimeout = this.handleOperationTimeout.bind(this);
 
             // Initialize state
             await this.initializeState();

@@ -1,32 +1,30 @@
 /* components/measurements.css */
-/* Measurement specific styles - extends w3.css */
+/* Measurement component styles - extends w3.css */
 
 /* Measurement fields container */
 .measurement-fields {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
     padding: 8px;
 }
 
-/* Select controls */
+/* Select controls - extend w3-select */
 .measurement-select {
     min-width: 120px;
-    padding: 4px 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    background-color: white;
 }
 
-.unit-select { min-width: 120px; }
-.multiplier-select { width: 100px; }
-.timezone-select { width: 160px; }
+.unit-select { 
+    min-width: 120px; 
+}
 
-/* Measurement editor */
+.multiplier-select { 
+    width: 100px; 
+}
+
+.timezone-select { 
+    width: 160px; 
+}
+
+/* Measurement editor - using w3-card for consistency */
 .measurement-editor {
-    border: 1px solid #ddd;
-    border-radius: 4px;
     margin: 8px 0;
 }
 
@@ -46,38 +44,33 @@
     padding: 0 8px;
 }
 
-/* Measurement status indicators */
+/* Measurement status indicators using w3-tag */
 .measurement-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
     border-radius: 12px;
     font-size: 0.85em;
 }
 
 .status-active {
-    background-color: #e8f5e9;
-    color: #2e7d32;
+    background-color: #2e7d32 !important;
+    color: white !important;
 }
 
 .status-inactive {
-    background-color: #f5f5f5;
-    color: #757575;
+    background-color: #757575 !important;
+    color: white !important;
 }
 
 .status-error {
-    background-color: #ffebee;
-    color: #c62828;
+    background-color: #c62828 !important;
+    color: white !important;
 }
 
-/* Measurement validation */
+/* Measurement validation using w3-text-red */
 .measurement-field.error {
     border-color: #f44336;
 }
 
 .measurement-error {
-    color: #f44336;
     font-size: 0.85em;
     margin-top: 4px;
 }
@@ -88,21 +81,19 @@
     margin: 16px 0;
 }
 
+/* Chart legend using w3-bar */
 .chart-legend {
-    display: flex;
-    gap: 16px;
     padding: 8px;
-    justify-content: center;
 }
 
 .legend-item {
-    display: flex;
-    align-items: center;
-    gap: 4px;
+    margin: 0 8px;
 }
 
 .legend-color {
     width: 12px;
     height: 12px;
     border-radius: 2px;
+    display: inline-block;
+    margin-right: 4px;
 }

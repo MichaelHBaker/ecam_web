@@ -6,27 +6,26 @@
 {% block content %}
 <!-- Main Content -->
 <main class="w3-container" style="margin-top: 80px;">
-
     <!-- Projects Section -->
     <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
-        <button class="w3-bar-item w3-button section-button" data-action="toggle-section">
+        <button class="w3-bar-item w3-button section-button" data-action="toggle-section" data-section="projects">
             <i class="bi bi-chevron-right"></i> Projects
         </button>
-            <div class="w3-dropdown-hover menu-trigger">
-                <button class="w3-button">
-                    <i class="bi bi-three-dots-vertical"></i>
-                </button>
-                <div class="w3-dropdown-content w3-bar-block">
-                    <a href="#" class="w3-bar-item w3-button" data-action="filter-projects">
-                        <i class="bi bi-funnel"></i> Filter Projects
-                    </a>
-                    <a href="#" class="w3-bar-item w3-button" data-action="add-project">
-                        <i class="bi bi-plus-lg"></i> Add Project
-                    </a>
-                </div>
+        <div class="w3-dropdown-hover menu-trigger">
+            <button class="w3-button">
+                <i class="bi bi-three-dots-vertical"></i>
+            </button>
+            <div class="w3-dropdown-content w3-bar-block">
+                <a href="#" class="w3-bar-item w3-button" data-action="filter-projects">
+                    <i class="bi bi-funnel"></i> Filter Projects
+                </a>
+                <a href="#" class="w3-bar-item w3-button" data-action="add-project">
+                    <i class="bi bi-plus-lg"></i> Add Project
+                </a>
             </div>
         </div>
-    <div class="w3-container w3-hide">
+    </div>
+    <div class="w3-container w3-hide" data-content="projects">
         <div class="tree-container">
             <div class="tree-wrapper w3-margin-top">
                 <!-- Projects will be loaded here dynamically -->
@@ -42,104 +41,95 @@
             
     <!-- Measurements Section -->
     <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
-        <button class="w3-bar-item w3-button section-button" data-action="toggle-section">
+        <button class="w3-bar-item w3-button section-button" data-action="toggle-section" data-section="measurements">
             <i class="bi bi-chevron-right"></i> Measurements
         </button>
     </div>
-    <div class="w3-container w3-hide">
-        Measurements content
+    <div class="w3-container w3-hide" data-content="measurements">
+        <div class="w3-panel w3-pale-blue">
+            <p>Measurement data will appear here</p>
+        </div>
     </div>
 
     <!-- Data Section -->
     <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
-        <button class="w3-bar-item w3-button section-button" data-action="toggle-section">
+        <button class="w3-bar-item w3-button section-button" data-action="toggle-section" data-section="data">
             <i class="bi bi-chevron-right"></i> Data
         </button>
     </div>
-    <div class="w3-container w3-hide">
-        Data content
+    <div class="w3-container w3-hide" data-content="data">
+        <div class="w3-panel w3-pale-blue">
+            <p>Data management tools will appear here</p>
+        </div>
     </div>
 
     <!-- Models Section -->
     <div class="w3-bar w3-white w3-margin-bottom w3-bottombar">
-        <button class="w3-bar-item w3-button section-button" data-action="toggle-section">
+        <button class="w3-bar-item w3-button section-button" data-action="toggle-section" data-section="models">
             <i class="bi bi-chevron-right"></i> Models
         </button>
     </div>
-    <div class="w3-container w3-hide">
-        Models content
+    <div class="w3-container w3-hide" data-content="models">
+        <div class="w3-panel w3-pale-blue">
+            <p>Models will be displayed here</p>
+        </div>
     </div>
 </main>
-
 {% endblock %}
 
 {% block extra_js %}
-
 <script type="module">
+    import { Events } from '/static/main/js/events.js';
+    import { NotificationUI } from '/static/main/js/ui.js';
+    import { Modal } from '/static/main/js/modals.js';
+    import { Dashboard } from '/static/main/js/dashboard.js';
 
-    <!-- Initialize State -->
-    import { 
-        DOM,  
-        Events, 
-        Dashboard
-    } from '/static/main/js/main.js';
-
-    document.addEventListener('DOMContentLoaded', async () => {
+    // Initialize dashboard when core is ready
+    Events.addDelegate(document, 'core:initialized', 'body', async (e, target) => {
         try {
-            
-
-            // Add section toggle handler
+            // Section toggle handling
             Events.addDelegate(document, 'click', '[data-action="toggle-section"]', async (e, target) => {
                 try {
-                    const contentDiv = target.closest('.w3-bar').nextElementSibling;
+                    const sectionName = target.dataset.section;
+                    const contentDiv = document.querySelector(`[data-content="${sectionName}"]`);
                     const icon = target.querySelector('.bi');
                     const isExpanding = contentDiv.classList.contains('w3-hide');
                     
-                    // Toggle section visibility
                     if (isExpanding) {
                         contentDiv.classList.remove('w3-hide');
                         icon.classList.remove('bi-chevron-right');
                         icon.classList.add('bi-chevron-down');
                         
-                        // Handle section-specific initialization
-                        const sectionText = target.textContent.trim();
-                        if (sectionText.includes('Projects')) {
+                        // Section-specific initialization
+                        if (sectionName === 'projects') {
+                            const loadingDiv = contentDiv.querySelector('.tree-loading');
+                            const noResultsDiv = contentDiv.querySelector('.no-results');
+                            const treeWrapper = contentDiv.querySelector('.tree-wrapper');
+                            
                             try {
-                                NotificationUI.show({
-                                    message: 'Loading projects...',
-                                    type: 'info',
-                                    duration: 2000
-                                });
+                                loadingDiv.classList.remove('w3-hide');
                                 await Dashboard.initializeTree();
+                                loadingDiv.classList.add('w3-hide');
+                                
+                                // Show no results if tree is empty
+                                if (!treeWrapper.children.length) {
+                                    noResultsDiv.classList.remove('w3-hide');
+                                }
                             } catch (err) {
+                                loadingDiv.classList.add('w3-hide');
                                 NotificationUI.show({
                                     message: `Failed to load projects: ${err.message}`,
                                     type: 'error',
                                     duration: 5000
                                 });
-                                throw err;
                             }
-                        } else if (sectionText.includes('Measurements')) {
-                            contentDiv.innerHTML = contentDiv.innerHTML.trim() === 'Measurements content' ?
-                                '<div class="w3-panel w3-pale-blue"><p>Measurement data will appear here</p></div>' :
-                                contentDiv.innerHTML;
-                        } else if (sectionText.includes('Data')) {
-                            contentDiv.innerHTML = contentDiv.innerHTML.trim() === 'Data content' ?
-                                '<div class="w3-panel w3-pale-blue"><p>Data management tools will appear here</p></div>' :
-                                contentDiv.innerHTML;
-                        } else if (sectionText.includes('Models')) {
-                            contentDiv.innerHTML = contentDiv.innerHTML.trim() === 'Models content' ?
-                                '<div class="w3-panel w3-pale-blue"><p>Models will be displayed here</p></div>' :
-                                contentDiv.innerHTML;
                         }
                     } else {
-                        // Collapse section
                         contentDiv.classList.add('w3-hide');
                         icon.classList.remove('bi-chevron-down');
                         icon.classList.add('bi-chevron-right');
                     }
                 } catch (error) {
-                    console.error('Error in section toggle:', error);
                     NotificationUI.show({
                         message: `Error toggling section: ${error.message}`,
                         type: 'error',
@@ -148,19 +138,13 @@
                 }
             });
 
+            // Project filtering
             Events.addDelegate(document, 'click', '[data-action="filter-projects"]', (e, target) => {
                 e.preventDefault();
-                const treeItem = target.closest('.tree-item');
-                const type = treeItem ? treeItem.dataset.type : 'project';
-                
-                Modal.show(`filter-${type}`, {
-                    title: `Filter ${type}s`,
+                Modal.show('filter-projects', {
+                    title: 'Filter Projects',
                     type: 'filter',
                     width: '400px',
-                    position: {
-                        x: e.clientX,
-                        y: e.clientY + 10
-                    },
                     content: `
                         <form class="w3-container w3-padding-16" data-action="filter-form">
                             <div class="w3-row-padding">
@@ -184,23 +168,21 @@
                             </div>
                         </form>
                     `
-                }).catch(error => {
-                    console.error('Error showing filter modal:', error);
-                    NotificationUI.show({
-                        message: `Error showing filter dialog: ${error.message}`,
-                        type: 'error',
-                        duration: 5000
-                    });
                 });
             });
 
+            // Project creation
             Events.addDelegate(document, 'click', '[data-action="add-project"]', (e, target) => {
                 e.preventDefault();
-                const addButton = DOM.getElement('#addProjectBtn');
-                if (addButton) {
-                    addButton.click();
-                }
+                Modal.show('add-project', {
+                    title: 'Add New Project',
+                    type: 'form',
+                    width: '500px',
+                    content: await Dashboard.getProjectForm()
+                });
             });
+
+            // Add any additional event handlers here...
 
         } catch (error) {
             console.error('Error initializing dashboard:', error);
@@ -209,6 +191,22 @@
                 type: 'error',
                 duration: 0,
                 closeable: true
+            });
+        }
+    });
+
+    // Handle form submissions
+    Events.addDelegate(document, 'submit', '[data-action="filter-form"]', async (e, target) => {
+        e.preventDefault();
+        try {
+            const formData = new FormData(target);
+            await Dashboard.applyFilter(Object.fromEntries(formData));
+            Modal.hide('filter-projects');
+        } catch (error) {
+            NotificationUI.show({
+                message: `Error applying filter: ${error.message}`,
+                type: 'error',
+                duration: 5000
             });
         }
     });

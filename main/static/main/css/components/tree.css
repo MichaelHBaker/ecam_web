@@ -1,154 +1,101 @@
 /* components/tree.css */
-/* Tree component styles - extends w3.css */
 
-/* Base tree structure */
+/* Tree container */
 .tree-container {
     position: relative;
     min-height: 200px;
-    padding: 16px;
 }
 
+/* Tree wrapper */
 .tree-wrapper {
     position: relative;
     min-height: 50px;
 }
 
-/* Tree node structure */
+/* Tree item */
 .tree-item {
     position: relative;
-    padding: 4px 0;
-    display: flex;
-    align-items: center;
+    margin: 4px 0;
 }
 
-.tree-text {
-    flex-grow: 1;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-/* Fields container */
-.fields-container {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    flex-grow: 1;
-}
-
-.tree-item-field {
-    border: none;
-    background: transparent;
+.tree-item-content {
     padding: 4px 8px;
-    font-size: 1rem;
-    color: inherit;
-    width: auto;
 }
 
-.tree-item-field.editing {
-    border: 1px solid #ccc;
-    background-color: white;
-    padding: 4px;
+/* Toggle button */
+.toggle-btn {
+    width: 32px;
+    transition: transform 0.3s ease;
+}
+
+.toggle-btn i {
+    transition: transform 0.3s ease;
+}
+
+/* Item data */
+.item-data {
+    flex-grow: 1;
+    padding: 4px 0;
+}
+
+.item-name {
+    display: block;
+}
+
+.item-description {
+    margin-top: 2px;
 }
 
 /* Action buttons */
 .item-actions {
-    display: none;
-    margin-left: 20px;
-    position: relative;
+    visibility: hidden;
 }
 
 .tree-item:hover .item-actions {
-    display: inline-block;
+    visibility: visible;
 }
 
 /* Children container */
 .children-container {
-    margin-left: 24px;
-    transition: height 0.3s ease;
+    margin-left: 32px;
+    overflow: hidden;
 }
 
-/* Loading states */
-.loading-state {
-    display: none;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
+/* Loading indicator */
+.loading-indicator {
+    padding: 8px;
+    text-align: center;
 }
 
-.loading-state.w3-show {
-    display: flex;
-}
-
-.loading-state i {
-    margin-right: 8px;
-}
-
-/* Error states */
-.error-state {
-    display: none;
+/* Empty state */
+.tree-empty {
     padding: 20px;
     text-align: center;
 }
 
-.error-state.w3-show {
-    display: block;
+/* Error state */
+.tree-error {
+    padding: 16px;
 }
 
-.error-message {
-    margin-bottom: 10px;
+/* Tree animations */
+.tree-item.w3-animate-opacity {
+    animation-duration: 0.3s;
 }
 
-/* No results state */
-.no-results {
-    display: none;
-    padding: 20px;
-    text-align: center;
-    color: #757575;
+.children-container.w3-animate-opacity {
+    animation-duration: 0.3s;
 }
 
-.no-results.w3-show {
-    display: block;
-}
-
-/* Tree headings */
-.tree-headings {
-    padding: 8px 35px;
-    color: #757575;
-    font-size: 0.9em;
-}
-
-.tree-heading-before {
-    padding-left: 6px;
-}
-
-/* Edit controls */
-.edit-controls {
-    display: none;
-    align-items: center;
-    gap: 4px;
-    margin-left: 8px;
-}
-
-.edit-controls.w3-show {
-    display: inline-flex;
-}
-
-/* Validation states */
-.tree-item-field.error {
-    border-color: #f44336;
-}
-
-.field-error {
-    color: #f44336;
-    font-size: 0.8em;
-    margin-top: 4px;
-}
-
-/* Transitions */
-.tree-item,
-.tree-item-field,
-.item-actions,
-.edit-controls {
-    transition: all 0.3s ease;
+/* Responsive adjustments */
+@media (max-width: 600px) {
+    .children-container {
+        margin-left: 16px;
+    }
+    
+    .item-actions {
+        position: relative;
+        visibility: visible;
+        margin-top: 4px;
+    }
 }

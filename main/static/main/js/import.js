@@ -29,11 +29,6 @@ class ImportManager {
             allowedExtensions: ['.csv', '.txt', '.xls', '.xlsx']
         };
 
-        // Bind methods
-        this.handleFileSelect = this.handleFileSelect.bind(this);
-        this.updateStatus = this.updateStatus.bind(this);
-        this.updateProgress = this.updateProgress.bind(this);
-        this.handleError = this.handleError.bind(this);
     }
 
     /**
@@ -78,7 +73,13 @@ class ImportManager {
 
             // Initialize UI elements
             await this.initializeUI();
-            
+
+            // Bind methods
+            this.handleFileSelect = this.handleFileSelect.bind(this);
+            this.updateStatus = this.updateStatus.bind(this);
+            this.updateProgress = this.updateProgress.bind(this);
+            this.handleError = this.handleError.bind(this);
+
             // Set up event listeners
             await this.attachEventListeners();
 

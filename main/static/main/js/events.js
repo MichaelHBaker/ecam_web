@@ -14,10 +14,6 @@ class EventManager {
         this.delegatedEvents = new Map();
         this.boundHandlers = new WeakMap();
         
-        // Bind handlers
-        this.handleGlobalClick = this.handleGlobalClick.bind(this);
-        this.handleKeyPress = this.handleKeyPress.bind(this);
-        this.handleWindowResize = this.debounce(this.handleWindowResize.bind(this), 250);
     }
 
     /**
@@ -42,11 +38,16 @@ class EventManager {
             // Initialize event state
             State.set(EVENTS_STATE_KEY, {
                 activeHandlers: new Set(),
-                delegatedEvents: new Set(),  // Add this
+                delegatedEvents: new Set(),
                 lastEvent: null,
                 error: null,
                 lastUpdate: new Date()
             });
+
+            // Bind handlers
+            this.handleGlobalClick = this.handleGlobalClick.bind(this);
+            this.handleKeyPress = this.handleKeyPress.bind(this);
+            this.handleWindowResize = this.debounce(this.handleWindowResize.bind(this), 250);
 
             // Setup global listeners
             document.addEventListener('click', this.handleGlobalClick);
@@ -68,6 +69,62 @@ class EventManager {
      */
     isInitialized() {
         return this.initialized;
+    }
+
+    /**
+     * Add delegated event listener
+     * @param {HTMLElement|Document} context - Context element
+     * @param {string} eventType - Event type
+     * @param {string} selector - Delegate selector
+     * @param {Function} handler - Event handler
+     * @param {Object} options - Event listener options
+     * @returns {Function} Remove listener function
+     */
+    addDelegate(context, eventType, selector, handler, options = {}) {
+        if (!this.initialized) {
+            throw new Error('Event manager must be initialized before use');
+        }
+
+        try {
+            const listener = (event) => {
+                const target = event.target.closest(selector);
+                if (target  && context.contains(target)) {
+                    handler.call(target, event, target);
+                }
+            };
+
+            context.addEventListener(eventType, listener, options);
+
+            const delegationId = this.generateDelegationId(context, eventType, selector);
+
+            // Track in delegatedEvents map
+            this.delegatedEvents.set(delegationId, {
+                context,
+                eventType,
+                handler: listener,
+                selector,
+                options
+            });
+
+            // Track in state
+            this.updateEventState('delegateAdded', {
+                delegationId,
+                context: context === document ? 'document' : context.id || 'unknown',
+                eventType,
+                selector,
+                timestamp: new Date()
+            });
+
+            // Return remove function
+            return () => {
+                context.removeEventListener(eventType, listener, options);
+                this.delegatedEvents.delete(delegationId);
+                this.updateEventState('delegateRemoved', { delegationId });
+            };
+        } catch (error) {
+            this.handleError('AddDelegate', error);
+            return () => {}; // Return no-op function
+        }
     }
 
     /**
@@ -138,49 +195,6 @@ class EventManager {
         }
     }
 
-    /**
-     * Add delegated event handler
-     * @param {HTMLElement} container - Container element
-     * @param {string} eventType - Event type
-     * @param {string} selector - Target selector
-     * @param {Function} handler - Event handler
-     * @returns {Function} Cleanup function
-     */
-    delegate(container, eventType, selector, handler) {
-        if (!this.initialized) {
-            throw new Error('Event manager must be initialized before use');
-        }
-
-        try {
-            const delegateHandler = (event) => {
-                const target = event.target.closest(selector);
-                if (target && container.contains(target)) {
-                    handler.call(target, event, target);
-                }
-            };
-
-            container.addEventListener(eventType, delegateHandler);
-
-            const delegationId = this.generateDelegationId(container, eventType, selector);
-            this.delegatedEvents.set(delegationId, {
-                container,
-                eventType,
-                handler: delegateHandler
-            });
-
-            this.updateEventState('delegationAdded', { delegationId });
-
-            return () => {
-                container.removeEventListener(eventType, delegateHandler);
-                this.delegatedEvents.delete(delegationId);
-                this.updateEventState('delegationRemoved', { delegationId });
-            };
-
-        } catch (error) {
-            this.handleError('AddDelegation', error);
-            return () => {}; // Return no-op cleanup
-        }
-    }
 
     /**
      * Handle global click events
@@ -348,10 +362,10 @@ class EventManager {
             });
 
             // Remove all delegated events
-            this.delegatedEvents.forEach(({ container, eventType, handler }) => {
-                container.removeEventListener(eventType, handler);
+            this.delegatedEvents.forEach(entry => {
+                entry.context.removeEventListener(entry.eventType, entry.handler, entry.options);
             });
-
+            
             // Clear collections
             this.handlers.clear();
             this.delegatedEvents.clear();
@@ -360,7 +374,7 @@ class EventManager {
             // Reset state
             State.update(EVENTS_STATE_KEY, {
                 activeHandlers: new Set(),
-                delegatedEvents: new Set(),  // Add this
+                delegatedEvents: new Set(), 
                 lastEvent: null,
                 error: null,
                 lastUpdate: new Date()

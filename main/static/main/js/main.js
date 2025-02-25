@@ -7,6 +7,7 @@ import { Events } from '/static/main/js/events.js';
 import { CRUD } from '/static/main/js/crud.js';
 import { API } from '/static/main/js/api.js';
 import { Modal } from '/static/main/js/modals.js';
+import { Forms } from '/static/main/js/forms.js';
 import { NotificationUI, TreeUI, StatusUI } from '/static/main/js/ui.js';
 
 class DashboardManager {
@@ -30,12 +31,59 @@ class DashboardManager {
     }
 
     /**
-     * Initialize dashboard components
+     * Initialize dashboard components with proper dependency order
      */
     async initialize() {
         if (this.initialized) return;
 
         try {
+
+            // Improved error logging
+            window.onerror = function(message, source, lineno, colno, error) {
+                console.error('Dashboard Uncaught Error:', {message, source, lineno, colno, error});
+                return false;
+            };
+
+            // Define initialization order with dependencies
+            const modules = [
+                { module: State, name: 'State' },
+                { module: DOM, name: 'DOM' },
+                { module: Events, name: 'Events' },
+                { module: API, name: 'API' },
+                { module: NotificationUI, name: 'NotificationUI' },
+                { module: StatusUI, name: 'StatusUI' },
+                { module: TreeUI, name: 'TreeUI' },
+                { module: Modal, name: 'Modal' },
+                { module: Forms, name: 'Forms' },
+                { module: CRUD, name: 'CRUD' }
+            ];
+
+            // Skip Event Manager if already initialized
+            if (Events.isInitialized()) {
+                console.log('Events already initialized, skipping');
+                modules.splice(modules.findIndex(m => m.name === 'Events'), 1);
+            }
+
+            // Initialize modules sequentially
+            for (const item of modules) {
+                try {
+                    console.log(`Initializing ${item.name}...`);
+                    await item.module.initialize();
+                } catch (error) {
+                    console.error(`Failed to initialize ${item.name}:`, error);
+                    console.error(`Error details: ${error.message}`);
+
+                    // For non-critical components, we could continue
+                    if (!['State', 'DOM', 'API'].includes(item.name)) {
+                        console.warn(`Continuing without ${item.name}`);
+                        continue;
+                    }
+                    
+                    throw error; // Re-throw for critical components
+                }
+            }
+            
+            // Now it's safe to show UI elements and perform dashboard setup
             StatusUI.show('Initializing dashboard...', { id: 'init' });
             
             // Set up event subscriptions
@@ -53,13 +101,16 @@ class DashboardManager {
                 type: 'success',
                 duration: 2000
             });
+            
+            // Trigger an event indicating core is initialized
+            Events.trigger('core:initialized');
+            
+            console.log('Core initialization complete:', new Date());
 
         } catch (error) {
             console.error('Dashboard initialization error:', error);
-            NotificationUI.show({
-                message: `Failed to initialize dashboard: ${error.message}`,
-                type: 'error'
-            });
+            // Use basic alert if UI components might not be initialized
+            alert(`Failed to initialize application: ${error.message}`);
         }
     }
 
@@ -515,6 +566,46 @@ class DashboardManager {
             }
         });
     }
+
+    /**
+     * Handle edit action
+     */
+    async handleEdit(type, id) {
+        // Placeholder implementation
+        console.log(`Edit ${type} with ID ${id}`);
+        // You can later implement proper edit functionality
+    }
+
+    /**
+     * Handle delete action
+     */
+    async handleDelete(type, id) {
+        // Placeholder implementation
+        console.log(`Delete ${type} with ID ${id}`);
+        // You can later implement proper delete functionality
+    }
+
+    /**
+     * Handle add child action
+     */
+    async handleAddChild(type, id) {
+        // Placeholder implementation
+        console.log(`Add child to ${type} with ID ${id}`);
+        // You can later implement proper add child functionality
+    }
+
+    /**
+     * Handle toggle action
+     */
+    async handleToggle(type, id) {
+        // Placeholder implementation
+        console.log(`Toggle ${type} with ID ${id}`);
+        // You can later implement proper toggle functionality
+        const item = DOM.getElement(`[data-type="${type}"][data-id="${id}"]`);
+        if (item) {
+            TreeUI.toggleNode(item);
+        }
+    }
 }
 
 
@@ -522,9 +613,14 @@ class DashboardManager {
 const Dashboard = new DashboardManager();
 
 // Initialize dashboard when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        Dashboard.initialize();
+    });
+} else {
     Dashboard.initialize();
-});
+}
+
 
 // Export utilities
 export {
@@ -536,6 +632,7 @@ export {
     NotificationUI,
     TreeUI,
     Modal,
+    Forms,
     StatusUI,
     Dashboard
 };

@@ -29,4 +29,8 @@ urlpatterns = [
     path('api/data-imports/', views.create_data_import, name='api-data-imports'),
     path('api/data-imports/<int:import_id>/', views.get_data_import, name='api-data-import-detail'),
     path('api/', include(router.urls)),
+    path('api/fields/', views.ModelFieldsViewSet.as_view({'get': 'list'}), name='field-definitions'),
+    path('api/fields/validation/', views.ModelFieldsViewSet.as_view({'get': 'validation_rules'}), name='validation-rules'),
+    path('api/fields/dependencies/', views.ModelFieldsViewSet.as_view({'get': 'dependencies'}), name='field-dependencies'),
+
 ]

@@ -79,14 +79,12 @@
 
 {% block extra_js %}
 <script type="module">
-    import { Events } from '/static/main/js/events.js';
-    import { NotificationUI } from '/static/main/js/ui.js';
-    import { Modal } from '/static/main/js/modals.js';
-    import { Dashboard } from '/static/main/js/dashboard.js';
+    import { Events, NotificationUI, Modal, Dashboard } from '/static/main/js/main.js';
 
     // Initialize dashboard when core is ready
     Events.addDelegate(document, 'core:initialized', 'body', async (e, target) => {
         try {
+            
             // Section toggle handling
             Events.addDelegate(document, 'click', '[data-action="toggle-section"]', async (e, target) => {
                 try {

@@ -28,11 +28,13 @@
 
 {% block extra_js %}
 <script type="module">
-    document.addEventListener('DOMContentLoaded', () => {
+    import { State, DOM, Events, API, NotificationUI, StatusUI } from '/static/main/js/main.js';
+
+    Events.addDelegate(document, 'core:initialized', 'body', () => {
         const loginForm = document.getElementById('loginForm');
         if (!loginForm) return;
-
-        loginForm.addEventListener('submit', async (e) => {
+        
+        Events.addDelegate(loginForm, 'submit', null, async (e, target) => {
             e.preventDefault();
             const submitButton = loginForm.querySelector('button[type="submit"]');
             
@@ -59,18 +61,12 @@
 
             } catch (error) {
                 console.error('Login error:', error);
-                // Show error message
-                const errorDiv = document.createElement('div');
-                errorDiv.className = 'w3-panel w3-pale-red';
-                errorDiv.innerHTML = `<p>${error.message || 'Login failed. Please try again.'}</p>`;
-                
-                const container = loginForm.closest('.w3-container');
-                container.insertBefore(errorDiv, loginForm);
-
-                // Remove error message after 5 seconds
-                setTimeout(() => {
-                    errorDiv.remove();
-                }, 5000);
+                // Show error message using NotificationUI
+                NotificationUI.show({
+                    message: error.message || 'Login failed. Please try again.',
+                    type: 'error',
+                    duration: 5000
+                });
 
             } finally {
                 // Reset button state

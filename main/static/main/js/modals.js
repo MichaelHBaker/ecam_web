@@ -749,6 +749,32 @@ class ModalManager {
         }
     }
     /**
+     * Handles outside click events with safety checks.
+     * Closes the modal if the click occurs on the modal backdrop.
+     * @private
+     * @param {MouseEvent} event - Mouse event
+     */
+    handleOutsideClick(event) {
+        if (!this.initialized) return;
+        try {
+            // Assume the modal element is the event.currentTarget (the backdrop)
+            const modal = event.currentTarget;
+            // If the click target is the modal itself (i.e. the backdrop), close the modal.
+            if (event.target === modal) {
+                const instanceId = modal.dataset.instanceId;
+                if (instanceId) {
+                    const instance = modalInstances.get(instanceId);
+                    if (instance && instance.config.closeOnOutsideClick) {
+                        this.hide(instance.id);
+                    }
+                }
+            }
+        } catch (error) {
+            this.handleError('Outside Click Handler Error', error);
+        }
+    }
+
+    /**
      * Handles key press events with safety checks
      * @private
      * @param {KeyboardEvent} event - Keyboard event

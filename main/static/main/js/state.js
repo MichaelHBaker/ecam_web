@@ -25,7 +25,12 @@ class StateManager {
     isInitialized() {
         return this.initialized;
     }
-
+ 
+    async initialize() {
+        // No asynchronous setup needed; resolve immediately.
+        return Promise.resolve();
+    }
+    
     /**
      * Get a value from state
      * @param {string} key - State key

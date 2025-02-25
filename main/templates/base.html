@@ -18,7 +18,6 @@
     <link rel="stylesheet" href="{% static 'main/css/main.css' %}">
     <link rel="shortcut icon" type="image/png" href="{% static 'favicon.ico' %}">
     
-    {% block extra_css %}{% endblock %}
 </head>
 <body>
     <header class="w3-container">
@@ -42,125 +41,86 @@
         <p>Copyright © {{ year }}</p>
     </footer>
 
+
     <!-- Base JavaScript -->
-    <script type="module">
-        // Import core modules
-        import { State } from '/static/main/js/state.js';
-        import { DOM } from '/static/main/js/dom.js';
-        import { Events } from '/static/main/js/events.js';
-        import { API } from '/static/main/js/api.js';
-        import { NotificationUI, StatusUI, TreeUI } from '/static/main/js/ui.js';
-        import { Modal } from '/static/main/js/modals.js';
-        import { Forms } from '/static/main/js/forms.js';
-        import { CRUD } from '/static/main/js/crud.js';
+<script type="module">
+    // Import core modules
+    import { State, DOM, Events, API, NotificationUI, StatusUI, TreeUI, Modal, Forms, CRUD, Dashboard } from '/static/main/js/main.js';
 
-        // Initialize core application
-        Events.addDelegate(document, 'DOMContentLoaded', 'body', async (e, target) => {
-            try {
-                // Initial state setup
-                State.set('app_state', {
-                    initialized: false,
-                    lastUpdate: new Date(),
-                    currentPage: window.location.pathname
+    // Wait for DOM to be fully loaded
+    document.addEventListener('DOMContentLoaded', async () => {
+        try {
+            // First ensure Events is initialized before adding any event delegates
+            await Events.initialize();
+            
+            // Navigation handling - only add after Events is initialized
+            Events.addDelegate(document, 'core:initialized', 'body', () => {
+                // Only set up these handlers after core initialization is done
+                Events.addDelegate(document, 'click', '[data-action="navigate"]', async (e, target) => {
+                    e.preventDefault();
+                    const href = target.getAttribute('href');
+                    if (href && href !== '#') {
+                        try {
+                            // Show loading state
+                            StatusUI.show('Loading...');
+                            window.location.href = href;
+                        } catch (error) {
+                            NotificationUI.show({
+                                message: `Navigation failed: ${error.message}`,
+                                type: 'error',
+                                duration: 5000
+                            });
+                        }
+                    }
                 });
 
-                // Initialize core utilities
-                await Promise.all([
-                    DOM.initialize(),
-                    API.initialize(),
-                    Events.initialize()
-                ]);
-
-                // Initialize UI components
-                await Promise.all([
-                    NotificationUI.initialize(),
-                    StatusUI.initialize(),
-                    Modal.initialize()
-                ]);
-
-                // Initialize business logic
-                await Promise.all([
-                    Forms.initialize(),
-                    CRUD.initialize(),
-                    TreeUI.initialize()
-                ]);
-
-                // Update state and trigger initialization complete
-                State.update('app_state', {
-                    initialized: true,
-                    lastUpdate: new Date()
-                });
-
-                Events.trigger('core:initialized');
-                
-                console.log('Core initialization complete:', new Date());
-
-            } catch (error) {
-                console.error('Core initialization failed:', error);
-                NotificationUI.show({
-                    message: `Initialization failed: ${error.message}`,
-                    type: 'error',
-                    duration: 5000
-                });
-            }
-        });
-
-        // Navigation handling
-        Events.addDelegate(document, 'click', '[data-action="navigate"]', async (e, target) => {
-            e.preventDefault();
-            const href = target.getAttribute('href');
-            if (href && href !== '#') {
-                try {
-                    // Show loading state
-                    StatusUI.show('Loading...');
-                    window.location.href = href;
-                } catch (error) {
+                // Global error handling
+                Events.addDelegate(window, 'error', 'body', (e, target) => {
                     NotificationUI.show({
-                        message: `Navigation failed: ${error.message}`,
+                        message: `Error: ${e.error?.message || e.message}`,
                         type: 'error',
                         duration: 5000
                     });
-                }
-            }
-        });
+                });
 
-        // Global error handling
-        Events.addDelegate(window, 'error', 'body', (e, target) => {
-            NotificationUI.show({
-                message: `Error: ${e.error?.message || e.message}`,
-                type: 'error',
-                duration: 5000
+                // Unhandled promise rejection handling
+                Events.addDelegate(window, 'unhandledrejection', 'body', (e, target) => {
+                    NotificationUI.show({
+                        message: `Async Error: ${e.reason?.message || e.reason}`,
+                        type: 'error',
+                        duration: 5000
+                    });
+                });
+
+                // Online/offline status handling
+                Events.addDelegate(window, 'online', 'body', () => {
+                    NotificationUI.show({
+                        message: 'Connection restored',
+                        type: 'success',
+                        duration: 3000
+                    });
+                });
+
+                Events.addDelegate(window, 'offline', 'body', () => {
+                    NotificationUI.show({
+                        message: 'Connection lost',
+                        type: 'warning',
+                        duration: 0,
+                        closeable: true
+                    });
+                });
             });
-        });
+            
+            // Let main.js handle the rest of initialization
+            // This will eventually trigger 'core:initialized' when done
+            
+        } catch (error) {
+            console.error('Base initialization error:', error);
+            // Simple alert as UI components might not be available
+            alert(`Base initialization error: ${error.message}`);
+        }
+    });
+</script>
 
-        // Unhandled promise rejection handling
-        Events.addDelegate(window, 'unhandledrejection', 'body', (e, target) => {
-            NotificationUI.show({
-                message: `Async Error: ${e.reason?.message || e.reason}`,
-                type: 'error',
-                duration: 5000
-            });
-        });
-
-        // Online/offline status handling
-        Events.addDelegate(window, 'online', 'body', () => {
-            NotificationUI.show({
-                message: 'Connection restored',
-                type: 'success',
-                duration: 3000
-            });
-        });
-
-        Events.addDelegate(window, 'offline', 'body', () => {
-            NotificationUI.show({
-                message: 'Connection lost',
-                type: 'warning',
-                duration: 0,
-                closeable: true
-            });
-        });
-    </script>
-
-    {% block extra_js %}{% endblock %}
 </body>
 </html>

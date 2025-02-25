@@ -22,8 +22,8 @@ class EventManager {
      */
     async initialize() {
         if (this.initialized) {
-            console.warn('Event manager already initialized');
-            return;
+            console.log('Event manager already initialized');
+            return this;
         }
 
         try {
@@ -84,19 +84,26 @@ class EventManager {
         if (!this.initialized) {
             throw new Error('Event manager must be initialized before use');
         }
-
+    
         try {
             const listener = (event) => {
+                // For custom events, we might not have a proper target
+                if (!event.target || typeof event.target.closest !== 'function') {
+                    // Handle custom events differently
+                    handler.call(context, event, context);
+                    return;
+                }
+                
                 const target = event.target.closest(selector);
-                if (target  && context.contains(target)) {
+                if (target && context.contains(target)) {
                     handler.call(target, event, target);
                 }
             };
-
+    
             context.addEventListener(eventType, listener, options);
-
+    
             const delegationId = this.generateDelegationId(context, eventType, selector);
-
+    
             // Track in delegatedEvents map
             this.delegatedEvents.set(delegationId, {
                 context,
@@ -105,7 +112,7 @@ class EventManager {
                 selector,
                 options
             });
-
+    
             // Track in state
             this.updateEventState('delegateAdded', {
                 delegationId,
@@ -114,7 +121,7 @@ class EventManager {
                 selector,
                 timestamp: new Date()
             });
-
+    
             // Return remove function
             return () => {
                 context.removeEventListener(eventType, listener, options);
@@ -124,6 +131,39 @@ class EventManager {
         } catch (error) {
             this.handleError('AddDelegate', error);
             return () => {}; // Return no-op function
+        }
+    }
+
+    /**
+     * Trigger an event
+     * @param {string} eventName - Name of the event to trigger
+     * @param {Object} data - Optional event data
+     */
+    trigger(eventName, data = {}) {
+        if (!this.initialized) {
+            throw new Error('Event manager must be initialized before use');
+        }
+
+        try {
+            // Create and dispatch custom event
+            const event = new CustomEvent(eventName, {
+                detail: data,
+                bubbles: true,
+                cancelable: true
+            });
+            
+            document.dispatchEvent(event);
+            
+            // Update state
+            this.updateEventState('triggered', {
+                eventName,
+                timestamp: new Date()
+            });
+            
+            return true;
+        } catch (error) {
+            this.handleError('Trigger Event', error);
+            return false;
         }
     }
 
@@ -365,7 +405,7 @@ class EventManager {
             this.delegatedEvents.forEach(entry => {
                 entry.context.removeEventListener(entry.eventType, entry.handler, entry.options);
             });
-            
+
             // Clear collections
             this.handlers.clear();
             this.delegatedEvents.clear();

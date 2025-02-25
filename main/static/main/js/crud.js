@@ -49,38 +49,21 @@ class TreeItemManager {
             console.warn('CRUD Manager already initialized');
             return this;
         }
-
+    
         try {
-            // Check dependencies
-            if (!State.isInitialized()) {
-                throw new Error('State must be initialized before CRUD Manager');
-            }
-            if (!API.isInitialized()) {
-                throw new Error('API must be initialized before CRUD Manager');
-            }
-            if (!DOM.isInitialized()) {
-                throw new Error('DOM must be initialized before CRUD Manager');
-            }
-            if (!TreeUI.isInitialized()) {
-                throw new Error('TreeUI must be initialized before CRUD Manager');
-            }
-
-            // Now bind methods after they're defined
-            this.handleSubmit = this.handleSubmit.bind(this);
-            this.handleCancel = this.handleCancel.bind(this);
-            this.handleOperationTimeout = this.handleOperationTimeout.bind(this);
-
+            // No method binding here - do it where the methods are defined
+    
             // Initialize state
             await this.initializeState();
             
             // Setup state subscriptions
             await this.setupStateSubscriptions();
-
+    
             this.initialized = true;
             console.log('CRUD Manager initialized');
-
+    
             return this;
-
+    
         } catch (error) {
             this.handleError('Initialization Error', error);
             throw error;
@@ -1264,6 +1247,150 @@ class TreeItemManager {
             this.handleError('Destroy Error', error);
         }
     }
+
+    /**
+     * Handle active node change
+     * @private
+     */
+    async handleActiveNodeChange(activeNode) {
+        // Placeholder implementation
+        console.log('Active node changed:', activeNode);
+    }
+
+    /**
+     * Find related operation for an error
+     * @private
+     */
+    findRelatedOperation(error) {
+        // Placeholder implementation
+        return null;
+    }
+
+    /**
+     * Handle permission error
+     * @private
+     */
+    async handlePermissionError(error) {
+        // Placeholder implementation
+        console.warn('Permission error:', error);
+        NotificationUI.show({
+            message: 'Permission denied: ' + error.message,
+            type: 'error',
+            duration: 5000
+        });
+    }
+
+    /**
+     * Show conflict resolution UI
+     * @private
+     */
+    async showConflictResolution(item, serverVersion) {
+        // Placeholder implementation
+        console.warn('Conflict resolution needed for item:', item, 'Server version:', serverVersion);
+    }
+
+    /**
+     * Validate update data
+     * @private
+     */
+    async validateUpdateData(type, data) {
+        // Placeholder implementation
+        return true;
+    }
+
+    /**
+     * Update item UI
+     * @private
+     */
+    async updateItemUI(item, data) {
+        // Placeholder implementation
+        if (data.name) {
+            const nameEl = item.querySelector('.item-name');
+            if (nameEl) nameEl.textContent = data.name;
+        }
+    }
+
+    /**
+     * Finalize update with server data
+     * @private
+     */
+    async finalizeUpdate(item, response) {
+        // Placeholder implementation
+        return;
+    }
+
+    /**
+     * Handle successful update
+     * @private
+     */
+    async handleSuccessfulUpdate(type, id, response) {
+        // Placeholder implementation
+        return;
+    }
+
+    /**
+     * Rollback delete operation
+     * @private
+     */
+    async rollbackDelete(parent, nextSibling, item, state) {
+        // Placeholder implementation
+        if (parent) {
+            if (nextSibling) {
+                parent.insertBefore(item, nextSibling);
+            } else {
+                parent.appendChild(item);
+            }
+            await this.rollbackItemState(item, state);
+        }
+    }
+
+    /**
+     * Handle successful deletion
+     * @private
+     */
+    async handleSuccessfulDeletion(type, id) {
+        // Placeholder implementation
+        return;
+    }
+
+    /**
+     * Validate submit data
+     * @private
+     */
+    async validateSubmitData(type, data) {
+        // Placeholder implementation
+        return true;
+    }
+
+    /**
+     * Show form error
+     * @private
+     */
+    showFormError(form, error) {
+        // Placeholder implementation
+        const errorContainer = form.querySelector('.form-error');
+        if (errorContainer) {
+            errorContainer.textContent = error.message;
+            errorContainer.style.display = 'block';
+        }
+    }
+
+    /**
+     * Handle form cancel
+     * @private
+     */
+    handleCancel(form) {
+        // Placeholder implementation
+        if (form && form.parentNode) {
+            form.classList.add('w3-animate-opacity');
+            form.style.opacity = '0';
+            
+            setTimeout(() => {
+                form.remove();
+            }, 300);
+        }
+    }
+
 }
 
 // Create and export singleton instance

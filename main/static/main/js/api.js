@@ -421,7 +421,7 @@ export const API = {
     // Model field endpoints
     ModelFields: {
         getFields: () => client.request('fields/'),
-        getValidationRules: () => client.request('fields/validation-rules/'),
+        getValidationRules: () => client.request('fields/validation/'),
         getDependencies: () => client.request('fields/dependencies/')
     },
 

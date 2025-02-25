@@ -240,6 +240,7 @@ class APIClient {
     }
 
     updateState(update) {
+        console.log('API State Update:', update);
         State.update(API_STATE_KEY, {
             ...update,
             lastUpdate: new Date()

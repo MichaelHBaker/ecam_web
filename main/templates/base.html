@@ -19,7 +19,7 @@
     <link rel="shortcut icon" type="image/png" href="{% static 'favicon.ico' %}">
     
 </head>
-<body>
+<body {% block body_attributes %}{% endblock %}>
     <header class="w3-container">
         <h5 class="w3-center">Energy Charting and Metrics (ECAM web version)</h5>
     </header>
@@ -41,86 +41,142 @@
         <p>Copyright © {{ year }}</p>
     </footer>
 
-
     <!-- Base JavaScript -->
-<script type="module">
-    // Import core modules
-    import { State, DOM, Events, API, NotificationUI, StatusUI, TreeUI, Modal, Forms, CRUD, Dashboard } from '/static/main/js/main.js';
+    <script type="module">
+        // Import core modules
+        import { State, DOM, Events, API, NotificationUI, StatusUI, TreeUI, Modal, Forms, CRUD, Dashboard } from '/static/main/js/main.js';
+    
+        // Wait for DOM to be fully loaded
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                // First ensure Events is initialized before adding any event delegates
+                await Events.initialize();
+                
+                // Add page type detection for page-specific initialization
+                const pageType = document.body.getAttribute('data-page-type') || 'page';
+                console.log(`Page type detected: ${pageType}`);
+                
+                // Listen for core initialization
+                Events.addDelegate(document, 'core:initialized', 'body', () => {
+                    console.log('Core initialized, setting up global handlers');
+                       
+                    // Global error handling
+                    Events.addDelegate(window, 'error', 'body', (e, target) => {
+                        NotificationUI.show({
+                            message: `Error: ${e.error?.message || e.message}`,
+                            type: 'error',
+                            duration: 5000
+                        });
+                    });
+    
+                    // Unhandled promise rejection handling
+                    Events.addDelegate(window, 'unhandledrejection', 'body', (e, target) => {
+                        NotificationUI.show({
+                            message: `Async Error: ${e.reason?.message || e.reason}`,
+                            type: 'error',
+                            duration: 5000
+                        });
+                    });
+    
+                    // Online/offline status handling
+                    Events.addDelegate(window, 'online', 'body', () => {
+                        NotificationUI.show({
+                            message: 'Connection restored',
+                            type: 'success',
+                            duration: 3000
+                        });
+                    });
+    
+                    Events.addDelegate(window, 'offline', 'body', () => {
+                        NotificationUI.show({
+                            message: 'Connection lost',
+                            type: 'warning',
+                            duration: 0,
+                            closeable: true
+                        });
+                    });
+                    
+                    // Trigger page-specific initialization
+                    console.log(`Triggering ${pageType}:ready event`);
+                    Events.trigger(`${pageType}:ready`);
+                });
+                
+            } catch (error) {
+                console.error('Base initialization error:', error);
+                // Simple alert as UI components might not be available
+                alert(`Base initialization error: ${error.message}`);
+            }
+        });
+    </script>
 
-    // Wait for DOM to be fully loaded
-    document.addEventListener('DOMContentLoaded', async () => {
-        try {
-            // First ensure Events is initialized before adding any event delegates
-            await Events.initialize();
+    <!-- Include any page-specific JavaScript -->
+    {% block extra_js %}{% endblock %}
+
+    <!-- Direct section toggle functionality -->
+    <script>
+    (function() {
+        // Execute when DOM is fully loaded
+        function initSectionToggles() {
+            console.log('Setting up section toggles directly');
             
-            // Navigation handling - only add after Events is initialized
-            Events.addDelegate(document, 'core:initialized', 'body', () => {
-                // Only set up these handlers after core initialization is done
-                Events.addDelegate(document, 'click', '[data-action="navigate"]', async (e, target) => {
-                    e.preventDefault();
-                    const href = target.getAttribute('href');
-                    if (href && href !== '#') {
-                        try {
-                            // Show loading state
-                            StatusUI.show('Loading...');
-                            window.location.href = href;
-                        } catch (error) {
-                            NotificationUI.show({
-                                message: `Navigation failed: ${error.message}`,
-                                type: 'error',
-                                duration: 5000
-                            });
+            // Global click handler for all toggle buttons
+            document.body.addEventListener('click', function(event) {
+                // Find if click was on or inside a toggle button
+                var toggleButton = event.target.closest('[data-action="toggle-section"]');
+                
+                if (toggleButton) {
+                    console.log('Section toggle clicked:', toggleButton);
+                    event.preventDefault();
+                    
+                    // Get section name and find content
+                    var sectionName = toggleButton.getAttribute('data-section');
+                    var sectionContent = document.querySelector('[data-content="' + sectionName + '"]');
+                    
+                    if (!sectionContent) {
+                        console.log('No content found for section:', sectionName);
+                        return;
+                    }
+                    
+                    // Toggle visibility
+                    var isHidden = sectionContent.classList.contains('w3-hide');
+                    console.log('Section is hidden:', isHidden);
+                    
+                    if (isHidden) {
+                        // Show section
+                        sectionContent.classList.remove('w3-hide');
+                        
+                        // Update icon
+                        var icon = toggleButton.querySelector('i');
+                        if (icon) {
+                            icon.classList.remove('bi-chevron-right');
+                            icon.classList.add('bi-chevron-down');
+                        }
+                    } else {
+                        // Hide section
+                        sectionContent.classList.add('w3-hide');
+                        
+                        // Update icon
+                        var icon = toggleButton.querySelector('i');
+                        if (icon) {
+                            icon.classList.remove('bi-chevron-down');
+                            icon.classList.add('bi-chevron-right');
                         }
                     }
-                });
-
-                // Global error handling
-                Events.addDelegate(window, 'error', 'body', (e, target) => {
-                    NotificationUI.show({
-                        message: `Error: ${e.error?.message || e.message}`,
-                        type: 'error',
-                        duration: 5000
-                    });
-                });
-
-                // Unhandled promise rejection handling
-                Events.addDelegate(window, 'unhandledrejection', 'body', (e, target) => {
-                    NotificationUI.show({
-                        message: `Async Error: ${e.reason?.message || e.reason}`,
-                        type: 'error',
-                        duration: 5000
-                    });
-                });
-
-                // Online/offline status handling
-                Events.addDelegate(window, 'online', 'body', () => {
-                    NotificationUI.show({
-                        message: 'Connection restored',
-                        type: 'success',
-                        duration: 3000
-                    });
-                });
-
-                Events.addDelegate(window, 'offline', 'body', () => {
-                    NotificationUI.show({
-                        message: 'Connection lost',
-                        type: 'warning',
-                        duration: 0,
-                        closeable: true
-                    });
-                });
+                    
+                    console.log('Section toggle complete');
+                }
             });
             
-            // Let main.js handle the rest of initialization
-            // This will eventually trigger 'core:initialized' when done
-            
-        } catch (error) {
-            console.error('Base initialization error:', error);
-            // Simple alert as UI components might not be available
-            alert(`Base initialization error: ${error.message}`);
+            console.log('Section toggle setup complete');
         }
-    });
-</script>
-
+        
+        // Set up toggles when DOM is loaded
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initSectionToggles);
+        } else {
+            initSectionToggles();
+        }
+    })();
+    </script>
 </body>
 </html>

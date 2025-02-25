@@ -106,6 +106,30 @@ class DashboardManager {
             Events.trigger('core:initialized');
             
             console.log('Core initialization complete:', new Date());
+            
+            setTimeout(() => {
+                // Force loading state to false
+                State.update('api_state', {
+                    loading: false,
+                    lastUpdate: new Date()
+                });
+                
+                // Hide any spinning elements directly
+                document.querySelectorAll('.w3-spin, .bi-arrow-repeat').forEach(el => {
+                    el.classList.remove('w3-spin');
+                    // Try to find and hide parent containers
+                    const container = el.closest('.status-item, .loading-container');
+                    if (container) {
+                        container.style.display = 'none';
+                    }
+                });
+                
+                // Also check StatusUI
+                StatusUI.hide('init');
+                StatusUI.hide('loading');
+                StatusUI.hide('filter');
+                StatusUI.hide('save');
+            }, 1000);
 
         } catch (error) {
             console.error('Dashboard initialization error:', error);
@@ -551,11 +575,11 @@ class DashboardManager {
 
         // Subscribe to API state
         State.subscribe('api_state', (newState) => {
+            console.log('API State Changed:', newState);
             this.loadingState = newState.loading;
-            DOM.getElement('#loadingOverlay')?.classList.toggle(
-                'w3-show', 
-                this.loadingState
-            );
+            const overlay = DOM.getElement('#loadingOverlay');
+            console.log('Loading Overlay Element:', overlay, 'Setting visible:', this.loadingState);
+            overlay?.classList.toggle('w3-show', this.loadingState);
         });
 
         // Subscribe to filter changes

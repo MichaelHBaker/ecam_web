@@ -3,6 +3,8 @@
 
 {% block title %}ECAM Web{% endblock %}
 
+{% block body_attributes %}data-page-type="dashboard"{% endblock %}
+
 {% block content %}
 <!-- Main Content -->
 <main class="w3-container" style="margin-top: 80px;">
@@ -81,61 +83,57 @@
 <script type="module">
     import { Events, NotificationUI, Modal, Dashboard } from '/static/main/js/main.js';
 
-    // Initialize dashboard when core is ready
-    Events.addDelegate(document, 'core:initialized', 'body', async (e, target) => {
+    console.log('Dashboard script loaded');
+    
+    // Add section toggle handler using Events module
+    Events.addDelegate(document, 'dashboard:ready', 'body', function(e, target) {
+        console.log('Dashboard initialization started');
+        
         try {
-            
-            // Section toggle handling
-            Events.addDelegate(document, 'click', '[data-action="toggle-section"]', async (e, target) => {
-                try {
-                    const sectionName = target.dataset.section;
-                    const contentDiv = document.querySelector(`[data-content="${sectionName}"]`);
-                    const icon = target.querySelector('.bi');
-                    const isExpanding = contentDiv.classList.contains('w3-hide');
+            // Section toggling
+            Events.addDelegate(document, 'click', '[data-action="toggle-section"]', function(e, target) {
+                console.log('Toggle section clicked:', target);
+                e.preventDefault();
+                
+                const sectionName = target.getAttribute('data-section');
+                console.log('Section name:', sectionName);
+                
+                if (!sectionName) return;
+                
+                const sectionContent = document.querySelector(`[data-content="${sectionName}"]`);
+                console.log('Section content:', sectionContent);
+                
+                if (!sectionContent) return;
+                
+                // Toggle visibility
+                const isHidden = sectionContent.classList.contains('w3-hide');
+                console.log('Is hidden:', isHidden);
+                
+                if (isHidden) {
+                    // Show section
+                    sectionContent.classList.remove('w3-hide');
                     
-                    if (isExpanding) {
-                        contentDiv.classList.remove('w3-hide');
+                    // Update icon
+                    const icon = target.querySelector('i');
+                    if (icon) {
                         icon.classList.remove('bi-chevron-right');
                         icon.classList.add('bi-chevron-down');
-                        
-                        // Section-specific initialization
-                        if (sectionName === 'projects') {
-                            const loadingDiv = contentDiv.querySelector('.tree-loading');
-                            const noResultsDiv = contentDiv.querySelector('.no-results');
-                            const treeWrapper = contentDiv.querySelector('.tree-wrapper');
-                            
-                            try {
-                                loadingDiv.classList.remove('w3-hide');
-                                await Dashboard.initializeTree();
-                                loadingDiv.classList.add('w3-hide');
-                                
-                                // Show no results if tree is empty
-                                if (!treeWrapper.children.length) {
-                                    noResultsDiv.classList.remove('w3-hide');
-                                }
-                            } catch (err) {
-                                loadingDiv.classList.add('w3-hide');
-                                NotificationUI.show({
-                                    message: `Failed to load projects: ${err.message}`,
-                                    type: 'error',
-                                    duration: 5000
-                                });
-                            }
-                        }
-                    } else {
-                        contentDiv.classList.add('w3-hide');
+                    }
+                } else {
+                    // Hide section
+                    sectionContent.classList.add('w3-hide');
+                    
+                    // Update icon
+                    const icon = target.querySelector('i');
+                    if (icon) {
                         icon.classList.remove('bi-chevron-down');
                         icon.classList.add('bi-chevron-right');
                     }
-                } catch (error) {
-                    NotificationUI.show({
-                        message: `Error toggling section: ${error.message}`,
-                        type: 'error',
-                        duration: 5000
-                    });
                 }
+                
+                console.log('Section toggled');
             });
-
+            
             // Project filtering
             Events.addDelegate(document, 'click', '[data-action="filter-projects"]', (e, target) => {
                 e.preventDefault();
@@ -176,14 +174,29 @@
                     title: 'Add New Project',
                     type: 'form',
                     width: '500px',
-                    content: await Dashboard.getProjectForm()
+                    content: Dashboard.getProjectForm()
                 });
             });
-
-            // Add any additional event handlers here...
-
+            
+            // Handle form submissions
+            Events.addDelegate(document, 'submit', '[data-action="filter-form"]', async (e, target) => {
+                e.preventDefault();
+                try {
+                    const formData = new FormData(target);
+                    await Dashboard.applyFilter(Object.fromEntries(formData));
+                    Modal.hide('filter-projects');
+                } catch (error) {
+                    NotificationUI.show({
+                        message: `Error applying filter: ${error.message}`,
+                        type: 'error',
+                        duration: 5000
+                    });
+                }
+            });
+            
+            console.log('Dashboard initialization complete');
         } catch (error) {
-            console.error('Error initializing dashboard:', error);
+            console.error('Dashboard initialization error:', error);
             NotificationUI.show({
                 message: `Dashboard initialization error: ${error.message}`,
                 type: 'error',
@@ -193,20 +206,75 @@
         }
     });
 
-    // Handle form submissions
-    Events.addDelegate(document, 'submit', '[data-action="filter-form"]', async (e, target) => {
-        e.preventDefault();
-        try {
-            const formData = new FormData(target);
-            await Dashboard.applyFilter(Object.fromEntries(formData));
-            Modal.hide('filter-projects');
-        } catch (error) {
-            NotificationUI.show({
-                message: `Error applying filter: ${error.message}`,
-                type: 'error',
-                duration: 5000
+    // Also add a direct event listener to help with debugging
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('DOM content loaded, dashboard ready?');
+        
+        // Add a manual trigger for dashboard:ready in case it doesn't fire automatically
+        setTimeout(function() {
+            if (!window._dashboardInitialized) {
+                console.log('Manually triggering dashboard:ready event');
+                document.dispatchEvent(new CustomEvent('dashboard:ready'));
+                window._dashboardInitialized = true;
+            }
+        }, 1000);
+    });
+</script>
+
+<!-- Fallback direct script for section toggling -->
+<script>
+    // Wait for DOM to be loaded
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log('DOM loaded, setting up fallback section toggling');
+        
+        // Find all toggle buttons
+        const toggleButtons = document.querySelectorAll('[data-action="toggle-section"]');
+        console.log('Found toggle buttons:', toggleButtons.length);
+        
+        // Add direct click handlers
+        toggleButtons.forEach(function(button) {
+            button.addEventListener('click', function(e) {
+                console.log('FALLBACK: Section toggle clicked');
+                e.preventDefault();
+                
+                const sectionName = this.getAttribute('data-section');
+                if (!sectionName) return;
+                
+                const sectionContent = document.querySelector(`[data-content="${sectionName}"]`);
+                if (!sectionContent) return;
+                
+                // Toggle visibility
+                const isHidden = sectionContent.classList.contains('w3-hide');
+                
+                if (isHidden) {
+                    // Show section
+                    sectionContent.classList.remove('w3-hide');
+                    
+                    // Update icon
+                    const icon = this.querySelector('i');
+                    if (icon) {
+                        icon.classList.remove('bi-chevron-right');
+                        icon.classList.add('bi-chevron-down');
+                    }
+                } else {
+                    // Hide section
+                    sectionContent.classList.add('w3-hide');
+                    
+                    // Update icon
+                    const icon = this.querySelector('i');
+                    if (icon) {
+                        icon.classList.remove('bi-chevron-down');
+                        icon.classList.add('bi-chevron-right');
+                    }
+                }
             });
-        }
+        });
     });
 </script>
 {% endblock %}
+
+<script>
+    // Add this at the very end of your dashboard.html file
+    console.log('TEST SCRIPT EXECUTED AT END OF PAGE');
+    alert('Is JavaScript working?');
+</script>

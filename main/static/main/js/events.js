@@ -71,8 +71,10 @@ class EventManager {
         return this.initialized;
     }
 
+    _originalAddDelegate = null;
+
     /**
-     * Add delegated event listener
+     * Add delegated event listener with improved event delegation handling
      * @param {HTMLElement|Document} context - Context element
      * @param {string} eventType - Event type
      * @param {string} selector - Delegate selector
@@ -81,30 +83,51 @@ class EventManager {
      * @returns {Function} Remove listener function
      */
     addDelegate(context, eventType, selector, handler, options = {}) {
+        console.log(`[Events] Adding delegation: ${eventType} for '${selector}'`);
+        
         if (!this.initialized) {
+            console.error(`[Events] Not initialized when adding delegation for ${eventType} - ${selector}`);
             throw new Error('Event manager must be initialized before use');
         }
-    
+
         try {
+            // Create a listener function that handles both standard and custom events
             const listener = (event) => {
-                // For custom events, we might not have a proper target
-                if (!event.target || typeof event.target.closest !== 'function') {
-                    // Handle custom events differently
+                // Handle custom events (those with colon in the name, like 'dashboard:ready')
+                if (eventType.includes(':') || !event.target || typeof event.target.closest !== 'function') {
                     handler.call(context, event, context);
                     return;
                 }
                 
-                const target = event.target.closest(selector);
-                if (target && context.contains(target)) {
-                    handler.call(target, event, target);
+                // First check if target itself matches
+                let matchedElement = null;
+                
+                // Check if target matches directly
+                if (event.target.matches && event.target.matches(selector)) {
+                    matchedElement = event.target;
+                } 
+                // Otherwise find closest ancestor that matches
+                else if (event.target.closest) {
+                    matchedElement = event.target.closest(selector);
+                }
+                
+                // Skip context check for document/window
+                const skipContextCheck = context === document || context === window;
+                
+                // Call handler if we found a match and it's in context
+                if (matchedElement && (skipContextCheck || context.contains(matchedElement))) {
+                    // Call handler with matched element as this and second parameter
+                    handler.call(matchedElement, event, matchedElement);
                 }
             };
-    
+
+            // Add the event listener to the context
             context.addEventListener(eventType, listener, options);
-    
+
+            // Generate a unique ID for this delegation
             const delegationId = this.generateDelegationId(context, eventType, selector);
-    
-            // Track in delegatedEvents map
+            
+            // Store in our delegation map
             this.delegatedEvents.set(delegationId, {
                 context,
                 eventType,
@@ -112,8 +135,8 @@ class EventManager {
                 selector,
                 options
             });
-    
-            // Track in state
+            
+            // Update state
             this.updateEventState('delegateAdded', {
                 delegationId,
                 context: context === document ? 'document' : context.id || 'unknown',
@@ -121,7 +144,7 @@ class EventManager {
                 selector,
                 timestamp: new Date()
             });
-    
+            
             // Return remove function
             return () => {
                 context.removeEventListener(eventType, listener, options);
@@ -129,6 +152,7 @@ class EventManager {
                 this.updateEventState('delegateRemoved', { delegationId });
             };
         } catch (error) {
+            console.error(`[Events] ERROR in addDelegate for ${eventType} - ${selector}:`, error);
             this.handleError('AddDelegate', error);
             return () => {}; // Return no-op function
         }
@@ -242,6 +266,9 @@ class EventManager {
      */
     handleGlobalClick(event) {
         try {
+            // Only log detailed information for debugging, not in production
+            // console.log(`[Events] Global click handler triggered on:`, event.target);
+            
             this.updateEventState('globalClick', {
                 target: event.target,
                 timestamp: new Date()
@@ -258,7 +285,6 @@ class EventManager {
             if (event.target.classList.contains('modal')) {
                 event.target.style.display = 'none';
             }
-
         } catch (error) {
             this.handleError('GlobalClick', error);
         }

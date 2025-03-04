@@ -2,8 +2,9 @@
 {% load static %}
 
 {% block title %}Login{% endblock %}
-
+{% block body_attributes %}data-page-type="login"{% endblock %}
 {% block content %}
+
 <div class="w3-container w3-padding-64">
     <div class="w3-card-4 w3-white" style="max-width: 500px; margin: 0 auto;">
         <div class="w3-container w3-blue">
@@ -27,62 +28,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script type="module">
-    import { State, DOM, Events, API, NotificationUI, StatusUI } from '/static/main/js/main.js';
-
-    // Set page type for coordinated initialization
-    document.body.setAttribute('data-page-type', 'login');
-    
-    // Listen for login-specific initialization
-    Events.addDelegate(document, 'login:ready', 'body', () => {
-        console.log('Login page initialization');
-        
-        const loginForm = document.getElementById('loginForm');
-        if (!loginForm) return;
-        
-        Events.addDelegate(loginForm, 'submit', null, async (e, target) => {
-            e.preventDefault();
-            const submitButton = loginForm.querySelector('button[type="submit"]');
-            
-            try {
-                // Show loading state
-                submitButton.disabled = true;
-                submitButton.innerHTML = '<i class="bi bi-arrow-repeat w3-spin"></i> Logging in...';
-
-                const formData = new FormData(loginForm);
-                const response = await fetch(loginForm.action, {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-CSRFToken': formData.get('csrfmiddlewaretoken')
-                    }
-                });
-
-                if (response.ok) {
-                    // Reset button BEFORE navigation
-                    submitButton.disabled = false;
-                    submitButton.textContent = 'Login';
-                    
-                    // THEN redirect
-                    window.location.href = '/dashboard/';
-                } else {
-                    throw new Error('Invalid credentials');
-                }
-
-            } catch (error) {
-                console.error('Login error:', error);
-                // Show error message using NotificationUI
-                NotificationUI.show({
-                    message: error.message || 'Login failed. Please try again.',
-                    type: 'error',
-                    duration: 5000
-                });
-                
-                // Reset button state
-                submitButton.disabled = false;
-                submitButton.textContent = 'Login';
-            }
-        });
-    });
-</script>
+<script type="module" src="{% static 'main/js/page/login.js' %}"></script>
 {% endblock %}

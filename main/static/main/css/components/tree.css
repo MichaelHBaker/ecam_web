@@ -12,53 +12,91 @@
     min-height: 50px;
 }
 
-/* Tree item */
+/* Tree item base structure */
 .tree-item {
+    width: 100%;
     position: relative;
-    margin: 4px 0;
+    margin-bottom: 2px;
 }
 
+/* Tree item content - ensure it stays on one line */
 .tree-item-content {
-    padding: 4px 8px;
+    display: flex !important;
+    align-items: center !important;
+    flex-wrap: nowrap !important;
+    width: 100%;
+    padding: 8px;
 }
 
 /* Toggle button */
-.toggle-btn {
-    width: 32px;
-    transition: transform 0.3s ease;
+.toggle-btn, 
+[data-action="toggle"] {
+    width: 40px !important;
+    flex-shrink: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
 }
 
-.toggle-btn i {
-    transition: transform 0.3s ease;
+/* Spacer for alignment */
+.spacer {
+    width: 40px;
+    flex-shrink: 0;
 }
 
 /* Item data */
 .item-data {
-    flex-grow: 1;
-    padding: 4px 0;
+    flex: 1 !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    margin: 0 8px;
 }
 
 .item-name {
     display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
 }
 
 .item-description {
-    margin-top: 2px;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.85em;
 }
 
 /* Action buttons */
 .item-actions {
-    visibility: hidden;
+    display: flex !important;
+    align-items: center !important;
+    flex-shrink: 0 !important;
+    margin-left: auto !important;
+    white-space: nowrap !important;
 }
 
-.tree-item:hover .item-actions {
-    visibility: visible;
+.item-actions .w3-button {
+    padding: 4px 8px;
+    min-width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Indentation for nested levels */
+.tree-item[data-type="location"] {
+    margin-left: 24px;
+}
+
+.tree-item[data-type="measurement"] {
+    margin-left: 48px;
 }
 
 /* Children container */
 .children-container {
-    margin-left: 32px;
-    overflow: hidden;
+    width: 100%;
 }
 
 /* Loading indicator */
@@ -67,35 +105,24 @@
     text-align: center;
 }
 
-/* Empty state */
-.tree-empty {
-    padding: 20px;
-    text-align: center;
-}
-
-/* Error state */
-.tree-error {
-    padding: 16px;
-}
-
-/* Tree animations */
-.tree-item.w3-animate-opacity {
-    animation-duration: 0.3s;
-}
-
-.children-container.w3-animate-opacity {
-    animation-duration: 0.3s;
-}
-
 /* Responsive adjustments */
 @media (max-width: 600px) {
-    .children-container {
+    .tree-item[data-type="location"] {
         margin-left: 16px;
     }
+
+    .tree-item[data-type="measurement"] {
+        margin-left: 32px;
+    }
     
-    .item-actions {
-        position: relative;
-        visibility: visible;
-        margin-top: 4px;
+    .item-actions .w3-button {
+        padding: 4px;
+        min-width: 28px;
+    }
+    
+    .toggle-btn,
+    [data-action="toggle"],
+    .spacer {
+        width: 32px !important;
     }
 }

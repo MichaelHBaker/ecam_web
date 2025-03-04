@@ -5,6 +5,7 @@ import { State } from './state.js';
 import { DOM } from './dom.js';
 import { API } from './api.js';
 import { NotificationUI } from './ui.js';
+import { Events } from './events.js';
 
 const TREE_STATE_KEY = 'tree_state';
 
@@ -44,10 +45,13 @@ class TreeManager {
             }
         };
 
-        // Bind methods
-        this.handleNodeClick = this.handleNodeClick.bind(this);
-        this.handleNodeAction = this.handleNodeAction.bind(this);
-        this.handleFilter = this.handleFilter.bind(this);
+        // Inside the TreeManager constructor, add:
+        this.cachedData = {
+            project: [],
+            location: [],
+            measurement: []
+        };
+
     }
 
     /**
@@ -70,7 +74,7 @@ class TreeManager {
 
     /**
      * Initialize tree manager with dependency checks
-     * @param {string} containerId - Container element ID
+     * @param {string|HTMLElement} containerId - Container element ID or element
      * @returns {Promise<TreeManager>} Initialized instance
      */
     async initialize(containerId) {
@@ -91,8 +95,40 @@ class TreeManager {
                 throw new Error('DOM must be initialized before TreeManager');
             }
 
-            // Get container
-            this.container = DOM.getElement(containerId);
+            // Enhanced container lookup - try multiple methods to find the container
+            console.log('Looking for container:', containerId);
+            
+            this.container = null;
+            
+            // Handle direct element reference
+            if (containerId instanceof HTMLElement) {
+                this.container = containerId;
+                console.log('Direct element reference provided:', this.container);
+            } 
+            // First try DOM utility
+            else if (!this.container) {
+                this.container = DOM.getElement(containerId);
+                console.log('DOM.getElement result:', this.container);
+            }
+            
+            // Then try direct document query with ID
+            if (!this.container && typeof containerId === 'string' && !containerId.startsWith('#')) {
+                this.container = document.getElementById(containerId);
+                console.log('document.getElementById result:', this.container);
+            }
+            
+            // Then try as a CSS selector
+            if (!this.container && typeof containerId === 'string') {
+                this.container = document.querySelector(containerId);
+                console.log('document.querySelector result:', this.container);
+            }
+            
+            // Last attempt - try with prepended # for ID
+            if (!this.container && typeof containerId === 'string' && !containerId.startsWith('#')) {
+                this.container = document.querySelector('#' + containerId);
+                console.log('document.querySelector with # result:', this.container);
+            }
+            
             if (!this.container) {
                 throw new Error(`Container ${containerId} not found`);
             }
@@ -100,8 +136,16 @@ class TreeManager {
             // Initialize state
             await this.initializeState();
 
+            // Bind methods
+            this.handleNodeAction = this.handleNodeAction.bind(this);
+            this.handleFilter = this.handleFilter.bind(this);
+
             // Setup container structure
             await this.setupContainer();
+
+            // Mark as initialized before methods that use _checkInitialized
+            this.initialized = true;
+            console.log('TreeManager initialized');
 
             // Setup event delegation
             await this.setupEventListeners();
@@ -111,9 +155,6 @@ class TreeManager {
 
             // Load initial data
             await this.loadInitialData();
-
-            this.initialized = true;
-            console.log('TreeManager initialized');
 
             return this;
 
@@ -149,7 +190,7 @@ class TreeManager {
                 lastUpdate: new Date()
             };
 
-            await State.set(TREE_STATE_KEY, initialState);
+            State.set(TREE_STATE_KEY, initialState);
 
         } catch (error) {
             this.handleError('State Initialization Error', error);
@@ -173,9 +214,9 @@ class TreeManager {
                     <div class="tree-header w3-bar w3-light-grey">
                         <div class="w3-bar-item">
                             <input type="text" 
-                                   class="w3-input" 
-                                   placeholder="Filter nodes..."
-                                   data-action="filter">
+                                class="w3-input" 
+                                placeholder="Filter nodes..."
+                                data-action="filter">
                         </div>
                         <div class="w3-bar-item w3-right">
                             <button class="w3-button" data-action="expand-all">
@@ -214,8 +255,47 @@ class TreeManager {
             this.errorContainer = DOM.getElement('.tree-error', this.container);
             this.emptyContainer = DOM.getElement('.tree-empty', this.container);
 
-            if (!this.wrapper || !this.loader || !this.errorContainer || !this.emptyContainer) {
-                throw new Error('Failed to initialize tree container structure');
+            // More flexible error handling - create missing elements if needed
+            if (!this.wrapper) {
+                this.wrapper = DOM.createElement('div', { className: 'tree-wrapper' });
+                DOM.getElement('.tree-content', this.container)?.appendChild(this.wrapper);
+            }
+            
+            if (!this.loader) {
+                this.loader = DOM.createElement('div', { 
+                    className: 'tree-loader w3-hide',
+                    innerHTML: '<i class="bi bi-arrow-repeat w3-spin"></i> Loading...'
+                });
+                DOM.getElement('.tree-content', this.container)?.appendChild(this.loader);
+            }
+            
+            if (!this.errorContainer) {
+                this.errorContainer = DOM.createElement('div', { 
+                    className: 'tree-error w3-hide',
+                    innerHTML: '<div class="w3-panel w3-pale-red"><h3>Error</h3><p class="error-message"></p></div>'
+                });
+                DOM.getElement('.tree-content', this.container)?.appendChild(this.errorContainer);
+            }
+            
+            if (!this.emptyContainer) {
+                // First try to use existing no-results container if available
+                this.emptyContainer = DOM.getElement('.no-results', this.container);
+                
+                if (!this.emptyContainer) {
+                    this.emptyContainer = DOM.createElement('div', { 
+                        className: 'tree-empty w3-hide',
+                        innerHTML: '<div class="w3-panel w3-pale-yellow"><p>No items found</p></div>'
+                    });
+                    DOM.getElement('.tree-content', this.container)?.appendChild(this.emptyContainer);
+                } else {
+                    // Add tree-empty class to existing element
+                    this.emptyContainer.classList.add('tree-empty');
+                }
+            }
+
+            // Final check for essential wrapper element
+            if (!this.wrapper) {
+                throw new Error('Failed to create or find tree wrapper element');
             }
 
         } catch (error) {
@@ -223,7 +303,7 @@ class TreeManager {
             throw error;
         }
     }
-
+ 
     /**
      * Handle errors consistently
      * @private
@@ -252,16 +332,18 @@ class TreeManager {
             console.error('Error updating state with error:', stateError);
         }
     }
+
     /**
      * Setup event listeners using delegation with enhanced error handling
      * @private
      */
     async setupEventListeners() {
-        this._checkInitialized();
+        // Don't check initialization here since this is called during the initialize method
+        // Note: _checkInitialized removed because initialize() calls this method before setting this.initialized = true
 
         try {
             // Node expansion/collapse
-            DOM.addDelegate(this.container, 'click', '[data-action="toggle"]', async (e, target) => {
+            Events.addDelegate(this.container, 'click', '[data-action="toggle"]', async (e, target) => {
                 try {
                     const node = target.closest('.tree-item');
                     if (node) {
@@ -274,7 +356,7 @@ class TreeManager {
             });
 
             // Node actions (edit, delete, add)
-            DOM.addDelegate(this.container, 'click', '[data-node-action]', async (e, target) => {
+            Events.addDelegate(this.container, 'click', '[data-node-action]', async (e, target) => {
                 try {
                     const node = target.closest('.tree-item');
                     if (node) {
@@ -300,7 +382,7 @@ class TreeManager {
             }
 
             // Expand/Collapse all
-            DOM.addDelegate(this.container, 'click', '[data-action="expand-all"]', async () => {
+            Events.addDelegate(this.container, 'click', '[data-action="expand-all"]', async () => {
                 try {
                     await this.expandAll();
                 } catch (error) {
@@ -308,7 +390,7 @@ class TreeManager {
                 }
             });
 
-            DOM.addDelegate(this.container, 'click', '[data-action="collapse-all"]', async () => {
+            Events.addDelegate(this.container, 'click', '[data-action="collapse-all"]', async () => {
                 try {
                     await this.collapseAll();
                 } catch (error) {
@@ -324,7 +406,7 @@ class TreeManager {
             throw error;
         }
     }
-
+ 
     /**
      * Setup infinite scroll using Intersection Observer
      * @private
@@ -368,6 +450,8 @@ class TreeManager {
      * @private
      */
     async setupStateSubscriptions() {
+        // Don't check initialization here since this is called during the initialize method
+        
         try {
             // Subscribe to filter changes
             State.subscribe(TREE_STATE_KEY, async (newState, oldState) => {
@@ -495,7 +579,7 @@ class TreeManager {
         this._checkInitialized();
 
         try {
-            await State.update(TREE_STATE_KEY, {
+            State.update(TREE_STATE_KEY, {
                 filter: value,
                 pagination: {
                     offset: 0,
@@ -541,7 +625,7 @@ class TreeManager {
             const response = await API.Projects.list(params);
 
             // Update pagination state
-            await State.update(TREE_STATE_KEY, {
+            State.update(TREE_STATE_KEY, {
                 pagination: {
                     offset: params.limit,
                     limit: params.limit,
@@ -598,7 +682,7 @@ class TreeManager {
             const response = await API.Projects.list(params);
 
             // Update pagination state
-            await State.update(TREE_STATE_KEY, {
+            State.update(TREE_STATE_KEY, {
                 pagination: {
                     offset: state.pagination.offset + params.limit,
                     limit: params.limit,
@@ -619,6 +703,7 @@ class TreeManager {
             this.loading.delete('more');
         }
     }
+
     /**
      * Render tree nodes with enhanced error handling
      * @param {Array} nodes - Nodes to render
@@ -626,7 +711,36 @@ class TreeManager {
      * @private
      */
     async renderNodes(nodes, append = false) {
-        this._checkInitialized();
+        // Add a fallback for initialization check failure
+        try {
+            this._checkInitialized();
+        } catch (error) {
+            console.warn('Tree not initialized, using fallback mode for renderNodes');
+            if (!this.wrapper) {
+                // Try to find container using multiple methods
+                let container = null;
+                if (this.container) {
+                    container = this.container;
+                } else {
+                    container = document.querySelector('#projectsTreeContainer') || 
+                            document.querySelector('.tree-container') ||
+                            document.querySelector('[data-content="projects"] .tree-container');
+                }
+                
+                if (container) {
+                    // Create wrapper if needed
+                    this.wrapper = container.querySelector('.tree-wrapper');
+                    if (!this.wrapper) {
+                        this.wrapper = document.createElement('div');
+                        this.wrapper.className = 'tree-wrapper';
+                        container.appendChild(this.wrapper);
+                    }
+                } else {
+                    console.error('Cannot render nodes: No container found in fallback mode');
+                    return;
+                }
+            }
+        }
 
         try {
             if (!append) {
@@ -654,15 +768,26 @@ class TreeManager {
             this.wrapper.appendChild(fragment);
 
             // Emit render event
-            const renderEvent = new CustomEvent('tree:render', {
-                detail: {
-                    nodeCount: nodes.length,
-                    append,
-                    timestamp: new Date()
-                },
-                bubbles: true
-            });
-            this.container.dispatchEvent(renderEvent);
+            try {
+                const renderEvent = new CustomEvent('tree:render', {
+                    detail: {
+                        nodeCount: nodes.length,
+                        append,
+                        timestamp: new Date()
+                    },
+                    bubbles: true
+                });
+                
+                if (this.container) {
+                    this.container.dispatchEvent(renderEvent);
+                } else if (this.wrapper) {
+                    this.wrapper.dispatchEvent(renderEvent);
+                } else {
+                    document.dispatchEvent(renderEvent);
+                }
+            } catch (eventError) {
+                console.warn('Error dispatching render event:', eventError);
+            }
 
         } catch (error) {
             this.handleError('Node Rendering Error', error);
@@ -680,14 +805,14 @@ class TreeManager {
         if (!node || !node.id) {
             throw new Error('Invalid node data');
         }
-
+    
         const type = node.type || 'project';
         const typeConfig = this.nodeTypes[type];
         
         if (!typeConfig) {
             throw new Error(`Unknown node type: ${type}`);
         }
-
+    
         try {
             // Create node container
             const nodeElement = DOM.createElement('div', {
@@ -697,12 +822,15 @@ class TreeManager {
                     'data-type': type
                 }
             });
-
-            // Create content structure
+    
+            // Create content structure with fixed flex layout
             const content = DOM.createElement('div', {
-                className: 'tree-item-content w3-bar'
+                className: 'tree-item-content w3-bar',
+                attributes: {
+                    style: 'display:flex; align-items:center; flex-wrap:nowrap; width:100%;'
+                }
             });
-
+    
             // Add toggle button if can have children
             if (typeConfig.canHaveChildren) {
                 const toggleBtn = DOM.createElement('button', {
@@ -710,77 +838,90 @@ class TreeManager {
                     attributes: {
                         'data-action': 'toggle',
                         'aria-expanded': 'false',
-                        'aria-controls': `children-${node.id}`
+                        'aria-controls': `children-${node.id}`,
+                        'style': 'flex-shrink:0; width:40px; display:flex; align-items:center; justify-content:center;'
                     },
                     innerHTML: '<i class="bi bi-chevron-right"></i>'
                 });
                 content.appendChild(toggleBtn);
             } else {
                 content.appendChild(DOM.createElement('span', {
-                    className: 'w3-bar-item spacer'
+                    className: 'w3-bar-item spacer',
+                    attributes: {
+                        style: 'width:40px; flex-shrink:0;'
+                    }
                 }));
             }
-
-            // Add item data
+    
+            // Add item data with proper overflow handling
             const itemData = DOM.createElement('div', {
                 className: 'w3-bar-item item-data',
+                attributes: {
+                    style: 'flex:1; min-width:0; overflow:hidden;'
+                },
                 innerHTML: `
-                    <span class="item-name">${this.sanitizeHtml(node.name)}</span>
+                    <span class="item-name" style="display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${this.sanitizeHtml(node.name)}</span>
                     ${node.description ? `
-                        <span class="item-description w3-small w3-text-grey">
+                        <span class="item-description w3-small w3-text-grey" style="display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                             ${this.sanitizeHtml(node.description)}
                         </span>
                     ` : ''}
                 `
             });
             content.appendChild(itemData);
-
-            // Add action buttons
+    
+            // Add action buttons that won't wrap
             const actions = DOM.createElement('div', {
-                className: 'w3-bar-item w3-right item-actions'
+                className: 'w3-bar-item w3-right item-actions',
+                attributes: {
+                    style: 'display:flex; align-items:center; flex-shrink:0; margin-left:auto; white-space:nowrap;'
+                }
             });
-
-            // Edit button
+    
+            // Add buttons
             actions.appendChild(this.createActionButton('edit', 'Edit', 'pencil'));
-
+            
             // Add child button if applicable
             if (typeConfig.canHaveChildren) {
                 actions.appendChild(this.createActionButton('add', 'Add child', 'plus'));
             }
-
+            
             // Delete button
             actions.appendChild(this.createActionButton('delete', 'Delete', 'trash'));
-
+    
             content.appendChild(actions);
             nodeElement.appendChild(content);
-
+    
             // Add children container if applicable
             if (typeConfig.canHaveChildren) {
                 const childrenContainer = DOM.createElement('div', {
                     className: 'children-container w3-hide',
-                    id: `children-${node.id}`
+                    id: `children-${node.id}`,
+                    attributes: {
+                        style: 'width:100%;'
+                    }
                 });
-
+    
                 childrenContainer.appendChild(DOM.createElement('div', {
                     className: 'w3-panel w3-center loading-indicator w3-hide',
                     innerHTML: '<i class="bi bi-arrow-repeat w3-spin"></i> Loading...'
                 }));
-
+    
                 childrenContainer.appendChild(DOM.createElement('div', {
                     className: 'children-wrapper'
                 }));
-
+    
                 nodeElement.appendChild(childrenContainer);
             }
-
+    
             return nodeElement;
-
+    
         } catch (error) {
             this.handleError(`Node Element Creation Error (${node.id})`, error);
             throw error;
         }
     }
-
+    
     /**
      * Create action button with proper attributes
      * @param {string} action - Action name
@@ -913,15 +1054,55 @@ class TreeManager {
             this.loading.add(nodeId);
             loadingIndicator.classList.remove('w3-hide');
 
-            // Load children data
-            const response = await typeConfig.loadChildren(nodeId);
+            // Check if we already have cached children data
+            let childrenData = null;
+            const cacheKey = `${nodeType}_${nodeId}_children`;
+            
+            if (this.cachedData && this.cachedData[typeConfig.childType]) {
+                childrenData = this.cachedData[typeConfig.childType].filter(
+                    node => node.parent_id === nodeId || node.parentId === nodeId
+                );
+            }
+            
+            // If no cached data or empty, load from API
+            if (!childrenData || childrenData.length === 0) {
+                // Load children data
+                const response = await typeConfig.loadChildren(nodeId);
+                
+                // Store in cache if available
+                if (this.cachedData && response && response.nodes) {
+                    if (!this.cachedData[typeConfig.childType]) {
+                        this.cachedData[typeConfig.childType] = [];
+                    }
+                    
+                    // Add or update cached children
+                    response.nodes.forEach(child => {
+                        // Add parent relationship
+                        child.parent_id = child.parent_id || nodeId;
+                        
+                        // Update cache with this child
+                        const existingIndex = this.cachedData[typeConfig.childType].findIndex(c => c.id === child.id);
+                        if (existingIndex >= 0) {
+                            this.cachedData[typeConfig.childType][existingIndex] = child;
+                        } else {
+                            this.cachedData[typeConfig.childType].push(child);
+                        }
+                    });
+                    
+                    childrenData = response.nodes;
+                } else if (response) {
+                    childrenData = response.nodes || response.results || response;
+                } else {
+                    childrenData = [];
+                }
+            }
             
             // Clear existing children
             childrenWrapper.innerHTML = '';
             
             // Create and append child nodes
             const fragment = document.createDocumentFragment();
-            for (const child of response.nodes) {
+            for (const child of childrenData) {
                 try {
                     const childElement = await this.createNodeElement({
                         ...child,
@@ -943,7 +1124,7 @@ class TreeManager {
                 detail: {
                     nodeId,
                     nodeType,
-                    childCount: response.nodes.length,
+                    childCount: childrenData.length,
                     timestamp: new Date()
                 },
                 bubbles: true
@@ -1020,7 +1201,7 @@ class TreeManager {
                 expandedIds.delete(id);
             }
 
-            await State.update(TREE_STATE_KEY, {
+            State.update(TREE_STATE_KEY, {
                 expanded: {
                     ...state.expanded,
                     [type]: Array.from(expandedIds)
@@ -1084,7 +1265,7 @@ class TreeManager {
                 loadedIds.delete(id);
             }
 
-            await State.update(TREE_STATE_KEY, {
+            State.update(TREE_STATE_KEY, {
                 loaded: {
                     ...state.loaded,
                     [type]: Array.from(loadedIds)
@@ -1214,9 +1395,10 @@ class TreeManager {
      */
 
     /**
-     * Cleanup specific node
+     * Cleanup specific node and its state
      * @param {string} nodeId - Node ID
      * @param {string} nodeType - Node type
+     * @returns {Promise<void>}
      * @private
      */
     async cleanupNode(nodeId, nodeType) {
@@ -1235,7 +1417,7 @@ class TreeManager {
             loadedIds.delete(nodeId);
 
             // Update state
-            await State.update(TREE_STATE_KEY, {
+            State.update(TREE_STATE_KEY, {
                 expanded: {
                     ...state.expanded,
                     [nodeType]: Array.from(expandedIds)
@@ -1250,6 +1432,33 @@ class TreeManager {
             this.loadedNodes.delete(`${nodeType}-${nodeId}`);
             this.expandedNodes.delete(`${nodeType}-${nodeId}`);
             this.loading.delete(nodeId);
+            
+            // Clean up cached data
+            if (this.cachedData && this.cachedData[nodeType]) {
+                // Remove this node from cache
+                this.cachedData[nodeType] = this.cachedData[nodeType].filter(node => 
+                    node.id !== nodeId
+                );
+                
+                // Also remove any children that might be in cache
+                const childType = this.nodeTypes[nodeType]?.childType;
+                if (childType && this.cachedData[childType]) {
+                    this.cachedData[childType] = this.cachedData[childType].filter(node => 
+                        node.parent_id !== nodeId && node.parentId !== nodeId
+                    );
+                }
+            }
+            
+            // Emit cleanup event
+            const cleanupEvent = new CustomEvent('tree:node:cleanup', {
+                detail: {
+                    nodeId,
+                    nodeType,
+                    timestamp: new Date()
+                },
+                bubbles: true
+            });
+            this.container.dispatchEvent(cleanupEvent);
 
         } catch (error) {
             this.handleError('Node Cleanup Error', error);
@@ -1291,7 +1500,7 @@ class TreeManager {
             this.emptyContainer = null;
 
             // Reset state
-            await State.update(TREE_STATE_KEY, {
+            State.update(TREE_STATE_KEY, {
                 filter: '',
                 pagination: {
                     offset: 0,
@@ -1325,6 +1534,152 @@ class TreeManager {
 
         } catch (error) {
             this.handleError('Destroy Error', error);
+        }
+    }
+
+    /**
+     * Load initial data for the tree
+     * @private
+     */
+    async loadInitialData() {
+        try {
+            console.log('Tree ready for data loading');
+            
+            // We don't load data here as this will be handled by the 
+            // tree:initialized event listener in dashboard.html
+            
+            // The basic structure is already set up at this point,
+            // and actual data loading is deferred to the event handler
+            
+            return true;
+        } catch (error) {
+            this.handleError('Initial Data Load Error', error);
+            return false;
+        }
+    }
+
+    // Additional helpful methods for handling specific node actions
+
+    /**
+     * Handle node edit action
+     * @param {string} nodeId - Node ID
+     * @param {string} nodeType - Node type
+     * @param {HTMLElement} nodeElement - Node element
+     * @private
+     */
+    async handleNodeEdit(nodeId, nodeType, nodeElement) {
+        try {
+            // Create and dispatch edit event
+            const editEvent = new CustomEvent('tree:node:edit', {
+                detail: {
+                    nodeId,
+                    nodeType,
+                    element: nodeElement,
+                    timestamp: new Date()
+                },
+                bubbles: true
+            });
+            
+            nodeElement.dispatchEvent(editEvent);
+        } catch (error) {
+            this.handleError('Node Edit Error', error);
+        }
+    }
+
+    /**
+     * Handle node delete action
+     * @param {string} nodeId - Node ID
+     * @param {string} nodeType - Node type
+     * @param {HTMLElement} nodeElement - Node element
+     * @private
+     */
+    async handleNodeDelete(nodeId, nodeType, nodeElement) {
+        try {
+            // Create and dispatch delete event
+            const deleteEvent = new CustomEvent('tree:node:delete', {
+                detail: {
+                    nodeId,
+                    nodeType,
+                    element: nodeElement,
+                    timestamp: new Date()
+                },
+                bubbles: true
+            });
+            
+            nodeElement.dispatchEvent(deleteEvent);
+        } catch (error) {
+            this.handleError('Node Delete Error', error);
+        }
+    }
+
+    /**
+     * Handle node add child action
+     * @param {string} nodeId - Node ID
+     * @param {string} nodeType - Node type
+     * @param {HTMLElement} nodeElement - Node element
+     * @private
+     */
+    async handleNodeAdd(nodeId, nodeType, nodeElement) {
+        try {
+            // Create and dispatch add event
+            const addEvent = new CustomEvent('tree:node:add', {
+                detail: {
+                    nodeId,
+                    nodeType,
+                    element: nodeElement,
+                    timestamp: new Date()
+                },
+                bubbles: true
+            });
+            
+            nodeElement.dispatchEvent(addEvent);
+        } catch (error) {
+            this.handleError('Node Add Error', error);
+        }
+    }
+
+    /**
+     * Expand all nodes
+     */
+    async expandAll() {
+        try {
+            this._checkInitialized();
+            
+            // Get all tree items with toggle buttons
+            const nodes = this.container.querySelectorAll('.tree-item .toggle-btn');
+            
+            for (const toggleButton of nodes) {
+                const nodeElement = toggleButton.closest('.tree-item');
+                if (nodeElement) {
+                    const childrenContainer = nodeElement.querySelector('.children-container');
+                    if (childrenContainer && childrenContainer.classList.contains('w3-hide')) {
+                        await this.toggleNode(nodeElement);
+                    }
+                }
+            }
+        } catch (error) {
+            this.handleError('Expand All Error', error);
+        }
+    }
+
+    /**
+     * Collapse all nodes
+     */
+    async collapseAll() {
+        try {
+            this._checkInitialized();
+            
+            // Get all tree items with toggle buttons that are expanded
+            const nodes = this.container.querySelectorAll('.tree-item .toggle-btn[aria-expanded="true"]');
+            
+            for (const toggleButton of nodes) {
+                const nodeElement = toggleButton.closest('.tree-item');
+                if (nodeElement) {
+                    await this.toggleNode(nodeElement);
+                }
+            }
+        } catch (error) {
+            this.handleError('Collapse All Error', error);
         }
     }
 }

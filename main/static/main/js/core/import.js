@@ -238,7 +238,7 @@ class ImportManager {
             });
 
             // Update global state
-            await State.update(IMPORT_STATE_KEY, {
+            State.update(IMPORT_STATE_KEY, {
                 [`location_${this.locationId}`]: initialState
             });
 

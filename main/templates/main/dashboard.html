@@ -13,11 +13,12 @@
         <button class="w3-bar-item w3-button section-button" data-action="toggle-section" data-section="projects">
             <i class="bi bi-chevron-right"></i> Projects
         </button>
-        <div class="w3-dropdown-hover menu-trigger">
+        <!-- Standard W3.CSS dropdown with no custom classes -->
+        <div class="w3-dropdown-hover">
             <button class="w3-button">
                 <i class="bi bi-three-dots-vertical"></i>
             </button>
-            <div class="w3-dropdown-content w3-bar-block">
+            <div class="w3-dropdown-content w3-bar-block w3-card">
                 <a href="#" class="w3-bar-item w3-button" data-action="filter-projects">
                     <i class="bi bi-funnel"></i> Filter Projects
                 </a>
@@ -32,10 +33,10 @@
             <div class="tree-wrapper w3-margin-top">
                 <!-- Projects will be loaded here dynamically -->
             </div>
-            <div class="tree-loading w3-center w3-padding-16 w3-hide">
+            <div class="w3-center w3-padding-16 w3-hide">
                 <i class="bi bi-arrow-repeat w3-spin"></i> Loading projects...
             </div>
-            <div class="no-results w3-panel w3-pale-yellow w3-hide">
+            <div class="w3-panel w3-pale-yellow w3-hide">
                 <p>No projects found. Create a new project to get started.</p>
             </div>
         </div>
@@ -80,201 +81,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script type="module">
-    import { Events, NotificationUI, Modal, Dashboard } from '/static/main/js/main.js';
-
-    console.log('Dashboard script loaded');
-    
-    // Add section toggle handler using Events module
-    Events.addDelegate(document, 'dashboard:ready', 'body', function(e, target) {
-        console.log('Dashboard initialization started');
-        
-        try {
-            // Section toggling
-            Events.addDelegate(document, 'click', '[data-action="toggle-section"]', function(e, target) {
-                console.log('Toggle section clicked:', target);
-                e.preventDefault();
-                
-                const sectionName = target.getAttribute('data-section');
-                console.log('Section name:', sectionName);
-                
-                if (!sectionName) return;
-                
-                const sectionContent = document.querySelector(`[data-content="${sectionName}"]`);
-                console.log('Section content:', sectionContent);
-                
-                if (!sectionContent) return;
-                
-                // Toggle visibility
-                const isHidden = sectionContent.classList.contains('w3-hide');
-                console.log('Is hidden:', isHidden);
-                
-                if (isHidden) {
-                    // Show section
-                    sectionContent.classList.remove('w3-hide');
-                    
-                    // Update icon
-                    const icon = target.querySelector('i');
-                    if (icon) {
-                        icon.classList.remove('bi-chevron-right');
-                        icon.classList.add('bi-chevron-down');
-                    }
-                } else {
-                    // Hide section
-                    sectionContent.classList.add('w3-hide');
-                    
-                    // Update icon
-                    const icon = target.querySelector('i');
-                    if (icon) {
-                        icon.classList.remove('bi-chevron-down');
-                        icon.classList.add('bi-chevron-right');
-                    }
-                }
-                
-                console.log('Section toggled');
-            });
-            
-            // Project filtering
-            Events.addDelegate(document, 'click', '[data-action="filter-projects"]', (e, target) => {
-                e.preventDefault();
-                Modal.show('filter-projects', {
-                    title: 'Filter Projects',
-                    type: 'filter',
-                    width: '400px',
-                    content: `
-                        <form class="w3-container w3-padding-16" data-action="filter-form">
-                            <div class="w3-row-padding">
-                                <div class="w3-col m12">
-                                    <input class="w3-input" type="text" name="search" placeholder="Search...">
-                                </div>
-                            </div>
-                            <div class="w3-row-padding w3-margin-top">
-                                <div class="w3-col m12">
-                                    <label>Status</label>
-                                    <select class="w3-select" name="status">
-                                        <option value="">All</option>
-                                        <option value="active">Active</option>
-                                        <option value="archived">Archived</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="w3-padding-16">
-                                <button type="submit" class="w3-button w3-blue">Apply Filter</button>
-                                <button type="button" class="w3-button" data-action="clear-filter">Clear</button>
-                            </div>
-                        </form>
-                    `
-                });
-            });
-
-            // Project creation
-            Events.addDelegate(document, 'click', '[data-action="add-project"]', (e, target) => {
-                e.preventDefault();
-                Modal.show('add-project', {
-                    title: 'Add New Project',
-                    type: 'form',
-                    width: '500px',
-                    content: Dashboard.getProjectForm()
-                });
-            });
-            
-            // Handle form submissions
-            Events.addDelegate(document, 'submit', '[data-action="filter-form"]', async (e, target) => {
-                e.preventDefault();
-                try {
-                    const formData = new FormData(target);
-                    await Dashboard.applyFilter(Object.fromEntries(formData));
-                    Modal.hide('filter-projects');
-                } catch (error) {
-                    NotificationUI.show({
-                        message: `Error applying filter: ${error.message}`,
-                        type: 'error',
-                        duration: 5000
-                    });
-                }
-            });
-            
-            console.log('Dashboard initialization complete');
-        } catch (error) {
-            console.error('Dashboard initialization error:', error);
-            NotificationUI.show({
-                message: `Dashboard initialization error: ${error.message}`,
-                type: 'error',
-                duration: 0,
-                closeable: true
-            });
-        }
-    });
-
-    // Also add a direct event listener to help with debugging
-    document.addEventListener('DOMContentLoaded', function() {
-        console.log('DOM content loaded, dashboard ready?');
-        
-        // Add a manual trigger for dashboard:ready in case it doesn't fire automatically
-        setTimeout(function() {
-            if (!window._dashboardInitialized) {
-                console.log('Manually triggering dashboard:ready event');
-                document.dispatchEvent(new CustomEvent('dashboard:ready'));
-                window._dashboardInitialized = true;
-            }
-        }, 1000);
-    });
-</script>
-
-<!-- Fallback direct script for section toggling -->
-<script>
-    // Wait for DOM to be loaded
-    document.addEventListener('DOMContentLoaded', function() {
-        console.log('DOM loaded, setting up fallback section toggling');
-        
-        // Find all toggle buttons
-        const toggleButtons = document.querySelectorAll('[data-action="toggle-section"]');
-        console.log('Found toggle buttons:', toggleButtons.length);
-        
-        // Add direct click handlers
-        toggleButtons.forEach(function(button) {
-            button.addEventListener('click', function(e) {
-                console.log('FALLBACK: Section toggle clicked');
-                e.preventDefault();
-                
-                const sectionName = this.getAttribute('data-section');
-                if (!sectionName) return;
-                
-                const sectionContent = document.querySelector(`[data-content="${sectionName}"]`);
-                if (!sectionContent) return;
-                
-                // Toggle visibility
-                const isHidden = sectionContent.classList.contains('w3-hide');
-                
-                if (isHidden) {
-                    // Show section
-                    sectionContent.classList.remove('w3-hide');
-                    
-                    // Update icon
-                    const icon = this.querySelector('i');
-                    if (icon) {
-                        icon.classList.remove('bi-chevron-right');
-                        icon.classList.add('bi-chevron-down');
-                    }
-                } else {
-                    // Hide section
-                    sectionContent.classList.add('w3-hide');
-                    
-                    // Update icon
-                    const icon = this.querySelector('i');
-                    if (icon) {
-                        icon.classList.remove('bi-chevron-down');
-                        icon.classList.add('bi-chevron-right');
-                    }
-                }
-            });
-        });
-    });
-</script>
+<script type="module" src="{% static 'main/js/page/dashboard.js' %}"></script>
 {% endblock %}
-
-<script>
-    // Add this at the very end of your dashboard.html file
-    console.log('TEST SCRIPT EXECUTED AT END OF PAGE');
-    alert('Is JavaScript working?');
-</script>

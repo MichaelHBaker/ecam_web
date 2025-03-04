@@ -1,26 +1,11 @@
 /* main.css */
-/* Main CSS entry point - only handles imports and global styles */
+/* Main CSS entry point - minimal overrides of W3.CSS */
 
-/* Base styles and utilities */
-@import 'base.css';
-
-/* Component styles */
-@import 'components/tree.css';
-@import 'components/measurement.css';
-@import 'components/dropdown.css';
-@import 'components/modal.css';
-@import 'components/filter.css';
-
-/* Global styles that don't fit in component files */
+/* Global styles */
 html, body {
     height: 100%;
     margin: 0;
     padding: 0;
-}
-
-/* Override w3.css defaults only when absolutely necessary */
-.w3-container {
-    padding: 16px;
 }
 
 /* Focus styles for accessibility */
@@ -29,7 +14,7 @@ html, body {
     outline-offset: 2px;
 }
 
-/* Custom scrollbar styling - keep since w3.css doesn't handle scrollbars */
+/* Custom scrollbar styling */
 ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
@@ -48,26 +33,7 @@ html, body {
     background: #555;
 }
 
-/* Print styles using w3.css utilities */
-@media print {
-    .w3-hide-print {
-        display: none !important;
-    }
-}
-
-/* Responsive layout enhancements */
-@media (max-width: 600px) {
-    .w3-container {
-        padding: 12px;
-    }
-}
-
 /* Accessibility improvements */
-.w3-button:focus-visible {
-    outline: 2px solid #2196F3;
-    outline-offset: 2px;
-}
-
 .visually-hidden {
     position: absolute;
     width: 1px;
@@ -77,4 +43,130 @@ html, body {
     overflow: hidden;
     clip: rect(0, 0, 0, 0);
     border: 0;
+}
+
+/* W3.CSS Extensions - only add what's not in W3.CSS */
+
+/* Animations */
+@keyframes w3-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.w3-spin {
+    animation: w3-spin 1s linear infinite;
+}
+
+/* Tree component - simplified */
+.tree-wrapper {
+    position: relative;
+    min-height: 50px;
+}
+
+.tree-item {
+    width: 100%;
+    position: relative;
+    margin-bottom: 2px;
+}
+
+.tree-item-content {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 8px;
+}
+
+.toggle-btn, 
+[data-action="toggle"] {
+    width: 40px;
+    text-align: center;
+}
+
+.spacer {
+    width: 40px;
+}
+
+.item-data {
+    flex: 1;
+    margin: 0 8px;
+    overflow: hidden;
+}
+
+.item-name {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+}
+
+.item-description {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.85em;
+}
+
+.item-actions {
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+/* Indentation for nested levels */
+.tree-item[data-type="location"] {
+    margin-left: 24px;
+}
+
+.tree-item[data-type="measurement"] {
+    margin-left: 48px;
+}
+
+/* Measurement specific styles */
+.measurement-select, .unit-select {
+    min-width: 120px;
+}
+
+.multiplier-select { 
+    width: 100px; 
+}
+
+.timezone-select { 
+    width: 160px; 
+}
+
+.measurement-chart {
+    height: 300px;
+    margin: 16px 0;
+}
+
+.legend-color {
+    width: 12px;
+    height: 12px;
+    display: inline-block;
+    margin-right: 4px;
+}
+
+/* Print styles */
+@media print {
+    .w3-hide-print {
+        display: none !important;
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+    .tree-item[data-type="location"] {
+        margin-left: 16px;
+    }
+
+    .tree-item[data-type="measurement"] {
+        margin-left: 32px;
+    }
+    
+    .toggle-btn,
+    [data-action="toggle"],
+    .spacer {
+        width: 32px;
+    }
 }

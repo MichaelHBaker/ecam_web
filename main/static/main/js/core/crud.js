@@ -3,8 +3,9 @@
 
 import { API } from './api.js';
 import { State } from './state.js';
-import { NotificationUI, TreeUI } from './ui.js';
+import { NotificationUI} from './ui.js';
 import { DOM } from './dom.js';
+import { Tree } from './tree.js';
 
 const CRUD_STATE_KEY = 'crud_state';
 
@@ -90,7 +91,7 @@ class TreeItemManager {
                 lastUpdate: new Date()
             };
 
-            await State.set(CRUD_STATE_KEY, initialState);
+            State.set(CRUD_STATE_KEY, initialState);
 
         } catch (error) {
             this.handleError('State Initialization Error', error);
@@ -631,7 +632,7 @@ class TreeItemManager {
             this.operationTimers.set(operationId, timeoutId);
 
             // Update state
-            await State.update(CRUD_STATE_KEY, {
+            State.update(CRUD_STATE_KEY, {
                 activeOperations: Array.from(this.activeOperations),
                 lastOperation: {
                     id: operationId,
@@ -700,7 +701,7 @@ class TreeItemManager {
             const state = await State.get(CRUD_STATE_KEY);
             const stats = this.updateOperationStats(state.stats, operation);
 
-            await State.update(CRUD_STATE_KEY, {
+            State.update(CRUD_STATE_KEY, {
                 activeOperations: Array.from(this.activeOperations),
                 lastOperation: {
                     id: operationId,
@@ -1105,7 +1106,7 @@ class TreeItemManager {
                 const response = await API[`${type}s`].create(data);
                 
                 // Create new item UI
-                const newItem = await TreeUI.createTreeItem({
+                const newItem = await Tree.createNodeElement({
                     type,
                     id: response.id,
                     name: response.name,
@@ -1215,7 +1216,7 @@ class TreeItemManager {
             this.activeOperations.clear();
 
             // Reset state
-            await State.update(CRUD_STATE_KEY, {
+            State.update(CRUD_STATE_KEY, {
                 activeOperations: [],
                 lastOperation: null,
                 error: null,

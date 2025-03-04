@@ -1,7 +1,7 @@
-{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    {% load static %}
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{% endblock %}</title>
@@ -42,141 +42,9 @@
     </footer>
 
     <!-- Base JavaScript -->
-    <script type="module">
-        // Import core modules
-        import { State, DOM, Events, API, NotificationUI, StatusUI, TreeUI, Modal, Forms, CRUD, Dashboard } from '/static/main/js/main.js';
-    
-        // Wait for DOM to be fully loaded
-        document.addEventListener('DOMContentLoaded', async () => {
-            try {
-                // First ensure Events is initialized before adding any event delegates
-                await Events.initialize();
-                
-                // Add page type detection for page-specific initialization
-                const pageType = document.body.getAttribute('data-page-type') || 'page';
-                console.log(`Page type detected: ${pageType}`);
-                
-                // Listen for core initialization
-                Events.addDelegate(document, 'core:initialized', 'body', () => {
-                    console.log('Core initialized, setting up global handlers');
-                       
-                    // Global error handling
-                    Events.addDelegate(window, 'error', 'body', (e, target) => {
-                        NotificationUI.show({
-                            message: `Error: ${e.error?.message || e.message}`,
-                            type: 'error',
-                            duration: 5000
-                        });
-                    });
-    
-                    // Unhandled promise rejection handling
-                    Events.addDelegate(window, 'unhandledrejection', 'body', (e, target) => {
-                        NotificationUI.show({
-                            message: `Async Error: ${e.reason?.message || e.reason}`,
-                            type: 'error',
-                            duration: 5000
-                        });
-                    });
-    
-                    // Online/offline status handling
-                    Events.addDelegate(window, 'online', 'body', () => {
-                        NotificationUI.show({
-                            message: 'Connection restored',
-                            type: 'success',
-                            duration: 3000
-                        });
-                    });
-    
-                    Events.addDelegate(window, 'offline', 'body', () => {
-                        NotificationUI.show({
-                            message: 'Connection lost',
-                            type: 'warning',
-                            duration: 0,
-                            closeable: true
-                        });
-                    });
-                    
-                    // Trigger page-specific initialization
-                    console.log(`Triggering ${pageType}:ready event`);
-                    Events.trigger(`${pageType}:ready`);
-                });
-                
-            } catch (error) {
-                console.error('Base initialization error:', error);
-                // Simple alert as UI components might not be available
-                alert(`Base initialization error: ${error.message}`);
-            }
-        });
-    </script>
+    <script type="module" src="{% static 'main/js/base.js' %}"></script>
 
     <!-- Include any page-specific JavaScript -->
     {% block extra_js %}{% endblock %}
-
-    <!-- Direct section toggle functionality -->
-    <script>
-    (function() {
-        // Execute when DOM is fully loaded
-        function initSectionToggles() {
-            console.log('Setting up section toggles directly');
-            
-            // Global click handler for all toggle buttons
-            document.body.addEventListener('click', function(event) {
-                // Find if click was on or inside a toggle button
-                var toggleButton = event.target.closest('[data-action="toggle-section"]');
-                
-                if (toggleButton) {
-                    console.log('Section toggle clicked:', toggleButton);
-                    event.preventDefault();
-                    
-                    // Get section name and find content
-                    var sectionName = toggleButton.getAttribute('data-section');
-                    var sectionContent = document.querySelector('[data-content="' + sectionName + '"]');
-                    
-                    if (!sectionContent) {
-                        console.log('No content found for section:', sectionName);
-                        return;
-                    }
-                    
-                    // Toggle visibility
-                    var isHidden = sectionContent.classList.contains('w3-hide');
-                    console.log('Section is hidden:', isHidden);
-                    
-                    if (isHidden) {
-                        // Show section
-                        sectionContent.classList.remove('w3-hide');
-                        
-                        // Update icon
-                        var icon = toggleButton.querySelector('i');
-                        if (icon) {
-                            icon.classList.remove('bi-chevron-right');
-                            icon.classList.add('bi-chevron-down');
-                        }
-                    } else {
-                        // Hide section
-                        sectionContent.classList.add('w3-hide');
-                        
-                        // Update icon
-                        var icon = toggleButton.querySelector('i');
-                        if (icon) {
-                            icon.classList.remove('bi-chevron-down');
-                            icon.classList.add('bi-chevron-right');
-                        }
-                    }
-                    
-                    console.log('Section toggle complete');
-                }
-            });
-            
-            console.log('Section toggle setup complete');
-        }
-        
-        // Set up toggles when DOM is loaded
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initSectionToggles);
-        } else {
-            initSectionToggles();
-        }
-    })();
-    </script>
 </body>
 </html>

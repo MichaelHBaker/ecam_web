@@ -483,16 +483,6 @@
           "Map",
           "initialize"
         ]
-      },
-      {
-        "name": "TreeUIManager",
-        "type": "class",
-        "file": "main\\static\\main\\js\\ui.js",
-        "methods": [
-          "constructor",
-          "Map",
-          "Set"
-        ]
       }
     ],
     "w3css_usage": {

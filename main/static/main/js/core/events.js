@@ -266,6 +266,55 @@ class EventManager {
      */
     handleGlobalClick(event) {
         try {
+            // Handle section toggle clicks
+            const toggleButton = event.target.closest('[data-action="toggle-section"]');
+            if (toggleButton) {
+                // Skip if already handled by delegation
+                if (event.customHandled) {
+                    return;
+                }
+                
+                const sectionName = toggleButton.getAttribute('data-section');
+                if (sectionName) {
+                    const sectionContent = document.querySelector(`[data-content="${sectionName}"]`);
+                    if (sectionContent) {
+                        console.log('Global handler processing section toggle:', sectionName);
+                        
+                        // Toggle visibility
+                        const isHidden = sectionContent.classList.contains('w3-hide');
+                        
+                        if (isHidden) {
+                            // Show section
+                            sectionContent.classList.remove('w3-hide');
+                            
+                            // Update icon
+                            const icon = toggleButton.querySelector('i');
+                            if (icon) {
+                                icon.classList.remove('bi-chevron-right');
+                                icon.classList.add('bi-chevron-down');
+                            }
+                        } else {
+                            // Hide section
+                            sectionContent.classList.add('w3-hide');
+                            
+                            // Update icon
+                            const icon = toggleButton.querySelector('i');
+                            if (icon) {
+                                icon.classList.remove('bi-chevron-down');
+                                icon.classList.add('bi-chevron-right');
+                            }
+                        }
+                        
+                        // Update state
+                        this.updateEventState('sectionToggle', {
+                            section: sectionName,
+                            isVisible: !isHidden,
+                            timestamp: new Date()
+                        });
+                    }
+                }
+            }
+
             // Only log detailed information for debugging, not in production
             // console.log(`[Events] Global click handler triggered on:`, event.target);
             

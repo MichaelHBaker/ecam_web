@@ -108,7 +108,7 @@ class FormManager {
                 lastUpdate: new Date()
             };
 
-            await State.set(FORMS_STATE_KEY, initialState);
+            State.set(FORMS_STATE_KEY, initialState);
 
         } catch (error) {
             this.handleError('State Initialization Error', error);
@@ -140,7 +140,7 @@ class FormManager {
             this.fieldDependencies = dependencies;
 
             // Update state
-            await State.update(FORMS_STATE_KEY, {
+            State.update(FORMS_STATE_KEY, {
                 modelFields: fields,
                 validationRules: rules,
                 dependencies: dependencies,
@@ -1042,7 +1042,7 @@ class FormManager {
                 ...data
             };
 
-            await State.update(FORMS_STATE_KEY, {
+            State.update(FORMS_STATE_KEY, {
                 instances: {
                     ...currentState.instances,
                     [formId]: updatedState
@@ -1085,7 +1085,7 @@ class FormManager {
                 lastUpdate: new Date()
             };
 
-            await State.update(FORMS_STATE_KEY, {
+            State.update(FORMS_STATE_KEY, {
                 instances: {
                     ...currentState.instances,
                     [formId]: {
@@ -1249,7 +1249,7 @@ class FormManager {
             // Update global state
             const currentState = State.get(FORMS_STATE_KEY);
             delete currentState.instances[formId];
-            await State.update(FORMS_STATE_KEY, currentState);
+            State.update(FORMS_STATE_KEY, currentState);
 
             // Emit destroy event
             const destroyEvent = new CustomEvent('form:destroy', {
@@ -1286,7 +1286,7 @@ class FormManager {
             this.fieldDependencies = null;
 
             // Reset global state
-            await State.update(FORMS_STATE_KEY, {
+            State.update(FORMS_STATE_KEY, {
                 instances: {},
                 modelFields: null,
                 validationRules: null,

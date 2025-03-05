@@ -204,6 +204,9 @@ class TreeManager {
      */
     async setupContainer() {
         try {
+            console.log(this.container.parentElement.getAttribute("data-content") + " !!!!!!!!!");
+            console.log(this.container.innerHTML + " !!!!!!!!!");
+
             // Clear container
             this.container.innerHTML = '';
 
@@ -247,7 +250,10 @@ class TreeManager {
                 `
             });
 
+            console.log(structure.innerHTML + " SSSSSSS");
             this.container.appendChild(structure);
+            console.log(this.container.innerHTML + " ZZZZZZZ");
+
 
             // Store references to main elements
             this.wrapper = DOM.getElement('.tree-wrapper', this.container);

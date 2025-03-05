@@ -59,6 +59,11 @@ class DOMUtilities {
         try {
             const element = document.createElement(tag);
 
+            config is a simple js obj not HTMLDivElement
+
+            console.log(tag);
+            console.log(config);
+
             // Set attributes
             if (config.attributes) {
                 Object.entries(config.attributes).forEach(([key, value]) => {
@@ -68,12 +73,16 @@ class DOMUtilities {
                 });
             }
 
+            console.log(element + 'AAA');
+            console.log(element.innerHTML + 'AAA');
+            
             // Set properties
             if (config.properties) {
                 Object.entries(config.properties).forEach(([key, value]) => {
                     element[key] = value;
                 });
             }
+            console.log(element + 'PPP');
 
             // Add classes
             if (config.classes) {
@@ -84,6 +93,8 @@ class DOMUtilities {
                 }
             }
 
+            console.log(element + 'CCC');
+
             // Set styles
             if (config.styles) {
                 Object.entries(config.styles).forEach(([key, value]) => {
@@ -91,12 +102,16 @@ class DOMUtilities {
                 });
             }
 
+            console.log(element + 'SSS');
+
             // Add event listeners
             if (config.events) {
                 Object.entries(config.events).forEach(([event, handler]) => {
                     element.addEventListener(event, handler);
                 });
             }
+            console.log(element + 'LLL');
+
 
             // Add content
             if (config.content) {
@@ -115,10 +130,14 @@ class DOMUtilities {
                 }
             }
 
+            console.log(element + 'CCC');
+
             // Add to element cache if ID is provided
             if (config.id) {
                 this.elementCache.set(config.id, element);
             }
+
+            console.log(element + 'EEEEEEE');
 
             return element;
 

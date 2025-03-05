@@ -303,63 +303,98 @@ class DashboardManager {
     }
 
     /**
-     * Event Handlers
+     * Handle section toggle with event delegation format using w3.css classes
+     * @param {Event} e - Event object
+     * @param {HTMLElement} target - Target element from delegation
      */
-    async handleSectionToggle(e, target) {
-        // Set this at the very beginning to prevent the global handler from processing it
-        e.customHandled = true;
+    handleSectionToggle(e, target) {
+        // Prevent default action and stop propagation
         e.preventDefault();
+        e.stopPropagation();
         
-        var sectionName = target.getAttribute('data-section');
-        console.log('Toggle section:', sectionName);
+        // Mark as handled to prevent other handlers
+        e.customHandled = true;
         
-        if (!sectionName) return;
+        const toggleButton = target.closest('[data-action="toggle-section"]');
+        if (!toggleButton) return false;
         
-        var sectionContent = document.querySelector(`[data-content="${sectionName}"]`);
-        if (!sectionContent) return;
+        const sectionName = toggleButton.getAttribute('data-section');
+        if (!sectionName) return false;
         
-        // Now check the visibility status
-        var hasHideClass = sectionContent.classList.contains('w3-hide');
+        const sectionContent = document.querySelector(`[data-content="${sectionName}"]`);
+        if (!sectionContent) return false;
         
-        console.log('Section state before toggling:', {
-            'has w3-hide class': hasHideClass,
-            'display': window.getComputedStyle(sectionContent).display
-        });
+        const isHidden = sectionContent.classList.contains('w3-hide');
+        const icon = toggleButton.querySelector('i');
         
-        // Toggle the section properly
-        if (hasHideClass) {
-            // Currently hidden, so show it
-            console.log('Showing section:', sectionName);
+        if (isHidden) {
+            // First show the section by removing the w3-hide class
             sectionContent.classList.remove('w3-hide');
             
             // Update icon
-            var icon = target.querySelector('i');
             if (icon) {
                 icon.classList.remove('bi-chevron-right');
                 icon.classList.add('bi-chevron-down');
             }
             
-            // Your existing code for projects section...
+            // Handle projects section specially
+            if (sectionName === 'projects') {
+                const treeContainer = sectionContent.querySelector('.tree-container');
+                
+                if (treeContainer) {
+                    // Apply w3-container to ensure proper spacing
+                    if (!treeContainer.classList.contains('w3-container')) {
+                        treeContainer.classList.add('w3-container');
+                    }
+                    
+                    // Ensure visibility with w3-show class
+                    treeContainer.classList.add('w3-show');
+                    
+                    // Find the tree wrapper
+                    const treeWrapper = treeContainer.querySelector('.tree-wrapper');
+                    
+                    if (treeWrapper) {
+                        // Make sure tree wrapper is visible
+                        treeWrapper.classList.remove('w3-hide');
+                        treeWrapper.classList.add('w3-show');
+                        
+                        // Use a w3.css class for margin
+                        if (!treeWrapper.classList.contains('w3-margin-top')) {
+                            treeWrapper.classList.add('w3-margin-top');
+                        }
+                        
+                        // Check if we need to load the projects
+                        if (treeWrapper.children.length === 0 || 
+                            !treeWrapper.querySelector('.tree-item')) {
+                            
+                            if (typeof Tree !== 'undefined' && Tree.isInitialized && Tree.isInitialized()) {
+                                // Use API to load projects
+                                API.Projects.list().then(response => {
+                                    if (response && response.nodes) {
+                                        Tree.renderNodes(response.nodes);
+                                    }
+                                }).catch(error => {
+                                    console.error('Error loading projects:', error);
+                                });
+                            }
+                        }
+                    }
+                }
+            }
         } else {
-            // Currently visible, so hide it
-            console.log('Hiding section:', sectionName);
+            // Hide the section
             sectionContent.classList.add('w3-hide');
             
             // Update icon
-            var icon = target.querySelector('i');
             if (icon) {
                 icon.classList.remove('bi-chevron-down');
                 icon.classList.add('bi-chevron-right');
             }
         }
         
-        // Verify final state
-        console.log('Section toggle complete:', {
-            'section': sectionName,
-            'has w3-hide class now': sectionContent.classList.contains('w3-hide'),
-            'display now': window.getComputedStyle(sectionContent).display
-        });
+        return false;
     }
+
 
     handleProjectFilter(e, target) {
         e.preventDefault();

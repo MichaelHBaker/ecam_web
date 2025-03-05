@@ -49,8 +49,8 @@ class EventManager {
             this.handleKeyPress = this.handleKeyPress.bind(this);
             this.handleWindowResize = this.debounce(this.handleWindowResize.bind(this), 250);
 
-            // Setup global listeners
-            document.addEventListener('click', this.handleGlobalClick);
+            // Setup global listeners in bubbling phase (LOWER priority)
+            document.addEventListener('click', this.handleGlobalClick, { capture: false });
             document.addEventListener('keydown', this.handleKeyPress);
             window.addEventListener('resize', this.handleWindowResize);
 
@@ -93,6 +93,11 @@ class EventManager {
         try {
             // Create a listener function that handles both standard and custom events
             const listener = (event) => {
+                // Skip if already handled by another delegate
+                if (event.customHandled) {
+                    return;
+                }
+                
                 // Handle custom events (those with colon in the name, like 'dashboard:ready')
                 if (eventType.includes(':') || !event.target || typeof event.target.closest !== 'function') {
                     handler.call(context, event, context);
@@ -121,8 +126,14 @@ class EventManager {
                 }
             };
 
-            // Add the event listener to the context
-            context.addEventListener(eventType, listener, options);
+            // Set capture to true to ensure delegated handlers run BEFORE global handlers
+            const captureOptions = {
+                ...options,
+                capture: true  // This ensures delegated handlers run first
+            };
+
+            // Add the event listener to the context with capture phase
+            context.addEventListener(eventType, listener, captureOptions);
 
             // Generate a unique ID for this delegation
             const delegationId = this.generateDelegationId(context, eventType, selector);
@@ -133,7 +144,7 @@ class EventManager {
                 eventType,
                 handler: listener,
                 selector,
-                options
+                options: captureOptions
             });
             
             // Update state
@@ -147,7 +158,7 @@ class EventManager {
             
             // Return remove function
             return () => {
-                context.removeEventListener(eventType, listener, options);
+                context.removeEventListener(eventType, listener, captureOptions);
                 this.delegatedEvents.delete(delegationId);
                 this.updateEventState('delegateRemoved', { delegationId });
             };
@@ -265,15 +276,15 @@ class EventManager {
      * @private
      */
     handleGlobalClick(event) {
+        // Skip ALL processing if already handled by delegation
+        if (event.customHandled) {
+            return;
+        }
+        
         try {
             // Handle section toggle clicks
             const toggleButton = event.target.closest('[data-action="toggle-section"]');
             if (toggleButton) {
-                // Skip if already handled by delegation
-                if (event.customHandled) {
-                    return;
-                }
-                
                 const sectionName = toggleButton.getAttribute('data-section');
                 if (sectionName) {
                     const sectionContent = document.querySelector(`[data-content="${sectionName}"]`);
@@ -304,6 +315,9 @@ class EventManager {
                                 icon.classList.add('bi-chevron-right');
                             }
                         }
+                        
+                        // Mark as handled to prevent double processing
+                        event.customHandled = true;
                         
                         // Update state
                         this.updateEventState('sectionToggle', {

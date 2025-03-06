@@ -37,29 +37,22 @@ class DashboardManager {
         console.log('Dashboard initialization started');
         
         try {
-            // Ensure Tree is initialized
-            if (!Tree.isInitialized()) {
-                try {
-                    console.log('Initializing Tree component...');
-                    // Find the container
-                    const treeContainer = document.querySelector('.tree-container') || 
-                                         document.querySelector('[data-content="projects"] .tree-container');
-                    
-                    if (treeContainer) {
-                        await Tree.initialize(treeContainer);
-                        console.log('Tree component initialized successfully');
-                        
-                        // Dispatch the initialized event
-                        document.dispatchEvent(new CustomEvent('tree:initialized'));
-                    } else {
-                        console.error('Could not find tree container for initialization');
-                    }
-                } catch (treeError) {
-                    console.error('Error initializing Tree:', treeError);
+            // Initialize state for section expansion
+            State.set('dashboard_sections', {
+                projects: false,  // Initially collapsed
+                measurements: false,
+                data: false,
+                models: false,
+                lastUpdate: new Date()
+            });
+
+            // Subscribe to section state changes
+            State.subscribe('dashboard_sections', (newState, oldState) => {
+                // Check if projects section was just expanded
+                if (newState.projects && (!oldState || !oldState.projects)) {
+                    this.loadProjects();
                 }
-            } else {
-                console.log('Tree already initialized');
-            }
+            });
 
             // Add tree node operation event listeners
             document.addEventListener('tree:node:add', async (event) => {
@@ -99,15 +92,8 @@ class DashboardManager {
             // Initialize forms
             this.initializeForms();
 
-            // Load projects if Tree is initialized
-            if (Tree.isInitialized()) {
-                await this.loadProjects();
-            } else {
-                // Listen for Tree initialization
-                document.addEventListener('tree:initialized', async () => {
-                    await this.loadProjects();
-                }, { once: true });
-            }
+            // Don't automatically load projects here
+            // They will be loaded when the section is expanded
             
             this.initialized = true;
             State.update('dashboard_state', {
@@ -273,21 +259,50 @@ class DashboardManager {
     async loadProjects() {
         console.log('Loading projects data...');
         try {
+            // Check if projects section is expanded - strict check
+            const sectionsState = State.get('dashboard_sections') || {};
+            if (sectionsState.projects !== true) {
+                console.log('Projects section is not expanded, skipping load');
+                return;
+            }
+            
+            // Check if tree wrapper exists and has content - don't reload if it does
+            const treeContainer = document.querySelector('[data-content="projects"] .tree-container');
+            if (!treeContainer) {
+                console.log('Tree container not found, skipping load');
+                return;
+            }
+            
+            const treeWrapper = treeContainer.querySelector('.tree-wrapper');
+            if (treeWrapper && treeWrapper.querySelector('.tree-item')) {
+                console.log('Projects already loaded, skipping');
+                return;
+            }
+            
             // Just load projects from API
             var response = await API.Projects.list();
             console.log('Projects loaded:', response);
             
             // Render the projects in the tree
             if (Tree.isInitialized()) {
-                if (response.data) {
-                    console.log('Rendering projects from response.data');
-                    Tree.renderNodes(response.data);
+                // Use a consistent approach to extract nodes
+                let projectNodes = [];
+                
+                if (response && response.nodes && Array.isArray(response.nodes)) {
+                    projectNodes = response.nodes;
                 } else if (Array.isArray(response)) {
-                    console.log('Rendering projects from array response');
-                    Tree.renderNodes(response);
-                } else {
-                    console.log('Rendering projects from response object');
-                    Tree.renderNodes(response.results || response.nodes || []);
+                    projectNodes = response;
+                } else if (response && response.results && Array.isArray(response.results)) {
+                    projectNodes = response.results;
+                } else if (response && response.data && Array.isArray(response.data)) {
+                    projectNodes = response.data;
+                }
+                
+                console.log('Rendering', projectNodes.length, 'projects');
+                
+                // Only render if we have nodes and they have the required properties
+                if (projectNodes.length > 0) {
+                    Tree.renderNodes(projectNodes);
                 }
             } else {
                 console.warn('Tree not initialized, cannot render projects');
@@ -327,6 +342,9 @@ class DashboardManager {
         const isHidden = sectionContent.classList.contains('w3-hide');
         const icon = toggleButton.querySelector('i');
         
+        // Get current sections state
+        const sectionsState = State.get('dashboard_sections') || {};
+        
         if (isHidden) {
             // First show the section by removing the w3-hide class
             sectionContent.classList.remove('w3-hide');
@@ -337,47 +355,32 @@ class DashboardManager {
                 icon.classList.add('bi-chevron-down');
             }
             
-            // Handle projects section specially
+            // Update state to reflect section is expanded
+            State.update('dashboard_sections', {
+                [sectionName]: true,
+                lastUpdate: new Date()
+            });
+            
+            // In handleSectionToggle, modify the projects section handling:
             if (sectionName === 'projects') {
                 const treeContainer = sectionContent.querySelector('.tree-container');
                 
                 if (treeContainer) {
-                    // Apply w3-container to ensure proper spacing
+                    // Apply styling only, don't load yet
                     if (!treeContainer.classList.contains('w3-container')) {
                         treeContainer.classList.add('w3-container');
                     }
                     
-                    // Ensure visibility with w3-show class
                     treeContainer.classList.add('w3-show');
                     
-                    // Find the tree wrapper
                     const treeWrapper = treeContainer.querySelector('.tree-wrapper');
                     
                     if (treeWrapper) {
-                        // Make sure tree wrapper is visible
                         treeWrapper.classList.remove('w3-hide');
                         treeWrapper.classList.add('w3-show');
                         
-                        // Use a w3.css class for margin
-                        if (!treeWrapper.classList.contains('w3-margin-top')) {
-                            treeWrapper.classList.add('w3-margin-top');
-                        }
-                        
-                        // Check if we need to load the projects
-                        if (treeWrapper.children.length === 0 || 
-                            !treeWrapper.querySelector('.tree-item')) {
-                            
-                            if (typeof Tree !== 'undefined' && Tree.isInitialized && Tree.isInitialized()) {
-                                // Use API to load projects
-                                API.Projects.list().then(response => {
-                                    if (response && response.nodes) {
-                                        Tree.renderNodes(response.nodes);
-                                    }
-                                }).catch(error => {
-                                    console.error('Error loading projects:', error);
-                                });
-                            }
-                        }
+                        // The state update will trigger loadProjects via subscription
+                        // Remove the direct call to loadProjects here to avoid duplicate loading
                     }
                 }
             }
@@ -390,6 +393,12 @@ class DashboardManager {
                 icon.classList.remove('bi-chevron-down');
                 icon.classList.add('bi-chevron-right');
             }
+            
+            // Update state to reflect section is collapsed
+            State.update('dashboard_sections', {
+                [sectionName]: false,
+                lastUpdate: new Date()
+            });
         }
         
         return false;
@@ -629,14 +638,6 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error('Failed to initialize dashboard:', error);
     });
     
-    // Add a manual trigger for dashboard:ready in case it doesn't fire automatically
-    setTimeout(function() {
-        if (!window._dashboardInitialized) {
-            console.log('Manually triggering dashboard:ready event');
-            document.dispatchEvent(new CustomEvent('dashboard:ready'));
-            window._dashboardInitialized = true;
-        }
-    }, 1000);
 });
 
 // Export dashboard instance

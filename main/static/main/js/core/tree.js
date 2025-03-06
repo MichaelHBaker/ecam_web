@@ -82,7 +82,7 @@ class TreeManager {
             console.warn('TreeManager already initialized');
             return this;
         }
-
+    
         try {
             // Check dependencies
             if (!State.isInitialized()) {
@@ -94,70 +94,50 @@ class TreeManager {
             if (!DOM.isInitialized()) {
                 throw new Error('DOM must be initialized before TreeManager');
             }
-
-            // Enhanced container lookup - try multiple methods to find the container
-            console.log('Looking for container:', containerId);
-            
-            this.container = null;
-            
-            // Handle direct element reference
+    
+            // Find container (simplified)
             if (containerId instanceof HTMLElement) {
                 this.container = containerId;
-                console.log('Direct element reference provided:', this.container);
-            } 
-            // First try DOM utility
-            else if (!this.container) {
+            } else {
                 this.container = DOM.getElement(containerId);
-                console.log('DOM.getElement result:', this.container);
-            }
-            
-            // Then try direct document query with ID
-            if (!this.container && typeof containerId === 'string' && !containerId.startsWith('#')) {
-                this.container = document.getElementById(containerId);
-                console.log('document.getElementById result:', this.container);
-            }
-            
-            // Then try as a CSS selector
-            if (!this.container && typeof containerId === 'string') {
-                this.container = document.querySelector(containerId);
-                console.log('document.querySelector result:', this.container);
-            }
-            
-            // Last attempt - try with prepended # for ID
-            if (!this.container && typeof containerId === 'string' && !containerId.startsWith('#')) {
-                this.container = document.querySelector('#' + containerId);
-                console.log('document.querySelector with # result:', this.container);
             }
             
             if (!this.container) {
                 throw new Error(`Container ${containerId} not found`);
             }
-
+    
+            // Find existing elements in the container
+            this.wrapper = this.container.querySelector('.tree-wrapper');
+            this.loader = this.container.querySelector('.w3-center.w3-padding-16');
+            this.errorContainer = this.container.querySelector('.tree-error');
+            this.emptyContainer = this.container.querySelector('.w3-panel.w3-pale-yellow');
+    
+            if (!this.wrapper) {
+                throw new Error('Tree wrapper element not found in container');
+            }
+    
             // Initialize state
             await this.initializeState();
-
+    
             // Bind methods
             this.handleNodeAction = this.handleNodeAction.bind(this);
             this.handleFilter = this.handleFilter.bind(this);
-
-            // Setup container structure
-            await this.setupContainer();
-
+    
             // Mark as initialized before methods that use _checkInitialized
             this.initialized = true;
             console.log('TreeManager initialized');
-
+    
             // Setup event delegation
             await this.setupEventListeners();
-
+    
             // Setup state subscriptions
             await this.setupStateSubscriptions();
-
+    
             // Load initial data
             await this.loadInitialData();
-
+    
             return this;
-
+    
         } catch (error) {
             this.handleError('Initialization Error', error);
             throw error;
@@ -198,118 +178,7 @@ class TreeManager {
         }
     }
 
-    /**
-     * Setup container structure with error handling
-     * @private
-     */
-    async setupContainer() {
-        try {
-            console.log(this.container.parentElement.getAttribute("data-content") + " !!!!!!!!!");
-            console.log(this.container.innerHTML + " !!!!!!!!!");
-
-            // Clear container
-            this.container.innerHTML = '';
-
-            // Create main structure using DOM utility
-            const structure = DOM.createElement('div', {
-                className: 'tree-container',
-                innerHTML: `
-                    <div class="tree-header w3-bar w3-light-grey">
-                        <div class="w3-bar-item">
-                            <input type="text" 
-                                class="w3-input" 
-                                placeholder="Filter nodes..."
-                                data-action="filter">
-                        </div>
-                        <div class="w3-bar-item w3-right">
-                            <button class="w3-button" data-action="expand-all">
-                                <i class="bi bi-arrows-expand"></i>
-                            </button>
-                            <button class="w3-button" data-action="collapse-all">
-                                <i class="bi bi-arrows-collapse"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="tree-content">
-                        <div class="tree-wrapper"></div>
-                        <div class="tree-loader w3-hide">
-                            <i class="bi bi-arrow-repeat w3-spin"></i> Loading...
-                        </div>
-                        <div class="tree-error w3-hide">
-                            <div class="w3-panel w3-pale-red">
-                                <h3>Error</h3>
-                                <p class="error-message"></p>
-                            </div>
-                        </div>
-                        <div class="tree-empty w3-hide">
-                            <div class="w3-panel w3-pale-yellow">
-                                <p>No items found</p>
-                            </div>
-                        </div>
-                    </div>
-                `
-            });
-
-            console.log(structure.innerHTML + " SSSSSSS");
-            this.container.appendChild(structure);
-            console.log(this.container.innerHTML + " ZZZZZZZ");
-
-
-            // Store references to main elements
-            this.wrapper = DOM.getElement('.tree-wrapper', this.container);
-            this.loader = DOM.getElement('.tree-loader', this.container);
-            this.errorContainer = DOM.getElement('.tree-error', this.container);
-            this.emptyContainer = DOM.getElement('.tree-empty', this.container);
-
-            // More flexible error handling - create missing elements if needed
-            if (!this.wrapper) {
-                this.wrapper = DOM.createElement('div', { className: 'tree-wrapper' });
-                DOM.getElement('.tree-content', this.container)?.appendChild(this.wrapper);
-            }
-            
-            if (!this.loader) {
-                this.loader = DOM.createElement('div', { 
-                    className: 'tree-loader w3-hide',
-                    innerHTML: '<i class="bi bi-arrow-repeat w3-spin"></i> Loading...'
-                });
-                DOM.getElement('.tree-content', this.container)?.appendChild(this.loader);
-            }
-            
-            if (!this.errorContainer) {
-                this.errorContainer = DOM.createElement('div', { 
-                    className: 'tree-error w3-hide',
-                    innerHTML: '<div class="w3-panel w3-pale-red"><h3>Error</h3><p class="error-message"></p></div>'
-                });
-                DOM.getElement('.tree-content', this.container)?.appendChild(this.errorContainer);
-            }
-            
-            if (!this.emptyContainer) {
-                // First try to use existing no-results container if available
-                this.emptyContainer = DOM.getElement('.no-results', this.container);
-                
-                if (!this.emptyContainer) {
-                    this.emptyContainer = DOM.createElement('div', { 
-                        className: 'tree-empty w3-hide',
-                        innerHTML: '<div class="w3-panel w3-pale-yellow"><p>No items found</p></div>'
-                    });
-                    DOM.getElement('.tree-content', this.container)?.appendChild(this.emptyContainer);
-                } else {
-                    // Add tree-empty class to existing element
-                    this.emptyContainer.classList.add('tree-empty');
-                }
-            }
-
-            // Final check for essential wrapper element
-            if (!this.wrapper) {
-                throw new Error('Failed to create or find tree wrapper element');
-            }
-
-        } catch (error) {
-            this.handleError('Container Setup Error', error);
-            throw error;
-        }
-    }
- 
+    
     /**
      * Handle errors consistently
      * @private
@@ -795,6 +664,8 @@ class TreeManager {
                 console.warn('Error dispatching render event:', eventError);
             }
 
+            console.log('Rendered tree structure:', this.wrapper.outerHTML.substring(0, 500));
+            
         } catch (error) {
             this.handleError('Node Rendering Error', error);
             throw error;
@@ -808,6 +679,7 @@ class TreeManager {
      * @private
      */
     async createNodeElement(node) {
+        console.log('Node data received:', JSON.stringify(node, null, 2));
         if (!node || !node.id) {
             throw new Error('Invalid node data');
         }

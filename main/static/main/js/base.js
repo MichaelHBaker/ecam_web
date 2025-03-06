@@ -59,6 +59,11 @@ async function initializeBasePage() {
             
             // Trigger page-specific initialization
             console.log(`Triggering ${pageType}:ready event`);
+            State.update('dashboard_state', {
+                initialized: true,
+                ready: true,  // Add a specific flag for the ready event
+                lastUpdate: new Date()
+            });
             Events.trigger(`${pageType}:ready`);
         });
         

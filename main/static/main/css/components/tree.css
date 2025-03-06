@@ -1,128 +1,79 @@
-/* components/tree.css */
+/* Tree component styles */
 
-/* Tree container */
-.tree-container {
-    position: relative;
-    min-height: 200px;
-}
-
-/* Tree wrapper */
-.tree-wrapper {
-    position: relative;
-    min-height: 50px;
-}
-
-/* Tree item base structure */
+/* Tree item styling */
 .tree-item {
     width: 100%;
-    position: relative;
     margin-bottom: 2px;
 }
 
-/* Tree item content - ensure it stays on one line */
-.tree-item-content {
-    display: flex !important;
-    align-items: center !important;
-    flex-wrap: nowrap !important;
-    width: 100%;
-    padding: 8px;
+/* Tree item bar */
+.tree-item > .w3-bar {
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
 }
 
 /* Toggle button */
-.toggle-btn, 
-[data-action="toggle"] {
-    width: 40px !important;
-    flex-shrink: 0 !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-}
-
-/* Spacer for alignment */
-.spacer {
-    width: 40px;
-    flex-shrink: 0;
-}
-
-/* Item data */
-.item-data {
-    flex: 1 !important;
-    min-width: 0 !important;
-    overflow: hidden !important;
-    margin: 0 8px;
-}
-
-.item-name {
-    display: block;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-weight: 500;
-}
-
-.item-description {
-    display: block;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 0.85em;
-}
-
-/* Action buttons */
-.item-actions {
-    display: flex !important;
-    align-items: center !important;
-    flex-shrink: 0 !important;
-    margin-left: auto !important;
-    white-space: nowrap !important;
-}
-
-.item-actions .w3-button {
-    padding: 4px 8px;
+.toggle-btn {
+    width: 32px;
     min-width: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    padding: 4px;
+    background: transparent;
+    border: none;
+    margin-right: 8px;
 }
 
-/* Indentation for nested levels */
-.tree-item[data-type="location"] {
-    margin-left: 24px;
+/* Node name */
+.tree-item .node-name {
+    flex: 1;
+    margin: 0 16px;
+    font-size: 16px;
 }
 
-.tree-item[data-type="measurement"] {
-    margin-left: 48px;
+/* Dropdown positioning */
+.w3-dropdown-hover {
+    position: relative;
+}
+
+.w3-dropdown-content {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    min-width: 160px;
+    z-index: 99;
+    background-color: white;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.w3-dropdown-content .w3-button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    white-space: nowrap;
 }
 
 /* Children container */
 .children-container {
-    width: 100%;
+    margin-left: 40px;
 }
 
-/* Loading indicator */
+/* Loading states */
 .loading-indicator {
-    padding: 8px;
+    padding: 16px;
     text-align: center;
 }
 
-/* Responsive adjustments */
-@media (max-width: 600px) {
-    .tree-item[data-type="location"] {
-        margin-left: 16px;
-    }
+.w3-hide {
+    display: none !important;
+}
 
-    .tree-item[data-type="measurement"] {
-        margin-left: 32px;
-    }
-    
-    .item-actions .w3-button {
-        padding: 4px;
-        min-width: 28px;
-    }
-    
-    .toggle-btn,
-    [data-action="toggle"],
-    .spacer {
-        width: 32px !important;
-    }
+/* Loading spinner animation */
+.w3-spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }

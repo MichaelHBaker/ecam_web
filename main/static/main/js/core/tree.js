@@ -665,7 +665,7 @@ class TreeManager {
             }
 
             console.log('Rendered tree structure:', this.wrapper.outerHTML.substring(0, 500));
-            
+
         } catch (error) {
             this.handleError('Node Rendering Error', error);
             throw error;
@@ -673,13 +673,12 @@ class TreeManager {
     }
 
     /**
-     * Create node element with enhanced safety
+     * Create node element with proper structure using the DOM utility
      * @param {Object} node - Node data
      * @returns {Promise<HTMLElement>} Created node element
      * @private
      */
     async createNodeElement(node) {
-        console.log('Node data received:', JSON.stringify(node, null, 2));
         if (!node || !node.id) {
             throw new Error('Invalid node data');
         }
@@ -692,23 +691,21 @@ class TreeManager {
         }
     
         try {
-            // Create node container
+            // Create main tree item container
             const nodeElement = DOM.createElement('div', {
-                className: 'tree-item w3-hover-light-grey',
+                className: 'tree-item',
                 attributes: {
                     'data-id': node.id,
                     'data-type': type
                 }
             });
-    
-            // Create content structure with fixed flex layout
-            const content = DOM.createElement('div', {
-                className: 'tree-item-content w3-bar',
-                attributes: {
-                    style: 'display:flex; align-items:center; flex-wrap:nowrap; width:100%;'
-                }
+            
+            // Create bar container for the node content
+            const barContainer = DOM.createElement('div', {
+                className: 'w3-bar w3-hover-light-grey'
             });
-    
+            nodeElement.appendChild(barContainer);
+            
             // Add toggle button if can have children
             if (typeConfig.canHaveChildren) {
                 const toggleBtn = DOM.createElement('button', {
@@ -717,109 +714,122 @@ class TreeManager {
                         'data-action': 'toggle',
                         'aria-expanded': 'false',
                         'aria-controls': `children-${node.id}`,
-                        'style': 'flex-shrink:0; width:40px; display:flex; align-items:center; justify-content:center;'
-                    },
-                    innerHTML: '<i class="bi bi-chevron-right"></i>'
+                    }
                 });
-                content.appendChild(toggleBtn);
+                toggleBtn.innerHTML = '<i class="bi bi-chevron-right"></i>';
+                barContainer.appendChild(toggleBtn);
             } else {
-                content.appendChild(DOM.createElement('span', {
-                    className: 'w3-bar-item spacer',
+                // Spacer if no toggle
+                barContainer.appendChild(DOM.createElement('div', {
+                    className: 'w3-bar-item',
                     attributes: {
-                        style: 'width:40px; flex-shrink:0;'
+                        style: 'width:40px'
                     }
                 }));
             }
-    
-            // Add item data with proper overflow handling
-            const itemData = DOM.createElement('div', {
-                className: 'w3-bar-item item-data',
+            
+            // Node name element
+            const nameSpan = DOM.createElement('span', {
+                className: 'w3-bar-item w3-large',
                 attributes: {
-                    style: 'flex:1; min-width:0; overflow:hidden;'
-                },
-                innerHTML: `
-                    <span class="item-name" style="display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${this.sanitizeHtml(node.name)}</span>
-                    ${node.description ? `
-                        <span class="item-description w3-small w3-text-grey" style="display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                            ${this.sanitizeHtml(node.description)}
-                        </span>
-                    ` : ''}
-                `
-            });
-            content.appendChild(itemData);
-    
-            // Add action buttons that won't wrap
-            const actions = DOM.createElement('div', {
-                className: 'w3-bar-item w3-right item-actions',
-                attributes: {
-                    style: 'display:flex; align-items:center; flex-shrink:0; margin-left:auto; white-space:nowrap;'
+                    style: 'flex:1'
                 }
             });
-    
-            // Add buttons
-            actions.appendChild(this.createActionButton('edit', 'Edit', 'pencil'));
+            nameSpan.textContent = node.name || 'Untitled';
+            barContainer.appendChild(nameSpan);
             
-            // Add child button if applicable
+            // Action menu with dropdown (three dots)
+            const actionsContainer = DOM.createElement('div', {
+                className: 'w3-dropdown-hover'
+            });
+            
+            // Three dots button
+            const menuBtn = DOM.createElement('button', {
+                className: 'w3-bar-item w3-button',
+                attributes: {
+                    'title': 'Actions'
+                }
+            });
+            menuBtn.innerHTML = '<i class="bi bi-three-dots-vertical"></i>';
+            actionsContainer.appendChild(menuBtn);
+            
+            // Dropdown content
+            const dropdownContent = DOM.createElement('div', {
+                className: 'w3-dropdown-content w3-bar-block w3-card-4'
+            });
+            
+            // Add child option (if applicable)
             if (typeConfig.canHaveChildren) {
-                actions.appendChild(this.createActionButton('add', 'Add child', 'plus'));
+                const addLink = DOM.createElement('a', {
+                    className: 'w3-bar-item w3-button',
+                    attributes: {
+                        'href': '#',
+                        'data-node-action': 'add'
+                    }
+                });
+                addLink.innerHTML = `<i class="bi bi-plus-lg"></i> Add ${typeConfig.childType || 'Child'}`;
+                dropdownContent.appendChild(addLink);
             }
             
-            // Delete button
-            actions.appendChild(this.createActionButton('delete', 'Delete', 'trash'));
-    
-            content.appendChild(actions);
-            nodeElement.appendChild(content);
-    
-            // Add children container if applicable
+            // Edit option
+            const editLink = DOM.createElement('a', {
+                className: 'w3-bar-item w3-button',
+                attributes: {
+                    'href': '#',
+                    'data-node-action': 'edit'
+                }
+            });
+            editLink.innerHTML = '<i class="bi bi-pencil"></i> Edit';
+            dropdownContent.appendChild(editLink);
+            
+            // Delete option
+            const deleteLink = DOM.createElement('a', {
+                className: 'w3-bar-item w3-button',
+                attributes: {
+                    'href': '#',
+                    'data-node-action': 'delete'
+                }
+            });
+            deleteLink.innerHTML = '<i class="bi bi-trash"></i> Delete';
+            dropdownContent.appendChild(deleteLink);
+            
+            actionsContainer.appendChild(dropdownContent);
+            barContainer.appendChild(actionsContainer);
+            
+            // Children container if applicable
             if (typeConfig.canHaveChildren) {
                 const childrenContainer = DOM.createElement('div', {
                     className: 'children-container w3-hide',
                     id: `children-${node.id}`,
                     attributes: {
-                        style: 'width:100%;'
+                        style: 'margin-left: 40px'
                     }
                 });
-    
-                childrenContainer.appendChild(DOM.createElement('div', {
-                    className: 'w3-panel w3-center loading-indicator w3-hide',
-                    innerHTML: '<i class="bi bi-arrow-repeat w3-spin"></i> Loading...'
-                }));
-    
-                childrenContainer.appendChild(DOM.createElement('div', {
+                
+                // Loading indicator
+                const loadingIndicator = DOM.createElement('div', {
+                    className: 'w3-center w3-padding-16 loading-indicator w3-hide'
+                });
+                loadingIndicator.innerHTML = '<i class="bi bi-arrow-repeat w3-spin"></i> Loading...';
+                childrenContainer.appendChild(loadingIndicator);
+                
+                // Children wrapper
+                const childrenWrapper = DOM.createElement('div', {
                     className: 'children-wrapper'
-                }));
-    
+                });
+                
+                childrenContainer.appendChild(childrenWrapper);
                 nodeElement.appendChild(childrenContainer);
             }
-    
+            
             return nodeElement;
-    
+            
         } catch (error) {
             this.handleError(`Node Element Creation Error (${node.id})`, error);
             throw error;
         }
     }
     
-    /**
-     * Create action button with proper attributes
-     * @param {string} action - Action name
-     * @param {string} title - Button title
-     * @param {string} icon - Button icon
-     * @returns {HTMLElement} Button element
-     * @private
-     */
-    createActionButton(action, title, icon) {
-        return DOM.createElement('button', {
-            className: 'w3-button',
-            attributes: {
-                'data-node-action': action,
-                'title': title,
-                'aria-label': title
-            },
-            innerHTML: `<i class="bi bi-${icon}"></i>`
-        });
-    }
-
     /**
      * Toggle node expansion state with animation
      * @param {HTMLElement} nodeElement - Node element

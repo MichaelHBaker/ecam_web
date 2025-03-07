@@ -590,31 +590,7 @@ class TreeManager {
         try {
             this._checkInitialized();
         } catch (error) {
-            console.warn('Tree not initialized, using fallback mode for renderNodes');
-            if (!this.wrapper) {
-                // Try to find container using multiple methods
-                let container = null;
-                if (this.container) {
-                    container = this.container;
-                } else {
-                    container = document.querySelector('#projectsTreeContainer') || 
-                            document.querySelector('.tree-container') ||
-                            document.querySelector('[data-content="projects"] .tree-container');
-                }
-                
-                if (container) {
-                    // Create wrapper if needed
-                    this.wrapper = container.querySelector('.tree-wrapper');
-                    if (!this.wrapper) {
-                        this.wrapper = document.createElement('div');
-                        this.wrapper.className = 'tree-wrapper';
-                        container.appendChild(this.wrapper);
-                    }
-                } else {
-                    console.error('Cannot render nodes: No container found in fallback mode');
-                    return;
-                }
-            }
+            console.warn('Tree not initialized, cannot renderNodes');
         }
 
         try {
@@ -664,7 +640,7 @@ class TreeManager {
                 console.warn('Error dispatching render event:', eventError);
             }
 
-            console.log('Rendered tree structure:', this.wrapper.outerHTML.substring(0, 500));
+            console.log('Rendered tree structure:', this.wrapper.outerHTML.substring(0, 2500));
 
         } catch (error) {
             this.handleError('Node Rendering Error', error);
@@ -673,7 +649,8 @@ class TreeManager {
     }
 
     /**
-     * Create node element with proper structure using the DOM utility
+     * Create a node element with highlight around chevron icon and project name,
+     * with three dots that show dropdown menu on hover
      * @param {Object} node - Node data
      * @returns {Promise<HTMLElement>} Created node element
      * @private
@@ -682,98 +659,98 @@ class TreeManager {
         if (!node || !node.id) {
             throw new Error('Invalid node data');
         }
-    
-        const type = node.type || 'project';
-        const typeConfig = this.nodeTypes[type];
-        
-        if (!typeConfig) {
-            throw new Error(`Unknown node type: ${type}`);
-        }
-    
+
         try {
             // Create main tree item container
             const nodeElement = DOM.createElement('div', {
-                className: 'tree-item',
+                classes: 'tree-item w3-padding-small',
                 attributes: {
                     'data-id': node.id,
-                    'data-type': type
+                    'data-type': node.type || 'project'
+                },
+                styles: {
+                    display: 'flex',
+                    alignItems: 'center'
                 }
             });
             
-            // Create bar container for the node content
-            const barContainer = DOM.createElement('div', {
-                className: 'w3-bar w3-hover-light-grey'
-            });
-            nodeElement.appendChild(barContainer);
-            
-            // Add toggle button if can have children
-            if (typeConfig.canHaveChildren) {
-                const toggleBtn = DOM.createElement('button', {
-                    className: 'w3-bar-item w3-button toggle-btn',
-                    attributes: {
-                        'data-action': 'toggle',
-                        'aria-expanded': 'false',
-                        'aria-controls': `children-${node.id}`,
-                    }
-                });
-                toggleBtn.innerHTML = '<i class="bi bi-chevron-right"></i>';
-                barContainer.appendChild(toggleBtn);
-            } else {
-                // Spacer if no toggle
-                barContainer.appendChild(DOM.createElement('div', {
-                    className: 'w3-bar-item',
-                    attributes: {
-                        style: 'width:40px'
-                    }
-                }));
-            }
-            
-            // Node name element
-            const nameSpan = DOM.createElement('span', {
-                className: 'w3-bar-item w3-large',
-                attributes: {
-                    style: 'flex:1'
+            // Create left side content (icon + name) with hover effect
+            const leftContent = DOM.createElement('div', {
+                classes: 'w3-hover-light-grey',
+                styles: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    cursor: 'pointer'
                 }
             });
-            nameSpan.textContent = node.name || 'Untitled';
-            barContainer.appendChild(nameSpan);
             
-            // Action menu with dropdown (three dots)
-            const actionsContainer = DOM.createElement('div', {
-                className: 'w3-dropdown-hover'
-            });
-            
-            // Three dots button
-            const menuBtn = DOM.createElement('button', {
-                className: 'w3-bar-item w3-button',
-                attributes: {
-                    'title': 'Actions'
+            // Create chevron icon
+            const chevronIcon = DOM.createElement('i', {
+                classes: ['bi', 'bi-chevron-right'],
+                styles: {
+                    marginRight: '8px'
                 }
             });
-            menuBtn.innerHTML = '<i class="bi bi-three-dots-vertical"></i>';
-            actionsContainer.appendChild(menuBtn);
             
-            // Dropdown content
+            // Add chevron and name to left content
+            leftContent.appendChild(chevronIcon);
+            leftContent.appendChild(document.createTextNode(node.name || 'Untitled'));
+            
+            // Add left content to node element
+            nodeElement.appendChild(leftContent);
+            
+            // Create dropdown container
+            const dropdownContainer = DOM.createElement('div', {
+                classes: 'w3-dropdown-hover',
+                styles: {
+                    marginLeft: '10px' // Small distance from the name
+                }
+            });
+            
+            // Create three dots button
+            const threeDotsBtn = DOM.createElement('button', {
+                classes: 'w3-button',
+                styles: {
+                    padding: '4px 8px'
+                }
+            });
+            
+            // Create the three dots icon
+            const threeDotsIcon = DOM.createElement('i', {
+                classes: ['bi', 'bi-three-dots-vertical']
+            });
+            
+            threeDotsBtn.appendChild(threeDotsIcon);
+            dropdownContainer.appendChild(threeDotsBtn);
+            
+            // Create dropdown content
             const dropdownContent = DOM.createElement('div', {
-                className: 'w3-dropdown-content w3-bar-block w3-card-4'
+                classes: 'w3-dropdown-content w3-bar-block w3-card'
             });
             
-            // Add child option (if applicable)
-            if (typeConfig.canHaveChildren) {
-                const addLink = DOM.createElement('a', {
-                    className: 'w3-bar-item w3-button',
+            // Add dropdown menu items
+            const typeConfig = this.nodeTypes[node.type || 'project'];
+            
+            // Add child option if this node type can have children
+            if (typeConfig && typeConfig.canHaveChildren) {
+                const addChildLink = DOM.createElement('a', {
+                    classes: 'w3-bar-item w3-button',
                     attributes: {
                         'href': '#',
                         'data-node-action': 'add'
                     }
                 });
-                addLink.innerHTML = `<i class="bi bi-plus-lg"></i> Add ${typeConfig.childType || 'Child'}`;
-                dropdownContent.appendChild(addLink);
+                
+                const childType = typeConfig.childType || 'Child';
+                addChildLink.innerHTML = `<i class="bi bi-plus-lg"></i> Add ${childType}`;
+                dropdownContent.appendChild(addChildLink);
             }
             
             // Edit option
             const editLink = DOM.createElement('a', {
-                className: 'w3-bar-item w3-button',
+                classes: 'w3-bar-item w3-button',
                 attributes: {
                     'href': '#',
                     'data-node-action': 'edit'
@@ -784,7 +761,7 @@ class TreeManager {
             
             // Delete option
             const deleteLink = DOM.createElement('a', {
-                className: 'w3-bar-item w3-button',
+                classes: 'w3-bar-item w3-button',
                 attributes: {
                     'href': '#',
                     'data-node-action': 'delete'
@@ -793,37 +770,13 @@ class TreeManager {
             deleteLink.innerHTML = '<i class="bi bi-trash"></i> Delete';
             dropdownContent.appendChild(deleteLink);
             
-            actionsContainer.appendChild(dropdownContent);
-            barContainer.appendChild(actionsContainer);
+            // Add dropdown content to dropdown container
+            dropdownContainer.appendChild(dropdownContent);
             
-            // Children container if applicable
-            if (typeConfig.canHaveChildren) {
-                const childrenContainer = DOM.createElement('div', {
-                    className: 'children-container w3-hide',
-                    id: `children-${node.id}`,
-                    attributes: {
-                        style: 'margin-left: 40px'
-                    }
-                });
-                
-                // Loading indicator
-                const loadingIndicator = DOM.createElement('div', {
-                    className: 'w3-center w3-padding-16 loading-indicator w3-hide'
-                });
-                loadingIndicator.innerHTML = '<i class="bi bi-arrow-repeat w3-spin"></i> Loading...';
-                childrenContainer.appendChild(loadingIndicator);
-                
-                // Children wrapper
-                const childrenWrapper = DOM.createElement('div', {
-                    className: 'children-wrapper'
-                });
-                
-                childrenContainer.appendChild(childrenWrapper);
-                nodeElement.appendChild(childrenContainer);
-            }
+            // Add dropdown container to node element
+            nodeElement.appendChild(dropdownContainer);
             
             return nodeElement;
-            
         } catch (error) {
             this.handleError(`Node Element Creation Error (${node.id})`, error);
             throw error;

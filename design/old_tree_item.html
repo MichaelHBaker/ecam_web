@@ -1,0 +1,217 @@
+{% load custom_tags %}
+<div class="tree-item w3-hover-light-grey">
+    <!-- Main Tree Content -->
+    <div id="id_form-{{ level_type }}-{{ item.id }}" class="tree-text">
+        <form id="id_{{ level_type }}Form-{{ item.id }}" 
+              onsubmit="return crud.updateItem(event, '{{ level_type }}', '{{ item.id }}', [{% for field in fields %}'{{ field.name }}'{% if not forloop.last %}, {% endif %}{% endfor %}])">
+            {% csrf_token %}
+            <input type="hidden" name="{{ level_type }}_id" value="{{ item.id }}">
+            {% if parent %}
+                <input type="hidden" name="parent_id" value="{{ parent.id }}">
+            {% endif %}
+
+            <!-- Expand/Collapse Button -->
+            {% if next_level_type %}
+                <button type="button" 
+                        onclick="toggleOpenClose('id_{{ level_type }}-{{ item.id }}')" 
+                        class="w3-button"
+                        title="Click to open/close {{ level_type }} details">
+                    <i id="id_chevronIcon-id_{{ level_type }}-{{ item.id }}" 
+                       class="bi bi-chevron-right"></i>
+                </button>
+            {% endif %}
+            
+            <!-- Fields Container -->
+            <div class="fields-container">
+                {% for field in fields %}
+                    <input id="id_{{ level_type }}{{ field.name|capfirst|cut:" " }}-{{ item.id }}" 
+                           type="text"
+                           name="{{ field.name }}"
+                           value="{{ item|get_field_value:field }}"
+                           class="tree-item-field"
+                           style="display: {% if field.name == 'name' %}inline{% else %}none{% endif %};"
+                           title="{% if field.name == 'name' %}{% for f in fields %}{% if f.name != 'name' %}{{ f.name }}: {{ item|get_field_value:f }}{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}{% endif %};"
+                           readonly>
+                {% endfor %}
+            </div>
+
+            <!-- Edit Controls -->
+            <span id="id_{{ level_type }}EditControls-{{ item.id }}" style="display:none; margin-left: 4px;">
+                <button type="submit" class="w3-button" style="padding: 0 4px;" onclick="event.stopPropagation()">
+                    <i class="bi bi-check w3-large"></i>
+                </button>
+                <button type="button" class="w3-button" style="padding: 0 4px;" 
+                        onclick="crud.cancelEdit(event, '{{ level_type }}', '{{ item.id }}', [{% for field in fields %}'{{ field.name }}'{% if not forloop.last %}, {% endif %}{% endfor %}])">
+                    <i class="bi bi-x w3-large"></i>
+                </button>
+            </span>
+        </form>
+    </div>
+
+    <!-- Action Menu -->
+    <div class="item-actions">
+        <button class="w3-button">
+            <i class="bi bi-three-dots-vertical"></i>
+        </button>
+        <div class="w3-dropdown-content w3-bar-block w3-border">
+            {% if next_level_type == 'location' %}
+            <a href="#" class="w3-bar-item w3-button"
+               onclick="crud.addItem('{{ next_level_type }}', [{% for field in model_fields|get_item:next_level_type|get_item:'fields' %}'{{ field.name }}'{% if not forloop.last %}, {% endif %}{% endfor %}], '{{ item.id }}'); return false;">
+                <i class="bi bi-plus"></i> Add Location
+            </a>
+            {% endif %}
+            
+            {% if next_level_type == 'measurement' %}
+                <a href="#" class="w3-bar-item w3-button"
+                   onclick="crud.showMeasurementModal('{{ item.id }}'); return false;">
+                    <i class="bi bi-plus"></i> Add Measurement
+                </a>
+            {% endif %}
+
+            <a href="#" class="w3-bar-item w3-button"
+               onclick="crud.editItem('{{ level_type }}', '{{ item.id }}', [{% for field in fields %}'{{ field.name }}'{% if not forloop.last %}, {% endif %}{% endfor %}]); return false;">
+                <i class="bi bi-pencil"></i> Edit
+            </a>
+
+            <a href="#" class="w3-bar-item w3-button"
+               onclick="crud.deleteItem('{{ level_type }}', '{{ item.id }}'); return false;">
+                <i class="bi bi-trash"></i> Delete
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Measurement Modal -->
+{% if next_level_type == 'measurement' %}
+<div id="id_modal-location-{{ item.id }}" class="w3-modal" style="display:none; z-index: 1000;">
+   <div class="w3-modal-content w3-card-4 w3-animate-top" 
+        style="width:90%; min-width:600px; min-height:400px; resize:both; overflow:auto;">
+       <!-- Use w3-bar instead of custom header -->
+       <div class="w3-bar w3-light-grey">
+           <span onclick="crud.hideMeasurementModal('{{ item.id }}')" 
+                 class="w3-bar-item w3-button w3-right">&times;</span>
+           <h4 class="w3-bar-item"><i class="bi bi-plus-circle"></i> Add Measurement</h4>
+       </div>
+   
+       <!-- Use w3-container for consistent padding -->
+       <form id="id_measurement_form-{{ item.id }}" class="w3-container">
+           <!-- Hidden dataset and import IDs -->
+           <input type="hidden" id="id_dataset_id-{{ item.id }}" name="dataset_id" value="">
+           <input type="hidden" id="id_import_id-{{ item.id }}" name="import_id" value="">
+
+           <!-- Source Selection Bar - using w3-bar -->
+           <div class="w3-bar w3-padding">
+               <div class="w3-dropdown-hover">
+                   <button class="w3-button w3-white w3-border">
+                       <i class="bi bi-file-earmark-text"></i> Source
+                       <i class="bi bi-chevron-down"></i>
+                   </button>
+                   <div class="w3-dropdown-content w3-bar-block w3-card">
+                       <input type="file" 
+                              id="id_file_input-{{ item.id }}" 
+                              accept=".csv"
+                              style="display: none;" 
+                              onchange="crud.handleFileChange(event, '{{ item.id }}')">
+                              
+                       <a href="#" class="w3-bar-item w3-button"
+                          onclick="crud.handleFileSelect('{{ item.id }}'); return false;">
+                           <i class="bi bi-file-earmark-text"></i> File
+                       </a>
+                       <a href="#" class="w3-bar-item w3-button w3-disabled">
+                           <i class="bi bi-cloud"></i> API
+                       </a>
+                       <a href="#" class="w3-bar-item w3-button w3-disabled">
+                           <i class="bi bi-database"></i> Database
+                       </a>
+                   </div>
+               </div>
+           </div>
+
+           <!-- File Display with Status - using w3-panel -->
+           <div id="id_file_display-{{ item.id }}" 
+                class="w3-panel w3-leftbar w3-pale-blue w3-border-blue w3-display-container">
+               <i class="bi bi-file-earmark"></i> No file selected
+           </div>
+
+            <!-- CodeMirror Container -->
+            <div id="id_codemirror_container-{{ item.id }}" 
+                class="w3-container w3-border w3-round" 
+                style="display: none; height: calc(100% - 200px);">
+                <!-- Import Status and Define Data controls - now moved BEFORE the CodeMirror container -->
+                <div id="id_import_controls-{{ item.id }}" style="display: none;">
+                    <div id="id_import_status-{{ item.id }}" class="w3-bar w3-padding-small">
+                        <span>Required for Import:</span>
+                        <span id="id_tz_status-{{ item.id }}" class="w3-margin-left" title="Time Zone">
+                            TZ [<i class="bi bi-x"></i>]
+                        </span>
+                        <span id="id_start_status-{{ item.id }}" class="w3-margin-left" title="Data Start">
+                            Start [<i class="bi bi-x"></i>]
+                        </span>
+                        <span id="id_time_status-{{ item.id }}" class="w3-margin-left" title="Time Components">
+                            Time [<i class="bi bi-x"></i>]
+                        </span>
+                        <span id="id_meas_status-{{ item.id }}" class="w3-margin-left" title="Measurements">
+                            Meas [<i class="bi bi-x"></i>]
+                        </span>
+                    </div>
+
+                    <!-- Define Data Section -->
+                    <div class="w3-bar w3-padding-small">
+                        <div class="w3-dropdown-hover">
+                            <span style="display: inline-block; margin-right: 4px;">Define Data</span>
+                            <button class="w3-button" style="padding: 0 4px;">
+                                <i class="bi bi-three-dots-vertical"></i>
+                            </button>
+                            <div class="w3-dropdown-content w3-bar-block w3-border w3-card">
+                                <a href="#" class="w3-bar-item w3-button" onclick="crud.showSourceStats('{{ item.id }}'); return false;">
+                                    <i class="bi bi-graph-up"></i> Source Stats
+                                </a>
+                                <a href="#" class="w3-bar-item w3-button" onclick="crud.defineTimeZone('{{ item.id }}'); return false;">
+                                    <i class="bi bi-clock"></i> Time Zone
+                                </a>
+                                <a href="#" class="w3-bar-item w3-button" onclick="crud.defineDataStart('{{ item.id }}'); return false;">
+                                    <i class="bi bi-arrow-right-circle"></i> Data Start
+                                </a>
+                                <a href="#" class="w3-bar-item w3-button" onclick="crud.defineTimestamp('{{ item.id }}'); return false;">
+                                    <i class="bi bi-calendar"></i> Time Stamp
+                                </a>
+                                <a href="#" class="w3-bar-item w3-button" onclick="crud.defineMeasurements('{{ item.id }}'); return false;">
+                                    <i class="bi bi-graph-up"></i> Measurements
+                                </a>
+                            </div>
+                        </div>
+                        <span class="w3-tooltip" style="margin-left: 4px;">
+                            <i class="bi bi-question-circle"></i>
+                            <span class="w3-text w3-tag">Select text if helpful for action</span>
+                        </span>
+                    </div>                
+
+                </div>
+
+                <div class="w3-block" style="height: 100%; overflow: auto;">
+                    <textarea id="id_codemirror_editor-{{ item.id }}" 
+                            style="display: none;"></textarea>
+                </div>
+            </div>
+
+           <!-- Action Buttons - using w3-bar -->
+           <div class="w3-bar w3-padding-16">
+               <button type="button"
+                        onclick="crud.processFile('{{ item.id }}')" 
+                        class="w3-button w3-blue w3-right" 
+                        disabled>
+                    Analyze <i class="bi bi-arrow-right"></i>
+                </button>
+           </div>
+       </form>
+   </div>
+</div>
+{% endif %}
+
+{% if next_level_type and children_attr %}
+    <div id="id_{{ level_type }}-{{ item.id }}" class="w3-container w3-hide w3-margin-left">
+        {% for child in item|get_attr:children_attr %}
+            {% render_tree_item child next_level_type model_fields parent=item %}
+        {% endfor %}
+    </div>
+{% endif %}

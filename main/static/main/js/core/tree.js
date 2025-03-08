@@ -659,7 +659,7 @@ class TreeManager {
         if (!node || !node.id) {
             throw new Error('Invalid node data');
         }
-
+    
         try {
             // Create main tree item container
             const nodeElement = DOM.createElement('div', {
@@ -670,111 +670,176 @@ class TreeManager {
                 },
                 styles: {
                     display: 'flex',
+                    flexDirection: 'column'
+                }
+            });
+            
+            // Create node content row
+            const nodeRow = DOM.createElement('div', {
+                styles: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    width: '100%',
+                    position: 'relative'
+                }
+            });
+            nodeElement.appendChild(nodeRow);
+            
+            // Get type configuration
+            const nodeType = node.type || 'project';
+            const typeConfig = this.nodeTypes[nodeType];
+            const canHaveChildren = typeConfig && typeConfig.canHaveChildren;
+            
+            // Only add toggle button if the node can have children
+            if (canHaveChildren) {
+                // Check if node is already expanded in state
+                const isExpanded = this.isNodeExpanded(nodeType, node.id);
+                
+                // Create toggle button
+                const toggleBtn = DOM.createElement('button', {
+                    classes: 'toggle-btn',
+                    styles: {
+                        background: 'none',
+                        border: 'none',
+                        padding: '4px',
+                        cursor: 'pointer',
+                        marginRight: '4px'
+                    },
+                    attributes: {
+                        'aria-expanded': isExpanded ? 'true' : 'false',
+                        'type': 'button',
+                        'data-action': 'toggle'
+                    }
+                });
+                
+                // Add icon to toggle button - use appropriate icon based on expansion state
+                const toggleIcon = DOM.createElement('i', {
+                    classes: ['bi', isExpanded ? 'bi-chevron-down' : 'bi-chevron-right']
+                });
+                toggleBtn.appendChild(toggleIcon);
+                nodeRow.appendChild(toggleBtn);
+            } else {
+                // Add a spacer for alignment when no toggle button is needed
+                const spacer = DOM.createElement('div', {
+                    styles: {
+                        width: '24px',  // Approximately the width of the toggle button
+                        display: 'inline-block'
+                    }
+                });
+                nodeRow.appendChild(spacer);
+            }
+            
+            // Create content container
+            const contentContainer = DOM.createElement('div', {
+                styles: {
+                    display: 'flex',
                     alignItems: 'center'
                 }
             });
             
-            // Create left side content (icon + name) with hover effect
-            const leftContent = DOM.createElement('div', {
-                classes: 'w3-hover-light-grey',
-                styles: {
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    cursor: 'pointer'
-                }
-            });
+            // Add the node name
+            contentContainer.appendChild(document.createTextNode(node.name || 'Untitled'));
             
-            // Create chevron icon
-            const chevronIcon = DOM.createElement('i', {
-                classes: ['bi', 'bi-chevron-right'],
-                styles: {
-                    marginRight: '8px'
-                }
-            });
+            // Add additional node attributes if they exist
+            if (node.address) {
+                const addressText = DOM.createElement('span', {
+                    styles: {
+                        marginLeft: '12px',
+                        color: '#666',
+                        fontStyle: 'italic'
+                    }
+                });
+                addressText.textContent = node.address;
+                contentContainer.appendChild(addressText);
+            }
             
-            // Add chevron and name to left content
-            leftContent.appendChild(chevronIcon);
-            leftContent.appendChild(document.createTextNode(node.name || 'Untitled'));
-            
-            // Add left content to node element
-            nodeElement.appendChild(leftContent);
+            // Add content container to row
+            nodeRow.appendChild(contentContainer);
             
             // Create dropdown container
             const dropdownContainer = DOM.createElement('div', {
                 classes: 'w3-dropdown-hover',
                 styles: {
-                    marginLeft: '10px' // Small distance from the name
+                    marginLeft: '12px'
                 }
             });
             
-            // Create three dots button
-            const threeDotsBtn = DOM.createElement('button', {
+            // Create dropdown button
+            const dropdownBtn = DOM.createElement('button', {
                 classes: 'w3-button',
                 styles: {
                     padding: '4px 8px'
                 }
             });
-            
-            // Create the three dots icon
-            const threeDotsIcon = DOM.createElement('i', {
-                classes: ['bi', 'bi-three-dots-vertical']
-            });
-            
-            threeDotsBtn.appendChild(threeDotsIcon);
-            dropdownContainer.appendChild(threeDotsBtn);
+            dropdownBtn.innerHTML = '<i class="bi bi-three-dots-vertical"></i>';
+            dropdownContainer.appendChild(dropdownBtn);
             
             // Create dropdown content
             const dropdownContent = DOM.createElement('div', {
                 classes: 'w3-dropdown-content w3-bar-block w3-card'
             });
             
-            // Add dropdown menu items
-            const typeConfig = this.nodeTypes[node.type || 'project'];
-            
-            // Add child option if this node type can have children
-            if (typeConfig && typeConfig.canHaveChildren) {
-                const addChildLink = DOM.createElement('a', {
+            // Add menu items based on node type
+            if (canHaveChildren) {
+                const addBtn = DOM.createElement('a', {
                     classes: 'w3-bar-item w3-button',
                     attributes: {
                         'href': '#',
                         'data-node-action': 'add'
                     }
                 });
-                
                 const childType = typeConfig.childType || 'Child';
-                addChildLink.innerHTML = `<i class="bi bi-plus-lg"></i> Add ${childType}`;
-                dropdownContent.appendChild(addChildLink);
+                addBtn.innerHTML = `<i class="bi bi-plus-lg"></i> Add ${childType}`;
+                dropdownContent.appendChild(addBtn);
             }
             
-            // Edit option
-            const editLink = DOM.createElement('a', {
+            // Add edit and delete options
+            const editBtn = DOM.createElement('a', {
                 classes: 'w3-bar-item w3-button',
                 attributes: {
                     'href': '#',
                     'data-node-action': 'edit'
                 }
             });
-            editLink.innerHTML = '<i class="bi bi-pencil"></i> Edit';
-            dropdownContent.appendChild(editLink);
+            editBtn.innerHTML = '<i class="bi bi-pencil"></i> Edit';
+            dropdownContent.appendChild(editBtn);
             
-            // Delete option
-            const deleteLink = DOM.createElement('a', {
+            const deleteBtn = DOM.createElement('a', {
                 classes: 'w3-bar-item w3-button',
                 attributes: {
                     'href': '#',
                     'data-node-action': 'delete'
                 }
             });
-            deleteLink.innerHTML = '<i class="bi bi-trash"></i> Delete';
-            dropdownContent.appendChild(deleteLink);
+            deleteBtn.innerHTML = '<i class="bi bi-trash"></i> Delete';
+            dropdownContent.appendChild(deleteBtn);
             
-            // Add dropdown content to dropdown container
             dropdownContainer.appendChild(dropdownContent);
+            nodeRow.appendChild(dropdownContainer);
             
-            // Add dropdown container to node element
-            nodeElement.appendChild(dropdownContainer);
+            // Only create children container if node can have children
+            if (canHaveChildren) {
+                // Create children container
+                const childrenContainer = DOM.createElement('div', {
+                    classes: 'children-container w3-hide'
+                });
+                
+                // Create loading indicator
+                const loadingIndicator = DOM.createElement('div', {
+                    classes: 'loading-indicator w3-padding w3-hide'
+                });
+                loadingIndicator.innerHTML = '<div class="w3-center"><i class="bi bi-arrow-repeat w3-spin"></i> Loading...</div>';
+                childrenContainer.appendChild(loadingIndicator);
+                
+                // Create wrapper for child nodes
+                const childrenWrapper = DOM.createElement('div', {
+                    classes: 'children-wrapper'
+                });
+                childrenContainer.appendChild(childrenWrapper);
+                
+                // Add children container to node element
+                nodeElement.appendChild(childrenContainer);
+            }
             
             return nodeElement;
         } catch (error) {
@@ -783,6 +848,7 @@ class TreeManager {
         }
     }
     
+    
     /**
      * Toggle node expansion state with animation
      * @param {HTMLElement} nodeElement - Node element
@@ -790,33 +856,40 @@ class TreeManager {
      */
     async toggleNode(nodeElement) {
         this._checkInitialized();
-
+    
+        console.log(nodeElement, "toggleNode called on this element");
+    
         const nodeId = nodeElement.dataset.id;
         const nodeType = nodeElement.dataset.type;
         const typeConfig = this.nodeTypes[nodeType];
-
+    
         if (!typeConfig.canHaveChildren || this.loading.has(nodeId)) {
             return;
         }
-
+    
         const childrenContainer = nodeElement.querySelector('.children-container');
         const toggleButton = nodeElement.querySelector('.toggle-btn');
         const toggleIcon = toggleButton?.querySelector('i');
         
         if (!childrenContainer || !toggleButton) return;
-
+    
         const isExpanding = childrenContainer.classList.contains('w3-hide');
         
         try {
             // Update ARIA states
             toggleButton.setAttribute('aria-expanded', isExpanding ? 'true' : 'false');
-
-            // Update button state with animation
+    
+            // Change icon class instead of using rotation
             if (toggleIcon) {
-                toggleIcon.style.transition = 'transform 0.3s ease';
-                toggleIcon.style.transform = isExpanding ? 'rotate(90deg)' : '';
+                if (isExpanding) {
+                    toggleIcon.classList.remove('bi-chevron-right');
+                    toggleIcon.classList.add('bi-chevron-down');
+                } else {
+                    toggleIcon.classList.remove('bi-chevron-down');
+                    toggleIcon.classList.add('bi-chevron-right');
+                }
             }
-
+    
             if (isExpanding) {
                 // Prepare for expansion animation
                 childrenContainer.style.display = 'block';
@@ -827,18 +900,18 @@ class TreeManager {
                 if (!this.isNodeLoaded(nodeType, nodeId)) {
                     await this.loadNodeChildren(nodeId, nodeType, nodeElement);
                 }
-
+    
                 // Animate expansion
                 const height = childrenContainer.scrollHeight;
                 childrenContainer.style.transition = 'height 0.3s ease';
                 childrenContainer.style.height = height + 'px';
-
+    
                 // Cleanup after animation
                 setTimeout(() => {
                     childrenContainer.style.height = '';
                     this.setNodeExpanded(nodeType, nodeId, true);
                 }, 300);
-
+    
             } else {
                 // Animate collapse
                 const height = childrenContainer.scrollHeight;
@@ -846,11 +919,11 @@ class TreeManager {
                 
                 // Force reflow
                 childrenContainer.offsetHeight;
-
+    
                 // Start animation
                 childrenContainer.style.transition = 'height 0.3s ease';
                 childrenContainer.style.height = '0';
-
+    
                 // Cleanup after animation
                 setTimeout(() => {
                     childrenContainer.classList.add('w3-hide');
@@ -859,12 +932,12 @@ class TreeManager {
                     this.setNodeExpanded(nodeType, nodeId, false);
                 }, 300);
             }
-
+    
         } catch (error) {
             this.handleError('Node Toggle Error', error);
-            // Revert button state on error
+            // Revert icon on error
             if (toggleIcon) {
-                toggleIcon.style.transform = '';
+                toggleIcon.className = 'bi bi-chevron-right';
             }
             toggleButton.setAttribute('aria-expanded', 'false');
         }

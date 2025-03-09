@@ -4,8 +4,9 @@
 import { State } from './state.js';
 import { DOM } from './dom.js';
 import { API } from './api.js';
-import { NotificationUI } from './ui.js';
+import { NotificationUI} from './ui.js';
 import { Events } from './events.js';
+import { Imports } from './import.js';
 
 const TREE_STATE_KEY = 'tree_state';
 
@@ -952,62 +953,91 @@ class TreeManager {
      */
     async loadNodeChildren(nodeId, nodeType, nodeElement) {
         this._checkInitialized();
-
+    
         if (this.loading.has(nodeId)) return;
-
+    
         const typeConfig = this.nodeTypes[nodeType];
         if (!typeConfig?.loadChildren) return;
-
+    
         const childrenContainer = nodeElement.querySelector('.children-container');
         const loadingIndicator = childrenContainer?.querySelector('.loading-indicator');
         const childrenWrapper = childrenContainer?.querySelector('.children-wrapper');
         
         if (!childrenContainer || !loadingIndicator || !childrenWrapper) return;
-
+    
         try {
             this.loading.add(nodeId);
             loadingIndicator.classList.remove('w3-hide');
-
+    
             // Check if we already have cached children data
             let childrenData = null;
             const cacheKey = `${nodeType}_${nodeId}_children`;
+            console.log(`[Tree][loadNodeChildren] Loading children for ${nodeType} ${nodeId}`);
+            console.log(`[Tree][loadNodeChildren] Current cache state:`, JSON.parse(JSON.stringify(this.cachedData)));
             
             if (this.cachedData && this.cachedData[typeConfig.childType]) {
                 childrenData = this.cachedData[typeConfig.childType].filter(
                     node => node.parent_id === nodeId || node.parentId === nodeId
                 );
+                console.log(`[Tree][loadNodeChildren] Found ${childrenData.length} cached children of type ${typeConfig.childType}`);
             }
             
             // If no cached data or empty, load from API
             if (!childrenData || childrenData.length === 0) {
+                console.log(`[Tree][loadNodeChildren] No cached data found, loading from API`);
                 // Load children data
                 const response = await typeConfig.loadChildren(nodeId);
+                console.log(`[Tree][loadNodeChildren] API response:`, response);
                 
                 // Store in cache if available
-                if (this.cachedData && response && response.nodes) {
-                    if (!this.cachedData[typeConfig.childType]) {
-                        this.cachedData[typeConfig.childType] = [];
+                if (this.cachedData && response) {
+                    let nodesToCache = [];
+                    
+                    if (response.nodes && Array.isArray(response.nodes)) {
+                        nodesToCache = response.nodes;
+                        console.log(`[Tree][loadNodeChildren] Found ${nodesToCache.length} nodes in response.nodes`);
+                    } else if (Array.isArray(response)) {
+                        nodesToCache = response;
+                        console.log(`[Tree][loadNodeChildren] Found ${nodesToCache.length} nodes in array response`);
+                    } else if (response.results && Array.isArray(response.results)) {
+                        nodesToCache = response.results;
+                        console.log(`[Tree][loadNodeChildren] Found ${nodesToCache.length} nodes in response.results`);
+                    } else if (response.data && Array.isArray(response.data)) {
+                        nodesToCache = response.data;
+                        console.log(`[Tree][loadNodeChildren] Found ${nodesToCache.length} nodes in response.data`);
+                    } else {
+                        console.log(`[Tree][loadNodeChildren] Could not find nodes array in response:`, response);
                     }
                     
-                    // Add or update cached children
-                    response.nodes.forEach(child => {
-                        // Add parent relationship
-                        child.parent_id = child.parent_id || nodeId;
+                    if (nodesToCache.length > 0) {
+                        console.log(`[Tree][loadNodeChildren] Preparing to cache ${nodesToCache.length} nodes of type ${typeConfig.childType}`);
                         
-                        // Update cache with this child
-                        const existingIndex = this.cachedData[typeConfig.childType].findIndex(c => c.id === child.id);
-                        if (existingIndex >= 0) {
-                            this.cachedData[typeConfig.childType][existingIndex] = child;
-                        } else {
-                            this.cachedData[typeConfig.childType].push(child);
+                        if (!this.cachedData[typeConfig.childType]) {
+                            this.cachedData[typeConfig.childType] = [];
+                            console.log(`[Tree][loadNodeChildren] Created new cache array for ${typeConfig.childType}`);
                         }
-                    });
-                    
-                    childrenData = response.nodes;
-                } else if (response) {
-                    childrenData = response.nodes || response.results || response;
-                } else {
-                    childrenData = [];
+                        
+                        // Add or update cached children
+                        nodesToCache.forEach(child => {
+                            // Add parent relationship and type
+                            child.parent_id = child.parent_id || nodeId;
+                            child.type = typeConfig.childType;
+                            
+                            // Update cache with this child
+                            const existingIndex = this.cachedData[typeConfig.childType].findIndex(c => c.id === child.id);
+                            if (existingIndex >= 0) {
+                                console.log(`[Tree][loadNodeChildren] Updating existing cache for ${child.id}`);
+                                this.cachedData[typeConfig.childType][existingIndex] = child;
+                            } else {
+                                console.log(`[Tree][loadNodeChildren] Adding new node to cache: ${typeConfig.childType} ${child.id} (${child.name || 'unnamed'})`);
+                                this.cachedData[typeConfig.childType].push(child);
+                            }
+                        });
+                        
+                        childrenData = nodesToCache;
+                        console.log(`[Tree][loadNodeChildren] Updated cache for ${typeConfig.childType}:`, 
+                                    this.cachedData[typeConfig.childType].length, "items");
+                    }
                 }
             }
             
@@ -1016,35 +1046,32 @@ class TreeManager {
             
             // Create and append child nodes
             const fragment = document.createDocumentFragment();
-            for (const child of childrenData) {
-                try {
-                    const childElement = await this.createNodeElement({
-                        ...child,
-                        type: typeConfig.childType
-                    });
-                    fragment.appendChild(childElement);
-                } catch (childError) {
-                    this.handleError(`Child Creation Error (${child.id})`, childError);
-                    // Continue with other children
+            if (childrenData && childrenData.length > 0) {
+                console.log(`[Tree][loadNodeChildren] Rendering ${childrenData.length} child nodes`);
+                for (const child of childrenData) {
+                    try {
+                        const childElement = await this.createNodeElement({
+                            ...child,
+                            type: typeConfig.childType
+                        });
+                        fragment.appendChild(childElement);
+                    } catch (childError) {
+                        this.handleError(`Child Creation Error (${child.id})`, childError);
+                        // Continue with other children
+                    }
                 }
+            } else {
+                console.log(`[Tree][loadNodeChildren] No child nodes to render`);
             }
+            
             childrenWrapper.appendChild(fragment);
-
+    
             // Update loaded state
             this.setNodeLoaded(nodeType, nodeId, true);
-
-            // Emit load event
-            const loadEvent = new CustomEvent('tree:node:load', {
-                detail: {
-                    nodeId,
-                    nodeType,
-                    childCount: childrenData.length,
-                    timestamp: new Date()
-                },
-                bubbles: true
-            });
-            nodeElement.dispatchEvent(loadEvent);
-
+    
+            // Final cache state check
+            console.log(`[Tree][loadNodeChildren] Final cache state:`, JSON.parse(JSON.stringify(this.cachedData)));
+    
         } catch (error) {
             this.handleError('Load Children Error', error);
             childrenContainer.classList.add('w3-hide');
@@ -1535,7 +1562,93 @@ class TreeManager {
      */
     async handleNodeAdd(nodeId, nodeType, nodeElement) {
         try {
+            console.log(`[Tree] handleNodeAdd called: nodeId=${nodeId}, nodeType=${nodeType}`);
+            
+            // Different handling based on node type
+            if (nodeType === 'location') {
+                // Handle adding measurement to a location
+                console.log(`[Tree] Location node detected, preparing for measurement import`);
+                
+                // Get location data from cache instead of DOM element
+                let locationName = 'Unknown Location';
+                let projectName = 'Project';
+                let projectId = null;
+                
+                // Get location data from cache
+                const locationData = this.cachedData.location.find(loc => loc.id === nodeId);
+                if (locationData) {
+                    locationName = locationData.name || 'Unknown Location';
+                    console.log(`[Tree] Found location name in cache: ${locationName}`);
+                    
+                    // Check for project reference in location data
+                    projectId = locationData.project || locationData.projectId || locationData.parent_id;
+                    console.log(`[Tree] Found projectId in cache: ${projectId}`);
+                    
+                    if (projectId) {
+                        const projectData = this.cachedData.project.find(proj => proj.id === projectId);
+                        if (projectData) {
+                            projectName = projectData.name || 'Project';
+                            console.log(`[Tree] Found project name: ${projectName}`);
+                        }
+                    }
+                } else {
+                    console.log(`[Tree] No location data found in cache for nodeId=${nodeId}`);
+                    console.log(`[Tree] Cache contains ${this.cachedData.location.length} location entries`);
+                }
+                
+                // Initialize the manager
+                await Imports.initialize();
+                console.log(`[Tree] ImportManager initialized for location ${nodeId}`);
+
+                // Show import modal directly
+                await Imports.showImportModal(
+                    nodeId,
+                    locationName,
+                    projectId,
+                    projectName
+                );
+
+                console.log(`[Tree] Import modal shown for location ${nodeId}`);
+
+            } else if (nodeType === 'project') {
+                // Handle adding location to a project
+                console.log(`[Tree] Project node detected, preparing to add location`);
+                
+                // Get project data from cache
+                let nodeName = 'Unknown Project';
+                const projectData = this.cachedData.project.find(proj => proj.id === nodeId);
+                if (projectData) {
+                    nodeName = projectData.name || 'Unknown Project';
+                }
+                
+                console.log(`[Tree] Project name: ${nodeName}`);
+                            
+                // Update state
+                State.update(TREE_STATE_KEY, {
+                    currentAction: {
+                        type: 'add_location',
+                        nodeId,
+                        nodeType,
+                        nodeName,
+                        timestamp: new Date()
+                    }
+                });
+                
+            } else {
+                // Handle adding project from dashboard or unknown node
+                console.log(`[Tree] Dashboard or unknown node type, assuming add project`);
+                            
+                // Update state
+                State.update(TREE_STATE_KEY, {
+                    currentAction: {
+                        type: 'add_project',
+                        timestamp: new Date()
+                    }
+                });
+            }
+            
             // Create and dispatch add event
+            console.log(`[Tree] Dispatching tree:node:add event`);
             const addEvent = new CustomEvent('tree:node:add', {
                 detail: {
                     nodeId,
@@ -1547,7 +1660,10 @@ class TreeManager {
             });
             
             nodeElement.dispatchEvent(addEvent);
+            console.log(`[Tree] tree:node:add event dispatched`);
+            
         } catch (error) {
+            console.error(`[Tree] Error in handleNodeAdd:`, error);
             this.handleError('Node Add Error', error);
         }
     }

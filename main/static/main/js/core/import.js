@@ -5,6 +5,8 @@ import { State } from './state.js';
 import { API } from './api.js';
 import { NotificationUI } from './ui.js';
 import { DOM } from './dom.js';
+import { Modal } from './modals.js';
+import { Events } from './events.js';
 
 const IMPORT_STATE_KEY = 'import_state';
 
@@ -28,7 +30,6 @@ class ImportManager {
             allowedTypes: ['text/csv', 'application/vnd.ms-excel'],
             allowedExtensions: ['.csv', '.txt', '.xls', '.xlsx']
         };
-
     }
 
     /**
@@ -43,7 +44,7 @@ class ImportManager {
      * Ensure manager is initialized
      * @private
      */
-    _checkInitialized() {
+    _checkInitialized = () => {
         if (!this.initialized) {
             throw new Error('Import Manager must be initialized before use');
         }
@@ -59,6 +60,7 @@ class ImportManager {
             return this;
         }
 
+        console.log('Got to import:initialize');
         try {
             // Check dependencies
             if (!State.isInitialized()) {
@@ -72,20 +74,14 @@ class ImportManager {
             }
 
             // Initialize UI elements
-            await this.initializeUI();
-
-            // Bind methods
-            this.handleFileSelect = this.handleFileSelect.bind(this);
-            this.updateStatus = this.updateStatus.bind(this);
-            this.updateProgress = this.updateProgress.bind(this);
-            this.handleError = this.handleError.bind(this);
+            // await this.initializeUI();
 
             // Set up event listeners
             await this.attachEventListeners();
 
             // Initialize import state
             await this.initializeState();
-
+            
             this.initialized = true;
             console.log('ImportManager initialized');
 
@@ -96,12 +92,11 @@ class ImportManager {
             throw error;
         }
     }
-
     /**
      * Initialize UI elements with error handling
      * @private
      */
-    async initializeUI() {
+    initializeUI = async () => {
         try {
             // Create container divs if they don't exist
             const containers = ['preview', 'progress', 'error', 'config'];
@@ -143,7 +138,7 @@ class ImportManager {
      * Initialize file input with error handling
      * @private
      */
-    async initializeFileInput() {
+    initializeFileInput = async () => {
         try {
             const existingInput = DOM.getElement(`file-input-${this.locationId}`);
             if (!existingInput) {
@@ -173,7 +168,7 @@ class ImportManager {
      * Initialize drop zone with error handling
      * @private
      */
-    async initializeDropZone() {
+    initializeDropZone = async () => {
         try {
             const dropZone = DOM.getElement(`import-dropzone-${this.locationId}`);
             if (!dropZone) return;
@@ -208,7 +203,7 @@ class ImportManager {
      * Initialize import state
      * @private
      */
-    async initializeState() {
+    initializeState = async () => {
         try {
             const initialState = {
                 sourceInfo: {
@@ -251,7 +246,7 @@ class ImportManager {
      * Attach event listeners with error handling
      * @private
      */
-    async attachEventListeners() {
+    attachEventListeners = async () => {
         try {
             // File input change handler
             const fileInput = DOM.getElement(`file-input-${this.locationId}`);
@@ -321,7 +316,7 @@ class ImportManager {
      * Handle file selection with validation and error handling
      * @param {Event} event - File input change event
      */
-    async handleFileSelect(event) {
+    handleFileSelect = async (event) => {
         this._checkInitialized();
 
         const file = event.target.files[0];
@@ -360,11 +355,182 @@ class ImportManager {
     }
 
     /**
+     * Show import modal for measurement data
+     * @param {string} nodeId - Location ID
+     * @param {string} nodeName - Location name
+     * @param {string} projectId - Parent project ID
+     * @param {string} projectName - Parent project name
+     */
+    showImportModal = async (nodeId, nodeName, projectId, projectName) => {
+        try {
+            console.log(`[ImportModal] Starting showImportModal for location ${nodeId} (${nodeName})`);
+            
+            if (!this.isInitialized()) {
+                console.log(`[ImportModal] Import manager not initialized, initializing now`);
+                await this.initialize();
+            }
+            
+            // Make sure Events is initialized first
+            if (!Events.isInitialized()) {
+                console.log(`[ImportModal] Events not initialized, initializing now`);
+                await Events.initialize();
+            }
+            
+            // Modal configuration
+            const modalId = `import-measurement-${nodeId}`;
+            console.log(`[ImportModal] Setting up modal configuration for modalId: ${modalId}`);
+            
+            const modalConfig = {
+                title: `Import Measurement Data`,
+                width: 600,
+                showCloseButton: true,
+                position: 'center',
+                closeOnEscape: true,
+                closeOnOutsideClick: true,
+                type: 'import',
+                draggable: true
+            };
+            console.log(`[ImportModal] Modal config created:`, modalConfig);
+            
+            // Create custom modal to ensure we have full control
+            console.log(`[ImportModal] Creating custom modal element`);
+            let modalElement = document.getElementById(`id_modal-${modalId}`);
+            if (!modalElement) {
+                modalElement = document.createElement('div');
+                modalElement.id = `id_modal-${modalId}`;
+                modalElement.className = 'w3-modal';
+                modalElement.setAttribute('data-modal-type', 'import');
+                document.body.appendChild(modalElement);
+            }
+            
+            // Create a custom structure for the modal with simplified text
+            console.log(`[ImportModal] Setting up custom modal structure with simplified text`);
+            modalElement.innerHTML = `
+                <div class="w3-modal-content w3-card-4 w3-animate-top">
+                    <div class="w3-bar w3-light-grey">
+                        <span class="w3-bar-item">Import Measurement Data</span>
+                        <button class="w3-bar-item w3-button w3-right" data-action="close-modal">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                    <div class="modal-body w3-container">
+                        <p class="w3-small">Project: ${this.sanitizeHtml(projectName || '')}</p>
+                        <p class="w3-small">Location: ${this.sanitizeHtml(nodeName)}</p>
+                        
+                        <div class="w3-bar w3-padding">
+                            <div class="w3-dropdown-hover">
+                                <button class="w3-button w3-white w3-border">
+                                    <i class="bi bi-file-earmark-text"></i> Source
+                                    <i class="bi bi-chevron-down"></i>
+                                </button>
+                                <div class="w3-dropdown-content w3-bar-block w3-card">
+                                    <input type="file" 
+                                        id="file-input-${nodeId}" 
+                                        accept="${this.fileValidation.allowedExtensions.join(',')}"
+                                        style="display: none;">
+                                        
+                                    <a href="#" class="w3-bar-item w3-button file-select-btn" data-action="select-file">
+                                        <i class="bi bi-file-earmark-text"></i> File
+                                    </a>
+                                    <a href="#" class="w3-bar-item w3-button w3-disabled">
+                                        <i class="bi bi-cloud"></i> API
+                                    </a>
+                                    <a href="#" class="w3-bar-item w3-button w3-disabled">
+                                        <i class="bi bi-database"></i> Database
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="import-status-${nodeId}" class="w3-bar w3-light-grey w3-margin-top">
+                            <div class="w3-bar-item">
+                                <i class="bi bi-clock"></i> Ready to import
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Set up basic modal appearance
+            modalElement.style.display = 'block';
+            modalElement.style.backgroundColor = 'rgba(0,0,0,0.4)';
+            modalElement.style.pointerEvents = 'auto';
+            
+            // Generate instance ID for tracking
+            const instanceId = `modal-${modalId}-${Date.now()}`;
+            console.log(`[ImportModal] Generated instanceId: ${instanceId}`);
+            modalElement.dataset.instanceId = instanceId;
+            
+            // Update reference to file input and dropzone
+            console.log(`[ImportModal] Setting up file input`);
+            
+            // Set up file input change handler
+            console.log(`[ImportModal] Setting up file input change handler`);
+            const fileInput = document.getElementById(`file-input-${nodeId}`);
+            if (fileInput) {
+                fileInput.addEventListener('change', this.handleFileSelect);
+                console.log(`[ImportModal] Added change handler to file input`);
+            } else {
+                console.warn(`[ImportModal] File input element not found: file-input-${nodeId}`);
+            }
+            
+            // Set up event delegations
+            console.log(`[ImportModal] Setting up event delegations`);
+            
+            // Modal close button delegate
+            console.log(`[ImportModal] Adding delegate for close button`);
+            Events.addDelegate(modalElement, 'click', '[data-action="close-modal"]', (e) => {
+                console.log(`[ImportModal] Close button clicked via delegation`);
+                e.preventDefault();
+                
+                // First hide the modal visually for immediate feedback
+                modalElement.style.display = 'none';
+                
+                // Then use Modal.hide for proper cleanup
+                Modal.hide(modalId);
+            });
+            
+            // File select button delegate
+            console.log(`[ImportModal] Adding delegate for file select button`);
+            Events.addDelegate(modalElement, 'click', '[data-action="select-file"]', (e) => {
+                console.log(`[ImportModal] File select button clicked via delegation`);
+                e.preventDefault();
+                
+                const fileInput = document.getElementById(`file-input-${nodeId}`);
+                if (fileInput) {
+                    console.log(`[ImportModal] Triggering file input click`);
+                    fileInput.click();
+                } else {
+                    console.warn(`[ImportModal] File input not found: file-input-${nodeId}`);
+                }
+            });
+            
+            // Update state
+            console.log(`[ImportModal] Updating import state`);
+            this.updateState({
+                modalOpen: true,
+                locationName: nodeName,
+                projectId,
+                projectName
+            });
+            console.log(`[ImportModal] Import state updated, modal setup complete`);
+            
+        } catch (error) {
+            console.error(`[ImportModal] Error in showImportModal:`, error);
+            this.handleError('Import Modal Error', error);
+            NotificationUI.show({
+                message: `Error opening import modal: ${error.message}`,
+                type: 'error'
+            });
+        }
+    }
+
+    /**
      * Validate file before upload with enhanced checks
      * @param {File} file - File to validate
      * @returns {Promise<Object>} Validation result
      */
-    async validateFile(file) {
+    validateFile = async (file) => {
         this._checkInitialized();
 
         try {
@@ -426,7 +592,7 @@ class ImportManager {
      * @param {File} file - File to check
      * @returns {Promise<string>} Detected file type
      */
-    async getFileType(file) {
+    getFileType = async (file) => {
         try {
             // Check file signature for more accurate type detection
             const buffer = await file.slice(0, 4).arrayBuffer();
@@ -467,7 +633,7 @@ class ImportManager {
      * @param {File} file - File to validate
      * @returns {Promise<Object>} Validation result
      */
-    async validateFileContent(file) {
+    validateFileContent = async (file) => {
         try {
             // Read first few lines to validate structure
             const sample = await file.slice(0, 4096).text();
@@ -523,12 +689,13 @@ class ImportManager {
             };
         }
     }
+
     /**
      * Upload file to server with progress tracking
      * @param {File} file - File to upload
      * @returns {Promise} Upload result
      */
-    async uploadFile(file) {
+    uploadFile = async (file) => {
         this._checkInitialized();
 
         try {
@@ -575,13 +742,12 @@ class ImportManager {
             throw new Error(`Upload failed: ${error.message}`);
         }
     }
-
     /**
      * Update upload progress with stats
      * @private
      * @param {Object} tracker - Upload tracker
      */
-    updateUploadProgress(tracker) {
+    updateUploadProgress = (tracker) => {
         try {
             const progress = Math.round((tracker.loaded / tracker.total) * 100);
             const elapsed = (Date.now() - tracker.startTime) / 1000;
@@ -609,7 +775,7 @@ class ImportManager {
      * Show file information in UI
      * @param {File} file - Uploaded file
      */
-    async showFileInfo(file) {
+    showFileInfo = async (file) => {
         this._checkInitialized();
 
         try {
@@ -660,7 +826,7 @@ class ImportManager {
      * Show file preview with enhanced error handling
      * @param {string} content - File preview content
      */
-    async showPreview(content) {
+    showPreview = async (content) => {
         this._checkInitialized();
 
         const container = DOM.getElement(`import-preview-${this.locationId}`);
@@ -722,7 +888,7 @@ class ImportManager {
      * @param {string} content - Raw preview content
      * @returns {Promise<string>} Formatted HTML
      */
-    async formatPreviewContent(content) {
+    formatPreviewContent = async (content) => {
         try {
             // Parse CSV content
             const parsedData = await this.parseCSV(content);
@@ -765,7 +931,7 @@ class ImportManager {
      * @param {*} value - Cell value
      * @returns {string} Sanitized value
      */
-    sanitizeCell(value) {
+    sanitizeCell = (value) => {
         if (value === null || value === undefined) {
             return '';
         }
@@ -779,12 +945,26 @@ class ImportManager {
     }
 
     /**
+     * Sanitize HTML content
+     * @param {string} html - HTML to sanitize
+     * @returns {string} Sanitized HTML
+     */
+    sanitizeHtml = (html) => {
+        if (!html) return '';
+        return String(html)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+    /**
      * Parse CSV content
      * @private
      * @param {string} content - CSV content
      * @returns {Promise<Array>} Parsed data
      */
-    async parseCSV(content) {
+    parseCSV = (content) => {
         return new Promise((resolve, reject) => {
             try {
                 Papa.parse(content, {
@@ -807,11 +987,22 @@ class ImportManager {
             }
         });
     }
+    
+    /**
+     * Analyze preview content
+     * This is a placeholder for future implementation
+     */
+    analyzePreviewContent = async (content) => {
+        // This method can be implemented later for content analysis
+        // For now, just return true
+        return true;
+    }
+
     /**
      * Validate import with enhanced error handling
      * @returns {Promise<Object>} Validation results
      */
-    async validateImport() {
+    validateImport = async () => {
         this._checkInitialized();
 
         if (!this.importId) {
@@ -843,7 +1034,7 @@ class ImportManager {
      * Show validation results with enhanced UI
      * @param {Object} results - Validation results
      */
-    async showValidationResults(results) {
+    showValidationResults = async (results) => {
         this._checkInitialized();
 
         try {
@@ -911,7 +1102,7 @@ class ImportManager {
      * Create warnings panel
      * @private
      */
-    createWarningsPanel(warnings) {
+    createWarningsPanel = (warnings) => {
         return DOM.createElement('div', {
             className: 'w3-panel w3-pale-yellow',
             innerHTML: `
@@ -932,7 +1123,7 @@ class ImportManager {
      * Create recommendations panel
      * @private
      */
-    createRecommendationsPanel(recommendations) {
+    createRecommendationsPanel = (recommendations) => {
         return DOM.createElement('div', {
             className: 'w3-panel w3-pale-blue',
             innerHTML: `
@@ -953,7 +1144,7 @@ class ImportManager {
      * Create data quality panel
      * @private
      */
-    createDataQualityPanel(quality) {
+    createDataQualityPanel = (quality) => {
         const metrics = [];
         
         if (quality.completeness) {
@@ -987,7 +1178,7 @@ class ImportManager {
      * @param {string} status - New status
      * @param {string} [message] - Optional status message
      */
-    updateStatus(status, message = '') {
+    updateStatus = (status, message = '') => {
         try {
             this.status = status;
             
@@ -1025,13 +1216,12 @@ class ImportManager {
             this.handleError('Status Update Error', error);
         }
     }
-
     /**
      * Update state with error handling
      * @private
      * @param {Object} update - State update
      */
-    updateState(update) {
+    updateState = (update) => {
         try {
             const currentState = State.get(IMPORT_STATE_KEY)[`location_${this.locationId}`] || {};
             
@@ -1048,12 +1238,22 @@ class ImportManager {
     }
 
     /**
+     * Update progress UI
+     * Placeholder for UI progress updates
+     */
+    updateProgressUI = (progress, speed, remaining) => {
+        // Implementation can be added later
+        // For now, just log to console
+        console.log(`Progress: ${progress}%, Speed: ${this.formatFileSize(speed)}/s, Remaining: ${remaining}s`);
+    }
+
+    /**
      * Format file size for display
      * @private
      * @param {number} bytes - File size in bytes
      * @returns {string} Formatted size
      */
-    formatFileSize(bytes) {
+    formatFileSize = (bytes) => {
         const units = ['B', 'KB', 'MB', 'GB'];
         let size = bytes;
         let unitIndex = 0;
@@ -1072,7 +1272,7 @@ class ImportManager {
      * @param {string} context - Error context
      * @param {Error} error - Error object
      */
-    handleError(context, error) {
+    handleError = (context, error) => {
         console.error(`Import Error (${context}):`, error);
         
         NotificationUI.show({
@@ -1094,7 +1294,7 @@ class ImportManager {
     /**
      * Clear current file
      */
-    clearFile() {
+    clearFile = () => {
         this._checkInitialized();
 
         try {
@@ -1141,7 +1341,7 @@ class ImportManager {
     /**
      * Clean up resources
      */
-    destroy() {
+    destroy = () => {
         if (!this.initialized) return;
 
         try {
@@ -1173,4 +1373,5 @@ class ImportManager {
     }
 }
 
-export default ImportManager;
+// Export singleton instance
+export const Imports = new ImportManager();

@@ -1,58 +1,9 @@
+Finish fix for caching projects as part of tree initialize
+Review all js for correct use of delegates and subscription, when should each be used
+modernize all modules to remove need for .bind
+use codemirror.js to load container in import modal
+see below outline of flow for import developed before lazy load refactor
 
-event.js
-    Auto Cleanup
-    Add MutationObserver to cleanup handlers for removed elements
-    Add cleanupElementHandlers() method
-    Event Batching
-    add eventQueue and processingEvents flags
-    Add processEventQueue() method
-    Add processEvent() method
-    Add trigger() method
-    Debug Tools
-    Add debug flag and eventLog array
-    Add enableDebug() method
-    Add logEvent() method
-    Add getEventLog() method
-    Keyboard Shortcuts
-    Add shortcuts Map
-    Add registerShortcut() method
-    Add normalizeKeys() method
-    Enhance handleKeyPress()
-    Event Throttling
-    Add throttle() method for high-frequency events
-    Error Recovery
-    Add recoverFromError() method
-    Re-bind handlers
-    Re-attach listeners
-    Re-initialize observer
-
-
-changes
-    client side rendering (reactive), tree_item.html is gone
-        observables
-        subscription
-        delegation
-    lazy loading
-
-
-if a second page is needed such as for model definition
-    // main.js
-    class PageManager {
-        constructor(pageType) {
-            this.pageType = pageType;
-            this.initialized = false;
-            this.loadingState = false;
-    // Page-specific manager
-    class DashboardManager extends PageManager {
-    // Page-specific manager
-    class ModelManager extends PageManager {
-
-use case 
-    login
-    project action menu 
-        when page opens the project action menu dropsdouwn  
-        find a project 
-        add project 
 
 Models
 Equation or expression 
@@ -65,22 +16,6 @@ Parameters can be computed or a measurement
 Equations can be joined
 ISO 80000-2 mathemnatical symbols and operators
 
-Immediate
-    Get it working again
-        dataset name -- combo input with droplist of current datasets, select one replaces, or enter new
-    Reorg crud into file set, I like what Gemini suggested, see below
-    On project creation
-        create Shared location -- then you can have measurements at the project level
-
-
-
-Next step
-    Constrain on unique name is not allowing for multiple datasets from same source
-        also need to clear data sources if they are not imported.
-    project security groups, creator is owner, add and invite user to the 3dot on project
-        when owner is deleted all data is deleted
-    project action menu needs add user
-    measurement and location need copy to, but are greyed out unless done by project owner
 
 add measurements
     source

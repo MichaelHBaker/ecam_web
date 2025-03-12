@@ -48,6 +48,7 @@ class TreeManager {
 
         // Inside the TreeManager constructor, add:
         this.cachedData = {
+            root: [],
             project: [],
             location: [],
             measurement: []
@@ -108,7 +109,9 @@ class TreeManager {
             }
     
             // Find existing elements in the container
-            this.wrapper = this.container.querySelector('.tree-wrapper');
+            this.wrapper = this.container.querySelector('.children-wrapper') || 
+               this.container.querySelector('.tree-wrapper');
+
             this.loader = this.container.querySelector('.w3-center.w3-padding-16');
             this.errorContainer = this.container.querySelector('.tree-error');
             this.emptyContainer = this.container.querySelector('.w3-panel.w3-pale-yellow');
@@ -134,9 +137,6 @@ class TreeManager {
             // Setup state subscriptions
             await this.setupStateSubscriptions();
     
-            // Load initial data
-            await this.loadInitialData();
-    
             return this;
     
         } catch (error) {
@@ -159,20 +159,22 @@ class TreeManager {
                     hasMore: false
                 },
                 expanded: {
+                    root: [],      // Add root type here
                     project: [],
                     location: [],
                     measurement: []
                 },
                 loaded: {
+                    root: [],      // Add root type here
                     project: [],
                     location: [],
                     measurement: []
                 },
                 lastUpdate: new Date()
             };
-
+    
             State.set(TREE_STATE_KEY, initialState);
-
+    
         } catch (error) {
             this.handleError('State Initialization Error', error);
             throw error;
@@ -1478,26 +1480,6 @@ class TreeManager {
         }
     }
 
-    /**
-     * Load initial data for the tree
-     * @private
-     */
-    async loadInitialData() {
-        try {
-            console.log('Tree ready for data loading');
-            
-            // We don't load data here as this will be handled by the 
-            // tree:initialized event listener in dashboard.html
-            
-            // The basic structure is already set up at this point,
-            // and actual data loading is deferred to the event handler
-            
-            return true;
-        } catch (error) {
-            this.handleError('Initial Data Load Error', error);
-            return false;
-        }
-    }
 
     // Additional helpful methods for handling specific node actions
 

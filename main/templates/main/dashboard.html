@@ -30,9 +30,24 @@
     </div>
     <div class="w3-container w3-hide" data-content="projects">
         <div class="tree-container">
-            <div class="tree-wrapper w3-margin-top">
-                <!-- Projects will be loaded here dynamically -->
+
+            <div id="projects-root" class="tree-item" data-id="root" data-type="root">
+                <div class="node-row" style="display: flex; align-items: center; width: 100%; position: relative;">
+                  <button class="toggle-btn" style="background: none; border: none; padding: 4px; cursor: pointer; margin-right: 4px;" aria-expanded="false" type="button" data-action="toggle">
+                    <i class="bi bi-chevron-right"></i>
+                  </button>
+                  <div style="display: flex; align-items: center;">All Projects</div>
+                </div>
+                <div class="children-container w3-hide">
+                  <div class="loading-indicator w3-padding w3-hide">
+                    <div class="w3-center"><i class="bi bi-arrow-repeat w3-spin"></i> Loading...</div>
+                  </div>
+                  <div class="children-wrapper w3-margin-top">
+                    <!-- Projects will be loaded here dynamically -->
+                  </div>
+                </div>
             </div>
+
             <div class="w3-center w3-padding-16 w3-hide">
                 <i class="bi bi-arrow-repeat w3-spin"></i> Loading projects...
             </div>

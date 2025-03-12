@@ -46,42 +46,28 @@ class DashboardManager {
                 lastUpdate: new Date()
             });
 
-            // Subscribe to section state changes
-            State.subscribe('dashboard_sections', (newState, oldState) => {
-                // Check if projects section was just expanded
-                if (newState.projects && (!oldState || !oldState.projects)) {
-                    this.loadProjects();
+            // Initialize the TreeManager early
+            if (!Tree.isInitialized()) {
+                console.log('Initializing Tree Manager');
+                const treeContainer = document.querySelector('.tree-container');
+                if (!treeContainer) {
+                    throw new Error('Tree container not found in DOM');
                 }
-            });
-
-            // Add tree node operation event listeners
-            document.addEventListener('tree:node:add', async (event) => {
-                const { nodeId, nodeType, element } = event.detail;
-                console.log(`Node added: ${nodeType} ${nodeId}`);
                 
-                // If parent is expanded, ensure children are visible
-                if (Tree.isInitialized() && element && Tree.isNodeExpanded(nodeType, nodeId)) {
-                    try {
-                        await Tree.loadNodeChildren(nodeId, nodeType, element);
-                    } catch (error) {
-                        console.error('Error loading children of new node:', error);
-                    }
-                }
-            });
-
-            document.addEventListener('tree:node:delete', async (event) => {
-                const { nodeId, nodeType } = event.detail;
-                console.log(`Node deleted: ${nodeType} ${nodeId}`);
+                await Tree.initialize(treeContainer);
                 
-                // Clean up tree state for the deleted node
-                if (Tree.isInitialized()) {
-                    try {
-                        await Tree.cleanupNode(nodeId, nodeType);
-                    } catch (error) {
-                        console.error('Error cleaning up deleted node:', error);
-                    }
+                // Add 'root' type to nodeTypes configuration if needed
+                if (!Tree.nodeTypes.root) {
+                    Tree.nodeTypes.root = {
+                        childType: 'project',
+                        loadChildren: async (id) => API.Root.getChildren(id),
+                        canHaveChildren: true
+                    };
+                    console.log('Added root node type configuration to Tree');
                 }
-            });
+                
+                console.log('Tree Manager initialized successfully');
+            }
 
             // Set up event listeners
             this.setupEventListeners();
@@ -91,9 +77,6 @@ class DashboardManager {
 
             // Initialize forms
             this.initializeForms();
-
-            // Don't automatically load projects here
-            // They will be loaded when the section is expanded
             
             this.initialized = true;
             State.update('dashboard_state', {
@@ -253,70 +236,7 @@ class DashboardManager {
         });
     }
 
-    /**
-     * Load projects data
-     */
-    async loadProjects() {
-        console.log('Loading projects data...');
-        try {
-            // Check if projects section is expanded - strict check
-            const sectionsState = State.get('dashboard_sections') || {};
-            if (sectionsState.projects !== true) {
-                console.log('Projects section is not expanded, skipping load');
-                return;
-            }
-            
-            // Check if tree wrapper exists and has content - don't reload if it does
-            const treeContainer = document.querySelector('[data-content="projects"] .tree-container');
-            if (!treeContainer) {
-                console.log('Tree container not found, skipping load');
-                return;
-            }
-            
-            const treeWrapper = treeContainer.querySelector('.tree-wrapper');
-            if (treeWrapper && treeWrapper.querySelector('.tree-item')) {
-                console.log('Projects already loaded, skipping');
-                return;
-            }
-            
-            // Just load projects from API
-            var response = await API.Projects.list();
-            console.log('Projects loaded:', response);
-            
-            // Render the projects in the tree
-            if (Tree.isInitialized()) {
-                // Use a consistent approach to extract nodes
-                let projectNodes = [];
-                
-                if (response && response.nodes && Array.isArray(response.nodes)) {
-                    projectNodes = response.nodes;
-                } else if (Array.isArray(response)) {
-                    projectNodes = response;
-                } else if (response && response.results && Array.isArray(response.results)) {
-                    projectNodes = response.results;
-                } else if (response && response.data && Array.isArray(response.data)) {
-                    projectNodes = response.data;
-                }
-                
-                console.log('Rendering', projectNodes.length, 'projects');
-                
-                // Only render if we have nodes and they have the required properties
-                if (projectNodes.length > 0) {
-                    Tree.renderNodes(projectNodes);
-                }
-            } else {
-                console.warn('Tree not initialized, cannot render projects');
-            }
-        } catch (error) {
-            console.error('Error loading projects:', error);
-            NotificationUI.show({
-                message: `Failed to load projects: ${error.message}`,
-                type: 'error',
-                duration: 5000
-            });
-        }
-    }
-
+    
     /**
      * Handle section toggle with event delegation format using w3.css classes
      * @param {Event} e - Event object
@@ -330,22 +250,38 @@ class DashboardManager {
         // Mark as handled to prevent other handlers
         e.customHandled = true;
         
+        console.log('[DEBUG] handleSectionToggle called', e, target);
+        
         const toggleButton = target.closest('[data-action="toggle-section"]');
-        if (!toggleButton) return false;
+        if (!toggleButton) {
+            console.log('[DEBUG] No toggle button found');
+            return false;
+        }
         
         const sectionName = toggleButton.getAttribute('data-section');
-        if (!sectionName) return false;
+        if (!sectionName) {
+            console.log('[DEBUG] No section name found');
+            return false;
+        }
+        
+        console.log(`[DEBUG] Section toggle: ${sectionName}`);
         
         const sectionContent = document.querySelector(`[data-content="${sectionName}"]`);
-        if (!sectionContent) return false;
+        if (!sectionContent) {
+            console.log(`[DEBUG] Section content not found for ${sectionName}`);
+            return false;
+        }
         
         const isHidden = sectionContent.classList.contains('w3-hide');
         const icon = toggleButton.querySelector('i');
         
         // Get current sections state
         const sectionsState = State.get('dashboard_sections') || {};
+        console.log('[DEBUG] Current section state:', sectionsState);
         
         if (isHidden) {
+            console.log(`[DEBUG] Expanding section: ${sectionName}`);
+            
             // First show the section by removing the w3-hide class
             sectionContent.classList.remove('w3-hide');
             
@@ -361,30 +297,59 @@ class DashboardManager {
                 lastUpdate: new Date()
             });
             
-            // In handleSectionToggle, modify the projects section handling:
+            // Special handling for projects section
             if (sectionName === 'projects') {
                 const treeContainer = sectionContent.querySelector('.tree-container');
                 
+                console.log('[DEBUG] Tree container found:', !!treeContainer);
+                
                 if (treeContainer) {
-                    // Apply styling only, don't load yet
+                    // Apply styling
                     if (!treeContainer.classList.contains('w3-container')) {
                         treeContainer.classList.add('w3-container');
                     }
                     
                     treeContainer.classList.add('w3-show');
                     
-                    const treeWrapper = treeContainer.querySelector('.tree-wrapper');
+                    // Find and expand the root node if Tree is initialized
+                    console.log('[DEBUG] Tree initialized:', Tree.isInitialized());
                     
-                    if (treeWrapper) {
-                        treeWrapper.classList.remove('w3-hide');
-                        treeWrapper.classList.add('w3-show');
+                    if (Tree.isInitialized()) {
+                        const rootNode = document.getElementById('projects-root');
+                        console.log('[DEBUG] Root node found:', !!rootNode);
                         
-                        // The state update will trigger loadProjects via subscription
-                        // Remove the direct call to loadProjects here to avoid duplicate loading
+                        if (rootNode) {
+                            console.log('[DEBUG] Root node:', rootNode);
+                            console.log('[DEBUG] Root node attributes:', 
+                                        'id=' + rootNode.getAttribute('data-id'), 
+                                        'type=' + rootNode.getAttribute('data-type'));
+                            
+                            // Check if the node has the necessary elements
+                            const childrenContainer = rootNode.querySelector('.children-container');
+                            const toggleButton = rootNode.querySelector('.toggle-btn');
+                            
+                            console.log('[DEBUG] Children container:', !!childrenContainer);
+                            console.log('[DEBUG] Toggle button:', !!toggleButton);
+                            
+                            // Expand the root node which will trigger loading its children
+                            console.log('[DEBUG] Attempting to expand root node...');
+                            
+                            setTimeout(() => {
+                                Tree.toggleNode(rootNode)
+                                    .then(() => {
+                                        console.log('[DEBUG] Root node expansion successful');
+                                    })
+                                    .catch(error => {
+                                        console.error('[DEBUG] Error expanding root node:', error);
+                                    });
+                            }, 0);
+                        }
                     }
                 }
             }
         } else {
+            console.log(`[DEBUG] Collapsing section: ${sectionName}`);
+            
             // Hide the section
             sectionContent.classList.add('w3-hide');
             

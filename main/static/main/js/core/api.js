@@ -298,6 +298,87 @@ export const API = {
     initialize: () => client.initialize(),
     isInitialized: () => client.isInitialized(),
 
+    Root: {
+        list: async (params = {}) => {
+            console.log('API.Root.list called with params:', params);
+            
+            // For root, there's only one item - the root itself
+            return {
+                nodes: [
+                    { 
+                        id: 'root', 
+                        name: 'All Projects', 
+                        type: 'root',
+                        description: 'Root node containing all projects'
+                    }
+                ],
+                has_more: false
+            };
+        },
+
+        get: (id) => {
+            if (id !== 'root') {
+                throw new APIError(
+                    API_ERROR_TYPES.NOT_FOUND,
+                    'Only root node with id "root" is valid at this level',
+                    { status: 404 }
+                );
+            }
+            
+            return Promise.resolve({ 
+                id: 'root', 
+                name: 'All Projects', 
+                type: 'root',
+                description: 'Root node containing all projects'
+            });
+        },
+
+        create: () => {
+            throw new APIError(
+                API_ERROR_TYPES.PERMISSION,
+                'Cannot create new root nodes',
+                { status: 403 }
+            );
+        },
+
+        update: () => {
+            throw new APIError(
+                API_ERROR_TYPES.PERMISSION,
+                'Cannot update the root node',
+                { status: 403 }
+            );
+        },
+
+        delete: () => {
+            throw new APIError(
+                API_ERROR_TYPES.PERMISSION,
+                'Cannot delete the root node',
+                { status: 403 }
+            );
+        },
+
+        getChildren: async (id, params = {}) => {
+            console.log('API.Root.getChildren called with id:', id, 'params:', params);
+            
+            if (id !== 'root') {
+                throw new APIError(
+                    API_ERROR_TYPES.NOT_FOUND,
+                    'Only root node with id "root" is valid at this level',
+                    { status: 404 }
+                );
+            }
+            
+            // The children of root are projects, so delegate to Projects.list
+            try {
+                const result = await API.Projects.list(params);
+                console.log('Root children (projects) loaded:', result);
+                return result;
+            } catch (error) {
+                console.error('Error in Root.getChildren:', error);
+                throw error;
+            }
+        }
+    },
     Projects: {
         list: async (params = {}) => {
             console.log('API.Projects.list called with params:', params);

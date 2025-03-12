@@ -1578,9 +1578,6 @@ class TreeManager {
                     console.log(`[Tree] Cache contains ${this.cachedData.location.length} location entries`);
                 }
                 
-                // Initialize the manager
-                await Imports.initialize();
-                console.log(`[Tree] ImportManager initialized for location ${nodeId}`);
 
                 // Show import modal directly
                 await Imports.showImportModal(

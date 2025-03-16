@@ -293,26 +293,55 @@ class CodeMirrorManager {
 
     /**
      * Detect CodeMirror mode from file
+     * Enhanced version with more file types
      * @private
      * @param {File} file - File
      * @returns {string|null} CodeMirror mode
      */
-    detectMode(file) {
+    detectMode = (file) => {
         const extension = file.name.split('.').pop().toLowerCase();
         
         const modeMap = {
+            // Programming languages
             'js': 'javascript',
+            'jsx': 'jsx',
+            'ts': 'text/typescript',
+            'tsx': 'text/typescript-jsx',
             'json': 'application/json',
             'html': 'htmlmixed',
+            'htm': 'htmlmixed',
             'xml': 'xml',
             'css': 'css',
+            'less': 'text/x-less',
+            'sass': 'text/x-sass',
+            'scss': 'text/x-scss',
             'py': 'python',
-            'csv': 'text/plain'
+            'rb': 'ruby',
+            'php': 'php',
+            'java': 'text/x-java',
+            'c': 'text/x-csrc',
+            'cpp': 'text/x-c++src',
+            'cs': 'text/x-csharp',
+            
+            // Data formats
+            'csv': 'text/plain',
+            'tsv': 'text/plain',
+            'txt': 'text/plain',
+            'md': 'text/x-markdown',
+            'yaml': 'text/x-yaml',
+            'yml': 'text/x-yaml',
+            
+            // Office documents
+            'xls': 'text/plain',
+            'xlsx': 'text/plain',
+            'doc': 'text/plain',
+            'docx': 'text/plain'
         };
 
         return modeMap[extension] || null;
     }
 
+    
     /**
      * Destroy a CodeMirror instance
      * @param {string} instanceId - Instance ID
@@ -430,4 +459,4 @@ class CodeMirrorManager {
 }
 
 // Export singleton instance
-export const CodeMirror = new CodeMirrorManager();
+export const CM = new CodeMirrorManager();

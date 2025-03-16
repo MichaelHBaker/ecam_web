@@ -332,39 +332,41 @@ class TreeManager {
         
         try {
             // Subscribe to filter changes
-            State.subscribe(TREE_STATE_KEY, async (newState, oldState) => {
-                try {
-                    if (newState.filter !== oldState?.filter) {
-                        const filterInput = DOM.getElement('[data-action="filter"]', this.container);
-                        if (filterInput && filterInput.value !== newState.filter) {
-                            filterInput.value = newState.filter;
-                            await this.refreshTree();
-                        }
-                    }
-                } catch (error) {
-                    this.handleError('Filter State Update Error', error);
-                }
-            });
+            // State.subscribe(TREE_STATE_KEY, async (newState, oldState) => {
+            //     console.log('[Tree]: Event for Filter changes');
+            //     try {
+            //         if (newState.filter !== oldState?.filter) {
+            //             console.log('[Tree]: new state:' + newState.Filter + '   old state:' + oldState.filter);
+            //             const filterInput = DOM.getElement('[data-action="filter"]', this.container);
+            //             if (filterInput && filterInput.value !== newState.filter) {
+            //                 filterInput.value = newState.filter;
+            //                 await this.refreshTree();
+            //             }
+            //         }
+            //     } catch (error) {
+            //         this.handleError('Filter State Update Error', error);
+            //     }
+            // });
 
             // Subscribe to expanded state changes
-            State.subscribe(TREE_STATE_KEY, async (newState, oldState) => {
-                try {
-                    const newExpanded = newState.expanded;
-                    const oldExpanded = oldState?.expanded || {};
-
-                    // Handle newly expanded nodes
-                    for (const [type, ids] of Object.entries(newExpanded)) {
-                        const oldIds = oldExpanded[type] || [];
-                        const addedIds = ids.filter(id => !oldIds.includes(id));
+            // State.subscribe(TREE_STATE_KEY, async (newState, oldState) => {
+            //     try {
+            //         const newExpanded = newState.expanded;
+            //         const oldExpanded = oldState?.expanded || {};
+            //         console.log('[Tree]: Event for Node expanding');
+            //         // Handle newly expanded nodes
+            //         for (const [type, ids] of Object.entries(newExpanded)) {
+            //             const oldIds = oldExpanded[type] || [];
+            //             const addedIds = ids.filter(id => !oldIds.includes(id));
                         
-                        for (const id of addedIds) {
-                            await this.ensureNodeExpanded(type, id);
-                        }
-                    }
-                } catch (error) {
-                    this.handleError('Expanded State Update Error', error);
-                }
-            });
+            //             for (const id of addedIds) {
+            //                 await this.ensureNodeExpanded(type, id);
+            //             }
+            //         }
+            //     } catch (error) {
+            //         this.handleError('Expanded State Update Error', error);
+            //     }
+            // });
 
         } catch (error) {
             this.handleError('State Subscription Error', error);
@@ -1551,51 +1553,55 @@ class TreeManager {
                 // Handle adding measurement to a location
                 console.log(`[Tree] Location node detected, preparing for measurement import`);
                 
-                // Get location data from cache instead of DOM element
+                // Get location data from cache
                 let locationName = 'Unknown Location';
                 let projectName = 'Project';
                 let projectId = null;
                 
-                // Get location data from cache
-                const locationData = this.cachedData.location.find(loc => loc.id === nodeId);
+                // Get the location from cache
+                const locationData = this.cachedData.location.find(loc => String(loc.id) === String(nodeId));
+                console.log(`[Tree] Location data from cache:`, locationData);
+                
                 if (locationData) {
+                    // Get the clean location name from cache
                     locationName = locationData.name || 'Unknown Location';
-                    console.log(`[Tree] Found location name in cache: ${locationName}`);
                     
-                    // Check for project reference in location data
-                    projectId = locationData.project || locationData.projectId || locationData.parent_id;
-                    console.log(`[Tree] Found projectId in cache: ${projectId}`);
+                    // Get project ID (could be in parent_id or project field)
+                    projectId = locationData.project || locationData.parent_id;
+                    console.log(`[Tree] Found project ID:`, projectId);
                     
+                    // Find project by ID, ensuring string comparison
                     if (projectId) {
-                        const projectData = this.cachedData.project.find(proj => proj.id === projectId);
+                        const projectData = this.cachedData.project.find(proj => 
+                            String(proj.id) === String(projectId));
+                        
+                        console.log(`[Tree] Found project data:`, projectData);
+                        
                         if (projectData) {
-                            projectName = projectData.name || 'Project';
+                            projectName = projectData.name;
                             console.log(`[Tree] Found project name: ${projectName}`);
                         }
                     }
-                } else {
-                    console.log(`[Tree] No location data found in cache for nodeId=${nodeId}`);
-                    console.log(`[Tree] Cache contains ${this.cachedData.location.length} location entries`);
                 }
                 
-
-                // Show import modal directly
+                console.log(`[Tree] Import parameters: nodeId=${nodeId}, locationName=${locationName}, projectId=${projectId}, projectName=${projectName}`);
+    
+                // Show import modal
                 await Imports.showImportModal(
                     nodeId,
                     locationName,
-                    projectId,
+                    projectId, 
                     projectName
                 );
-
+    
                 console.log(`[Tree] Import modal shown for location ${nodeId}`);
-
             } else if (nodeType === 'project') {
                 // Handle adding location to a project
                 console.log(`[Tree] Project node detected, preparing to add location`);
                 
-                // Get project data from cache
+                // Get project data from cache, using string comparison
                 let nodeName = 'Unknown Project';
-                const projectData = this.cachedData.project.find(proj => proj.id === nodeId);
+                const projectData = this.cachedData.project.find(proj => String(proj.id) === String(nodeId));
                 if (projectData) {
                     nodeName = projectData.name || 'Unknown Project';
                 }

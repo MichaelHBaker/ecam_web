@@ -7,6 +7,7 @@ import { NotificationUI } from './ui.js';
 import { DOM } from './dom.js';
 import { Modal } from './modals.js';
 import { Events } from './events.js';
+import { CM } from './codemirror.js';
 
 const IMPORT_STATE_KEY = 'import_state';
 
@@ -25,6 +26,7 @@ class ImportManager {
         this.datasetId = null;
         this.status = 'idle';
         this.config = {};
+        this.cmInstanceId = null;
         this.fileValidation = {
             maxSize: 50 * 1024 * 1024, // 50MB
             allowedTypes: ['text/csv', 'application/vnd.ms-excel'],
@@ -365,6 +367,8 @@ class ImportManager {
         try {
             console.log(`[ImportModal] Starting showImportModal for location ${nodeId} (${nodeName})`);
             
+            this.locationId = nodeId;
+
             if (!this.isInitialized()) {
                 console.log(`[ImportModal] Import manager not initialized, initializing now`);
                 await this.initialize();
@@ -376,13 +380,19 @@ class ImportManager {
                 await Events.initialize();
             }
             
+            // Make sure CodeMirror is initialized
+            if (!CM.isInitialized()) {
+                console.log(`[ImportModal] CodeMirror not initialized, initializing now`);
+                await CM.initialize();
+            }
+            
             // Modal configuration
             const modalId = `import-measurement-${nodeId}`;
             console.log(`[ImportModal] Setting up modal configuration for modalId: ${modalId}`);
             
             const modalConfig = {
                 title: `Import Measurement Data`,
-                width: 600,
+                width: 800, // Increased width for CodeMirror preview
                 showCloseButton: true,
                 position: 'center',
                 closeOnEscape: true,
@@ -442,6 +452,16 @@ class ImportManager {
                             </div>
                         </div>
                         
+                        <!-- CodeMirror container for file preview -->
+                        <div id="codemirror-container-${nodeId}" class="w3-container w3-margin-top" style="display: none;">
+                            <div class="w3-bar w3-light-grey">
+                                <div class="w3-bar-item">
+                                    <i class="bi bi-file-text"></i> File Preview (First 1000 rows)
+                                </div>
+                            </div>
+                            <textarea id="codemirror-editor-${nodeId}" style="width: 100%; height: 300px;"></textarea>
+                        </div>
+                        
                         <div id="import-status-${nodeId}" class="w3-bar w3-light-grey w3-margin-top">
                             <div class="w3-bar-item">
                                 <i class="bi bi-clock"></i> Ready to import
@@ -461,14 +481,19 @@ class ImportManager {
             console.log(`[ImportModal] Generated instanceId: ${instanceId}`);
             modalElement.dataset.instanceId = instanceId;
             
-            // Update reference to file input and dropzone
+            // Update reference to file input
             console.log(`[ImportModal] Setting up file input`);
             
             // Set up file input change handler
             console.log(`[ImportModal] Setting up file input change handler`);
             const fileInput = document.getElementById(`file-input-${nodeId}`);
             if (fileInput) {
-                fileInput.addEventListener('change', this.handleFileSelect);
+                // Remove any existing listeners to prevent duplicates
+                const newFileInput = fileInput.cloneNode(true);
+                fileInput.parentNode.replaceChild(newFileInput, fileInput);
+                
+                // Use arrow function to preserve 'this' context without binding
+                newFileInput.addEventListener('change', (e) => this.handleFileSelectWithPreview(e));
                 console.log(`[ImportModal] Added change handler to file input`);
             } else {
                 console.warn(`[ImportModal] File input element not found: file-input-${nodeId}`);
@@ -482,6 +507,9 @@ class ImportManager {
             Events.addDelegate(modalElement, 'click', '[data-action="close-modal"]', (e) => {
                 console.log(`[ImportModal] Close button clicked via delegation`);
                 e.preventDefault();
+                
+                // Clean up CodeMirror instance first
+                this.cleanupCodeMirrorPreview();
                 
                 // First hide the modal visually for immediate feedback
                 modalElement.style.display = 'none';
@@ -768,6 +796,164 @@ class ImportManager {
 
         } catch (error) {
             this.handleError('Progress Update Error', error);
+        }
+    }
+
+        /**
+     * Enhanced file selection handler with preview
+     * @param {Event} event - File input change event
+     */
+    handleFileSelectWithPreview = async (event) => {
+        this._checkInitialized();
+
+        const file = event.target.files[0];
+        if (!file) return;
+
+        try {
+            // Validate file
+            const validationResult = await this.validateFile(file);
+            if (!validationResult.valid) {
+                throw new Error(validationResult.error);
+            }
+
+            // Update status and UI
+            this.updateStatus('uploading');
+            await this.showFileInfo(file);
+
+            // Display file preview in CodeMirror
+            await this.displayFilePreview(file);
+
+            // Continue with normal file upload process
+            const result = await this.uploadFile(file);
+            
+            if (result.import_id) {
+                this.importId = result.import_id;
+                this.datasetId = result.dataset_id;
+                
+                // Show preview (existing functionality)
+                await this.showPreview(result.preview_content);
+                this.updateStatus('ready');
+                
+                // Start validation
+                await this.validateImport();
+            }
+
+        } catch (error) {
+            this.handleError('File Selection Error', error);
+            this.updateStatus('error', error.message);
+        }
+    }
+
+    /**
+     * Display file preview in CodeMirror
+     * @param {File} file - The file to preview
+     */
+    displayFilePreview = async (file) => {
+        try {
+
+            // Show CodeMirror container
+            const cmContainer = document.getElementById(`codemirror-container-${this.locationId}`);
+            if (cmContainer) {
+                cmContainer.style.display = 'block';
+            }
+            
+            // Get the editor element
+            const editorElementId = `codemirror-editor-${this.locationId}`;
+            const editorElement = document.getElementById(editorElementId);
+            if (!editorElement) {
+                throw new Error(`CodeMirror editor element not found: ${editorElementId}`);
+            }
+            
+            // Extract first 1000 rows
+            const previewContent = await this.readFirstNRows(file, 1000);
+            
+            // Create a new File object with limited content
+            const previewFile = new File(
+                [previewContent], 
+                file.name, 
+                { type: file.type }
+            );
+            
+            // Create or update CodeMirror instance
+            if (this.cmInstanceId) {
+                // If instance exists, load new file
+                await CM.loadFile(this.cmInstanceId, previewFile);
+            } else {
+                // Create new instance
+                const result = await CM.create(editorElement, {
+                    lineNumbers: true,
+                    lineWrapping: true,
+                    readOnly: true,
+                    theme: 'default',
+                    viewportMargin: Infinity
+                });
+                
+                this.cmInstanceId = result.id;
+                await CM.loadFile(this.cmInstanceId, previewFile);
+            }
+            
+        } catch (error) {
+            this.handleError('Display File Preview Error', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Read first N rows from a file
+     * @param {File} file - The file to read
+     * @param {number} maxRows - Maximum number of rows to read
+     * @returns {Promise<string>} First N rows of content
+     */
+    readFirstNRows = async (file, maxRows = 1000) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            
+            reader.onload = (e) => {
+                try {
+                    const content = e.target.result;
+                    
+                    // Split into lines and take first N rows
+                    const lines = content.split(/\r\n|\r|\n/);
+                    const limitedContent = lines.slice(0, maxRows).join('\n');
+                    
+                    // Add indicator if we truncated the file
+                    if (lines.length > maxRows) {
+                        resolve(limitedContent + '\n\n/* Preview limited to first ' + maxRows + ' rows */');
+                    } else {
+                        resolve(limitedContent);
+                    }
+                } catch (parseError) {
+                    reject(new Error(`Error parsing file content: ${parseError.message}`));
+                }
+            };
+            
+            reader.onerror = () => {
+                reject(new Error('Error reading file'));
+            };
+            
+            // Read the file as text
+            reader.readAsText(file);
+        });
+    }
+
+    /**
+     * Clean up CodeMirror instances
+     */
+    cleanupCodeMirrorPreview = () => {
+        try {
+            if (this.cmInstanceId) {
+                console.log(`[ImportModal] Destroying CodeMirror instance: ${this.cmInstanceId}`);
+                CM.destroy(this.cmInstanceId);
+                this.cmInstanceId = null;
+            }
+            
+            // Hide container if it exists
+            const cmContainer = document.getElementById(`codemirror-container-${this.locationId}`);
+            if (cmContainer) {
+                cmContainer.style.display = 'none';
+            }
+        } catch (error) {
+            this.handleError('CodeMirror Cleanup Error', error);
         }
     }
 

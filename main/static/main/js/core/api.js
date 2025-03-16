@@ -49,6 +49,7 @@ class APIClient {
         this.initialized = false;
         this.pendingRequests = new Set();
         this.config = { ...API_CONFIG };
+        this.csrfToken = null;
     }
 
     async initialize() {
@@ -73,6 +74,15 @@ class APIClient {
                 lastUpdate: new Date()
             });
 
+            // Get CSRF token from state if available
+            this.csrfToken = State.get('csrf_token');
+            
+            // Subscribe to CSRF token changes
+            State.subscribe('csrf_token', (token) => {
+                this.csrfToken = token;
+                console.log('CSRF token updated in API client');
+            });
+
             this.initialized = true;
             console.log('API client initialized');
 
@@ -86,7 +96,7 @@ class APIClient {
         return this.initialized;
     }
 
-    async request(endpoint, options = {}) {
+     async request(endpoint, options = {}) {
         if (!this.initialized) {
             throw new Error('API client must be initialized before use');
         }
@@ -111,6 +121,11 @@ class APIClient {
                     ...(options.headers || {})
                 }
             };
+
+            // Add CSRF token for non-GET requests
+            if (options.method && options.method !== 'GET' && this.csrfToken) {
+                config.headers['X-CSRFToken'] = this.csrfToken;
+            }
 
             // Don't set Content-Type for FormData
             if (options.body instanceof FormData) {
@@ -144,6 +159,7 @@ class APIClient {
             }
         }
     }
+
 
     async sendRequest(url, config) {
         const timeoutPromise = new Promise((_, reject) => {
@@ -572,7 +588,31 @@ export const API = {
                 method: 'DELETE'
             })
     },
-
+    DataImports: {
+        create: (locationId, formData, options = {}) => {
+            // Add location_id to the FormData
+            formData.append('location_id', locationId);
+            
+            return client.request('data-imports/', {
+                method: 'POST',
+                body: formData,
+                ...options
+            });
+        },
+        
+        get: (id) => 
+            client.request(`data-imports/${id}/`),
+        
+        list: (params = {}) => 
+            client.request('data-imports/', {
+                method: 'GET',
+                params: {
+                    offset: params.offset || 0,
+                    limit: params.limit || 20,
+                    filter: params.filter || ''
+                }
+            }),
+    },
     // Model field endpoints
     ModelFields: {
         getFields: () => client.request('fields/'),

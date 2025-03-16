@@ -10,6 +10,31 @@ async function initializeBasePage() {
         // First ensure Events is initialized before adding any event delegates
         await Events.initialize();
         
+        // Extract CSRF token and set in state
+        const getCsrfToken = () => {
+            // Try from cookie first
+            const tokenFromCookie = document.cookie
+                .split('; ')
+                .find(row => row.startsWith('csrftoken='))
+                ?.split('=')[1];
+                
+            if (tokenFromCookie) return tokenFromCookie;
+            
+            // Try from form input
+            const tokenInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
+            if (tokenInput) return tokenInput.value;
+            
+            return '';
+        };
+        
+        // Set the CSRF token in state
+        const csrfToken = getCsrfToken();
+        if (csrfToken) {
+            await State.initialize();  // Ensure state is initialized
+            State.set('csrf_token', csrfToken);
+            console.log('CSRF token set in state');
+        }
+        
         // Add page type detection for page-specific initialization
         const pageType = document.body.getAttribute('data-page-type') || 'page';
         console.log(`Page type detected: ${pageType}`);

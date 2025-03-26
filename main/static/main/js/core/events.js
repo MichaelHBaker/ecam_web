@@ -91,15 +91,51 @@ class EventManager {
         }
 
         try {
+            // Generate a base ID for this delegation type
+            const baseId = this.generateDelegationBaseId(context, eventType, selector);
+            console.log(`[Events] Generated baseId: ${baseId}`);
+            
+            // Check if we already have delegations of this type
+            const existingDelegations = Array.from(this.delegatedEvents.entries())
+                .filter(([key, value]) => key.startsWith(baseId));
+            
+            console.log(`[Events] Found ${existingDelegations.length} existing delegations for ${baseId}`);
+            if (existingDelegations.length > 0) {
+                console.log(`[Events] Existing delegation IDs:`, existingDelegations.map(([id]) => id));
+            }
+            
+            // Instead of just checking for the exact same handler,
+            // we'll check if there's already a delegation for this context/type/selector combination
+            if (existingDelegations.length > 0) {
+                const [delegationId, delegation] = existingDelegations[0];
+                console.log(`[Events] Reusing existing delegation: ${delegationId} for ${eventType} on '${selector}'`);
+                
+                // Return the remove function for the first existing delegation
+                return () => {
+                    console.log(`[Events] Removing reused delegation: ${delegationId}`);
+                    delegation.context.removeEventListener(
+                        delegation.eventType, 
+                        delegation.handler, 
+                        delegation.options
+                    );
+                    this.delegatedEvents.delete(delegationId);
+                    this.updateEventState('delegateRemoved', { delegationId });
+                };
+            }
+            
+            console.log(`[Events] Creating new delegation for ${eventType} on '${selector}'`);
+            
             // Create a listener function that handles both standard and custom events
             const listener = (event) => {
                 // Skip if already handled by another delegate
                 if (event.customHandled) {
+                    console.log(`[Events] Event already handled, skipping: ${eventType} for '${selector}'`);
                     return;
                 }
                 
                 // Handle custom events (those with colon in the name, like 'dashboard:ready')
                 if (eventType.includes(':') || !event.target || typeof event.target.closest !== 'function') {
+                    console.log(`[Events] Handling custom event: ${eventType}`);
                     handler.call(context, event, context);
                     return;
                 }
@@ -110,19 +146,30 @@ class EventManager {
                 // Check if target matches directly
                 if (event.target.matches && event.target.matches(selector)) {
                     matchedElement = event.target;
+                    console.log(`[Events] Direct match found for '${selector}'`);
                 } 
                 // Otherwise find closest ancestor that matches
                 else if (event.target.closest) {
                     matchedElement = event.target.closest(selector);
+                    if (matchedElement) {
+                        console.log(`[Events] Ancestor match found for '${selector}'`);
+                    }
                 }
                 
                 // Skip context check for document/window
                 const skipContextCheck = context === document || context === window;
+                const inContext = skipContextCheck || context.contains(matchedElement);
                 
                 // Call handler if we found a match and it's in context
-                if (matchedElement && (skipContextCheck || context.contains(matchedElement))) {
+                if (matchedElement && inContext) {
+                    console.log(`[Events] Calling handler for ${eventType} on '${selector}'`);
                     // Call handler with matched element as this and second parameter
                     handler.call(matchedElement, event, matchedElement);
+                } else if (matchedElement) {
+                    console.log(`[Events] Match found but not in context for '${selector}'`);
+                } else {
+                    // Verbose debug level logging - uncomment if needed
+                    // console.log(`[Events] No match found for '${selector}'`);
                 }
             };
 
@@ -134,18 +181,22 @@ class EventManager {
 
             // Add the event listener to the context with capture phase
             context.addEventListener(eventType, listener, captureOptions);
+            console.log(`[Events] Event listener added to context for ${eventType}`);
 
             // Generate a unique ID for this delegation
-            const delegationId = this.generateDelegationId(context, eventType, selector);
+            const delegationId = `${baseId}_${Date.now()}`;
+            console.log(`[Events] Generated unique delegationId: ${delegationId}`);
             
-            // Store in our delegation map
+            // Store in our delegation map with the original handler reference
             this.delegatedEvents.set(delegationId, {
                 context,
                 eventType,
                 handler: listener,
+                originalHandler: handler, // Store the original handler for comparison
                 selector,
                 options: captureOptions
             });
+            console.log(`[Events] Stored delegation in map with id: ${delegationId}`);
             
             // Update state
             this.updateEventState('delegateAdded', {
@@ -158,6 +209,7 @@ class EventManager {
             
             // Return remove function
             return () => {
+                console.log(`[Events] Removing delegation: ${delegationId}`);
                 context.removeEventListener(eventType, listener, captureOptions);
                 this.delegatedEvents.delete(delegationId);
                 this.updateEventState('delegateRemoved', { delegationId });
@@ -167,6 +219,17 @@ class EventManager {
             this.handleError('AddDelegate', error);
             return () => {}; // Return no-op function
         }
+    }
+
+    /**
+     * Generate base delegation ID (without uniqueness suffix)
+     * @private
+     */
+    generateDelegationBaseId(container, eventType, selector) {
+        const containerId = container.id || 
+                        (container === document ? 'document' : 
+                            (container === window ? 'window' : 'unknown'));
+        return `${containerId}_${eventType}_${selector}`;
     }
 
     /**

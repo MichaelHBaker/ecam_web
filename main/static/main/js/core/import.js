@@ -402,6 +402,10 @@ class ImportManager {
             };
             console.log(`[ImportModal] Modal config created:`, modalConfig);
             
+            // In showImportModal when finding/creating the modal element
+            const existingModals = document.querySelectorAll(`[id^="id_modal-import-measurement-"]`);
+            console.log(`[ImportModal] Existing import modals:`, existingModals.length, existingModals);
+
             // Create custom modal to ensure we have full control
             console.log(`[ImportModal] Creating custom modal element`);
             let modalElement = document.getElementById(`id_modal-${modalId}`);
@@ -413,6 +417,12 @@ class ImportManager {
                 document.body.appendChild(modalElement);
             }
             
+            // Before creating the new modal content with file input, check for and remove any existing file inputs with the same ID
+            const existingFileInput = document.getElementById(`file-input-${nodeId}`);
+            if (existingFileInput && existingFileInput.parentNode) {
+                existingFileInput.parentNode.removeChild(existingFileInput);
+            }
+
             // Create a custom structure for the modal with simplified text
             console.log(`[ImportModal] Setting up custom modal structure with simplified text`);
             modalElement.innerHTML = `
@@ -488,12 +498,22 @@ class ImportManager {
             console.log(`[ImportModal] Setting up file input change handler`);
             const fileInput = document.getElementById(`file-input-${nodeId}`);
             if (fileInput) {
+
+                // Before setting up the file input
+                const existingFileInputs = document.querySelectorAll(`[id^="file-input-"]`);
+                console.log(`[ImportModal] Existing file inputs:`, existingFileInputs.length, existingFileInputs);
+
                 // Remove any existing listeners to prevent duplicates
                 const newFileInput = fileInput.cloneNode(true);
                 fileInput.parentNode.replaceChild(newFileInput, fileInput);
                 
                 // Use arrow function to preserve 'this' context without binding
-                newFileInput.addEventListener('change', (e) => this.handleFileSelectWithPreview(e));
+                console.log(`[ImportModal] Setting up file input change handler for:`, newFileInput);
+                newFileInput.addEventListener('change', (e) => {
+                    console.log(`[ImportModal] File input change event triggered, target:`, e.target);
+                    console.log(`[ImportModal] File selected: ${e.target.files[0]?.name}`);
+                    this.handleFileSelectWithPreview(e);
+                });
                 console.log(`[ImportModal] Added change handler to file input`);
             } else {
                 console.warn(`[ImportModal] File input element not found: file-input-${nodeId}`);
@@ -520,19 +540,23 @@ class ImportManager {
             
             // File select button delegate
             console.log(`[ImportModal] Adding delegate for file select button`);
+            // In import.js, in the file select button click handler:
             Events.addDelegate(modalElement, 'click', '[data-action="select-file"]', (e) => {
-                console.log(`[ImportModal] File select button clicked via delegation`);
+                console.log(`[ImportModal] File select button clicked via delegation, event target:`, e.target);
+                console.log(`[ImportModal] Event currentTarget:`, e.currentTarget);
+                console.log(`[ImportModal] Event path:`, e.path || (e.composedPath && e.composedPath()));
                 e.preventDefault();
+                e.stopPropagation();
                 
                 const fileInput = document.getElementById(`file-input-${nodeId}`);
                 if (fileInput) {
-                    console.log(`[ImportModal] Triggering file input click`);
+                    console.log(`[ImportModal] Triggering file input click, fileInput:`, fileInput);
                     fileInput.click();
                 } else {
                     console.warn(`[ImportModal] File input not found: file-input-${nodeId}`);
                 }
             });
-            
+
             // Update state
             console.log(`[ImportModal] Updating import state`);
             this.updateState({

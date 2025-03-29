@@ -11,22 +11,32 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
+import os
+import platform
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Detect environment automatically
+IS_WINDOWS = platform.system() == 'Windows'
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-w05&cx50gn00u0!10@3eagbqg@1ih@rnum20^yf3+s!nto5-0-'
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
-
+# Set allowed hosts from environment variables
+ALLOWED_HOSTS = os.getenv('LOCAL_IPS', 'localhost,127.0.0.1').split(',')
+ec2_ip = os.getenv('EC2_IP')
+if ec2_ip:
+    ALLOWED_HOSTS.append(ec2_ip)
 
 # Application definition
 
@@ -84,15 +94,19 @@ WSGI_APPLICATION = 'ecam_web.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'ecam_web',
-        'HOST': '127.0.0.1',
-        'PORT': '5432',
-        'USER': 'mbaker@SBWCONSULTING',
+        'NAME': os.getenv('DATABASE_NAME', 'ecam_web'),
+        'HOST': os.getenv('DATABASE_HOST', '127.0.0.1'),
+        'PORT': os.getenv('DATABASE_PORT', '5432'),
+        'USER': os.getenv('DATABASE_USER_WINDOWS' if IS_WINDOWS else 'DATABASE_USER_LINUX'),
         'OPTIONS': {
             'sslmode': 'prefer',
         },
     }
 }
+
+# Add password only for Linux environment (not needed for Windows auth)
+if not IS_WINDOWS:
+    DATABASES['default']['PASSWORD'] = os.getenv('DATABASE_PASSWORD')
 
 
 # Password validation
@@ -132,7 +146,6 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
-
 ]
 
 # Default primary key field type

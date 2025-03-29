@@ -1,34 +1,7 @@
-root node
-    Let me explain the context and objectives, don't generate and code without my go aheadKs
-    I want to implement a root node for the projects tree
-    objective is to use LoadNodeChildren for all levels of the tree.
-    api export needs a a root type with parrallel set of methods (list, getchildren etc.) with error conditions for those that do not apply such as delete
+build out the collection of import specs
+will need to rethink def create_data_import(request): as it is doing to much
+    see add measurement workflow below.
 
-
-    api needs a root export
-        have all methods, with appropriate defaults
-    load projects to it like locations to a project
-        loadNodeChildren assigns to cache
-        need all projects assigned to cache
-    dashboard.js
-        delete loadprojects
-        don't need subscription
-        remove events that are redundant to tree.js
-            'tree:node:add'
-        Initialize treemanager early    
-    tree.js
-        remove loadInitialData
-    associate the root node with 
-            <div class="tree-wrapper w3-margin-top">
-                <!-- Projects will be loaded here dynamically -->
-            </div>
-    
-
-Finish fix for caching projects as part of tree initialize
-Review all js for correct use of delegates and subscription, when should each be used
-modernize all modules to remove need for .bind
-use codemirror.js to load container in import modal
-see below outline of flow for import developed before lazy load refactor
 
 
 Models

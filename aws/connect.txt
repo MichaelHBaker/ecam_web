@@ -1,1 +1,0 @@
-ssh -i C:\dev\ecam_web\aws\ecam-web-test-key-pair.pem ubuntu@18.217.173.166

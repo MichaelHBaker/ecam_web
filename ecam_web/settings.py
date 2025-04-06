@@ -34,8 +34,10 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 DEBUG = not IS_PRODUCTION
 
 # Set allowed hosts from environment variables
-if IS_PRODUCTION:
-    ALLOWED_HOSTS = os.getenv('PRODUCTION_ALLOWED_HOSTS', '').split(',')
+if os.getenv('ENVIRONMENT') == 'production':
+    hosts = os.getenv('PRODUCTION_ALLOWED_HOSTS', '').split(',')
+    hosts.extend(['michaelharrybaker.com', 'www.michaelharrybaker.com'])
+    ALLOWED_HOSTS = hosts
 else:
     ALLOWED_HOSTS = os.getenv('LOCAL_IPS', 'localhost,127.0.0.1').split(',')
 

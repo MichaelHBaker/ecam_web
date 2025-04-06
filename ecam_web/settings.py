@@ -20,23 +20,24 @@ load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Detect environment automatically
-IS_WINDOWS = platform.system() == 'Windows'
+# Environment configuration
+ENVIRONMENT = os.getenv('ENVIRONMENT', 'development')
+IS_PRODUCTION = ENVIRONMENT == 'production'
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = not IS_PRODUCTION
 
 # Set allowed hosts from environment variables
-ALLOWED_HOSTS = os.getenv('LOCAL_IPS', 'localhost,127.0.0.1').split(',')
-ec2_ip = os.getenv('EC2_IP')
-if ec2_ip:
-    ALLOWED_HOSTS.append(ec2_ip)
+if IS_PRODUCTION:
+    ALLOWED_HOSTS = os.getenv('PRODUCTION_ALLOWED_HOSTS', '').split(',')
+else:
+    ALLOWED_HOSTS = os.getenv('LOCAL_IPS', 'localhost,127.0.0.1').split(',')
 
 # Application definition
 
@@ -67,6 +68,10 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+# Add whitenoise for static files in production
+if IS_PRODUCTION:
+    MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
+
 ROOT_URLCONF = 'ecam_web.urls'
 
 TEMPLATES = [
@@ -87,27 +92,22 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'ecam_web.wsgi.application'
 
-
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DATABASE_NAME', 'ecam_web'),
-        'HOST': os.getenv('DATABASE_HOST', '127.0.0.1'),
-        'PORT': os.getenv('DATABASE_PORT', '5432'),
-        'USER': os.getenv('DATABASE_USER_WINDOWS' if IS_WINDOWS else 'DATABASE_USER_LINUX'),
+        'NAME': os.getenv('DATABASE_NAME'),
+        'HOST': os.getenv('DATABASE_HOST'),
+        'PORT': os.getenv('DATABASE_PORT'),
+        'USER': os.getenv('DATABASE_USER'),
+        'PASSWORD': os.getenv('DATABASE_PASSWORD'),
         'OPTIONS': {
-            'sslmode': 'prefer',
+            'sslmode': 'require' if IS_PRODUCTION else 'prefer',
         },
     }
 }
-
-# Add password only for Linux environment (not needed for Windows auth)
-if not IS_WINDOWS:
-    DATABASES['default']['PASSWORD'] = os.getenv('DATABASE_PASSWORD')
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -127,7 +127,6 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
 
@@ -138,7 +137,6 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 
 USE_TZ = True
-
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
@@ -151,12 +149,16 @@ STATICFILES_DIRS = [
 # This defines where collectstatic will gather files for production
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+# Production Static files settings
+if IS_PRODUCTION:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-
+# REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.SessionAuthentication',
@@ -168,3 +170,18 @@ REST_FRAMEWORK = {
         # 'rest_framework.permissions.AllowAny',
     ]
 }
+
+# Production security settings
+if IS_PRODUCTION:
+    # HTTPS settings
+    SECURE_SSL_REDIRECT = True
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    
+    # Additional security settings
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_BROWSER_XSS_FILTER = True
+    X_FRAME_OPTIONS = 'DENY'

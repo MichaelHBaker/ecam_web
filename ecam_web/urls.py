@@ -6,6 +6,10 @@ The `urlpatterns` list routes URLs to views. For more information please see:
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
+
+
 from rest_framework import routers
 from main import views
 
@@ -33,4 +37,4 @@ urlpatterns = [
     path('api/fields/validation/', views.ModelFieldsViewSet.as_view({'get': 'validation_rules'}), name='validation-rules'),
     path('api/fields/dependencies/', views.ModelFieldsViewSet.as_view({'get': 'dependencies'}), name='field-dependencies'),
 
-]
+]  + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

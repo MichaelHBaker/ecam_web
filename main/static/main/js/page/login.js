@@ -1,6 +1,6 @@
 // login.js - Login page specific functionality
 
-import { State, DOM, Events, API, NotificationUI, StatusUI } from '../../main.js';
+import { State, DOM, Events, API, NotificationUI, StatusUI } from '../main.js';
 
 /**
  * Login page manager

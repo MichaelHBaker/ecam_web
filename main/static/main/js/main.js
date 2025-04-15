@@ -1,16 +1,14 @@
 // main.js
 // Main application initialization module
-
-import { State } from '/static/main/js/core/state.js';
-import { DOM } from '/static/main/js/core/dom.js';
-import { Events } from '/static/main/js/core/events.js';
-import { CRUD } from '/static/main/js/core/crud.js';
-import { API } from '/static/main/js/core/api.js';
-import { Modal } from '/static/main/js/core/modals.js';
-import { Forms } from '/static/main/js/core/forms.js';
-import { Tree } from '/static/main/js/core/tree.js';
-import { NotificationUI, StatusUI } from '/static/main/js/core/ui.js';
-
+import { State } from './core/state.js';
+import { DOM } from './core/dom.js';
+import { Events } from './core/events.js';
+import { CRUD } from './core/crud.js';
+import { API } from './core/api.js';
+import { Modal } from './core/modals.js';
+import { Forms } from './core/forms.js';
+import { Tree } from './core/tree.js';
+import { NotificationUI, StatusUI } from './core/ui.js';
 /**
  * Core initialization manager - responsible for initializing core application components
  */

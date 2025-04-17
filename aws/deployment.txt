@@ -12,3 +12,7 @@ python manage.py collectstatic --noinput
 
 # Restart the application server
 sudo systemctl restart gunicorn-ecam-web.service
+
+/etc/supervisor/conf.d/yourproject.conf
+/etc/nginx/sites-available/yoursite
+/etc/systemd/system/yourproject.service

@@ -210,12 +210,6 @@ class Measurement(models.Model):
         help_text="SI multiplier for the measurement (if supported by type)"
     )
 
-    source_timezone = models.CharField(
-        max_length=50,
-        choices=get_valid_timezones(),
-        default='UTC',
-        help_text="Timezone of the incoming data"
-    )
 
     class Meta:
         constraints = [
@@ -378,6 +372,12 @@ class DataSource(models.Model):
         max_length=20,
         choices=SOURCE_TYPES,
         help_text="Type of data source"
+    )
+    source_timezone = models.CharField(
+        max_length=50,
+        choices=get_valid_timezones(),
+        default='UTC',
+        help_text="Timezone of the incoming data"
     )
     middleware_type = models.CharField(
         max_length=20, 

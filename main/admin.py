@@ -56,7 +56,7 @@ class LocationAdmin(admin.ModelAdmin):
 @admin.register(Measurement)
 class MeasurementAdmin(admin.ModelAdmin):
     list_display = ('name', 'get_owner', 'get_category', 'type', 'unit', 
-                   'multiplier', 'location', 'get_project', 'source_timezone')
+                   'multiplier', 'location', 'get_project')
     list_filter = ('type__category', 'type', 'location__project', 
                   'location__project__owner')
     search_fields = ('name', 'description')
@@ -79,7 +79,7 @@ class MeasurementAdmin(admin.ModelAdmin):
 
 @admin.register(DataSource)
 class DataSourceAdmin(admin.ModelAdmin):
-    list_display = ('name', 'project', 'created_by', 'source_type', 'middleware_type', 
+    list_display = ('name', 'project', 'created_by', 'source_type', 'source_timezone', 'middleware_type', 
                    'is_active', 'created_at')
     list_filter = ('source_type', 'middleware_type', 'is_active', 'project__owner')
     search_fields = ('name', 'description')

@@ -16,31 +16,20 @@ Equations can be joined
 ISO 80000-2 mathemnatical symbols and operators
 
 
-add measurements
-    source
-        for all sources
-            load 1000 lines to editor
-            ask for dataset name # need to create a unique name before starting the definition, a drop down of existing names if any
-        if source=file
-            delimiter {, tab, fixed}
-            line where data starts
-            ...
 
 add measurements
     source selection
-        for all sources
-            load preview (1000 lines) to editor
-            dataset name handling
-                show existing names in dropdown
-                validate new names
-                store name choice
         
         if source = file
+            file selection dialog
+
+            load preview (1000 lines) to editor
+
             file format detection
                 delimiter type {comma, tab, fixed width}
                     auto-detect
                     manual override
-                encoding detection
+                encoding detection (may be handled by OS)
                     auto-detect
                     manual override
             
@@ -66,11 +55,13 @@ add measurements
             timezone handling
                 source timezone selection
                 storage timezone (UTC)
-                
-            validation rules
-                required columns
-                data type validation
-                value range checks
+
+            dataset name
+                future: row subset criteria, connect to table of criteria, dataset must be rerunnable
+                drop down existing
+                pick one and overwrite
+                enter new one
+                        
                 
         if source = api
             [api specific configuration...]
@@ -89,8 +80,8 @@ add measurements
             
     preview & validation
         show sample of processed data
-        highlight any validation issues
-        allow corrections
+        log any validation issues
+        data editing performed downstream in modeling
         
     configuration storage
         save in dataset.import_config

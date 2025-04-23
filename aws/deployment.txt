@@ -1,18 +1,30 @@
-# Pull latest code
-git pull
+# Pull the latest code from the repository
+git pull || { echo "Failed to pull latest code"; exit 1; }
 
-# Install any new dependencies
-pip install -r requirements.txt
+# Activate the virtual environment (if applicable)
+# Uncomment the following line if you're using a virtual environment
+# source venv/bin/activate || { echo "Failed to activate virtual environment"; exit 1; }
 
-# Run migrations if database models changed
-python manage.py migrate
+# Install any new dependencies from requirements.txt
+pip install -r requirements.txt || { echo "Failed to install dependencies"; exit 1; }
 
-# Collect static files if needed
-python manage.py collectstatic --noinput
+# Apply database migrations if models have changed
+python manage.py migrate || { echo "Failed to apply migrations"; exit 1; }
 
-# Restart the application server
-sudo systemctl restart gunicorn-ecam-web.service
+# Collect static files for the application
+python manage.py collectstatic --noinput || { echo "Failed to collect static files"; exit 1; }
 
-/etc/supervisor/conf.d/yourproject.conf
-/etc/nginx/sites-available/yoursite
-/etc/systemd/system/yourproject.service
+# Reload and restart the application server
+sudo systemctl daemon-reload || { echo "Failed to reload systemd daemon"; exit 1; }
+sudo systemctl restart gunicorn-ecam-web.service || { echo "Failed to restart Gunicorn"; exit 1; }
+
+# Ensure Nginx configuration is active (optional)
+# Uncomment and adjust the following lines if needed
+# sudo ln -sf /etc/nginx/sites-available/yoursite /etc/nginx/sites-enabled/
+# sudo nginx -t || { echo "Nginx configuration test failed"; exit 1; }
+# sudo systemctl reload nginx || { echo "Failed to reload Nginx"; exit 1; }
+
+# Notes for reference
+# /etc/supervisor/conf.d/yourproject.conf
+# /etc/nginx/sites-available/yoursite
+# /etc/systemd/system/yourproject.service

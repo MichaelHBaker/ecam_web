@@ -387,9 +387,130 @@ AWS deployment scripts are available in the `aws/` directory. The application us
 - WSGI server interface
 - Environment-based security settings (HSTS, SSL redirect, secure cookies)
 
+## Current Development Status
+
+### What's Built: Data Infrastructure ✓
+
+The application currently provides a **complete data collection and management foundation**:
+- Hierarchical organization (Projects → Locations → Measurements → Datasets)
+- Multi-tenant access control with temporal tracking
+- Sophisticated data import pipeline (CSV, Excel with encoding detection)
+- Timeseries data storage with indexing
+- Custom tree-based CRUD with lazy loading
+- RESTful API with authentication
+- Production-ready security and validation layers
+
+**This represents significant engineering work** and provides a solid foundation for energy data management.
+
+### Critical Missing Functionality: Analytics & Intelligence Layer ✗
+
+However, the **core value proposition** of an "Energy Charting and Metrics" application is **not yet implemented**:
+
+#### **1. Mathematical Modeling System** (Highest Priority)
+The application name suggests analytical capabilities, but there is currently **no modeling infrastructure**:
+- **No equation/expression models** - Cannot define mathematical relationships between measurements
+- **No operators or parameters** - No computational framework for energy calculations
+- **No coefficients or templates** - Cannot create reusable calculation models
+- **No computed parameters** - All values must be imported; nothing can be calculated
+- **Design exists** (see [design/design.txt](design/design.txt) lines 7-16) but not implemented
+
+**Impact**: Cannot perform any energy analysis, M&V calculations, or derived metrics.
+
+#### **2. Statistical Analysis Capabilities** (Highest Priority)
+Despite having pandas and numpy installed, **no statistical processing exists**:
+- **No descriptive statistics** - Cannot calculate mean, median, std dev, min/max for datasets
+- **No time-series analysis** - Cannot detect trends, seasonality, or anomalies
+- **No correlation analysis** - Cannot compare measurements or identify relationships
+- **No baseline calculations** - Cannot establish baseline consumption patterns
+- **No regression or forecasting** - Cannot predict future consumption or savings
+
+**Impact**: Data can be stored but not analyzed. No insights can be derived from the collected data.
+
+#### **3. Visualization & Charting** (Highest Priority)
+There is **zero charting infrastructure**:
+- **No charting libraries** - No matplotlib, plotly, chart.js, D3.js, or similar
+- **No chart endpoints** - No API to request chart data or renderings
+- **No visualization UI** - No graphs, plots, or visual analytics on any page
+- **No interactive dashboards** - Dashboard exists but shows only organizational trees
+
+**Impact**: Users cannot see trends, patterns, or insights visually. All data interaction is through tables/forms.
+
+#### **4. Energy-Specific Analytics** (Core Business Logic Missing)
+The application supports "Audit" and "M&V" project types but has **no energy domain logic**:
+- **No energy consumption calculations** - Cannot compute kWh, therms, or energy costs
+- **No demand analysis** - Cannot identify peak demand or load profiles
+- **No savings calculations** - Cannot quantify energy savings or cost avoidance
+- **No M&V algorithms** - Despite having M&V as a project type, no IPMVP methods implemented
+- **No baseline/reporting period comparisons** - Cannot perform pre/post analysis
+- **No degree-day normalization** - Cannot adjust for weather variations
+- **No utility cost modeling** - Cannot calculate costs from rate schedules
+
+**Impact**: Cannot fulfill the primary use case for energy professionals. The application is a timeseries database, not an energy analytics platform.
+
+#### **5. Reporting & Analysis UI** (User Value Missing)
+No interfaces for working with analyzed data:
+- **No analysis dashboards** - No views showing computed metrics or statistics
+- **No report generation** - Cannot produce PDF/Excel reports of findings
+- **No comparison tools** - Cannot visually compare locations, periods, or scenarios
+- **No export of analysis results** - Can export raw data but not calculated insights
+
+**Impact**: Even if calculations were implemented, users would have no way to access or share results.
+
+#### **6. Advanced Data Processing**
+Additional analytical gaps:
+- **No data quality scoring** - Cannot assess completeness or reliability of datasets
+- **No outlier detection** - Cannot identify or flag anomalous readings
+- **No data interpolation** - Cannot fill gaps in timeseries data
+- **No aggregation functions** - Cannot roll up data to hourly/daily/monthly summaries
+- **No unit conversions in analysis** - Can store different units but not convert for comparison
+
+### What This Means
+
+The current application is essentially a **sophisticated energy data warehouse** with excellent:
+- Data organization and access control
+- Import/export capabilities
+- Multi-user collaboration features
+- Security and validation
+
+But it **cannot** currently:
+- Answer questions about the data ("What's our average consumption?")
+- Show trends or patterns ("Is our energy use increasing?")
+- Calculate savings ("How much did we save?")
+- Compare scenarios ("Location A vs Location B")
+- Generate insights ("When is peak demand?")
+- Produce reports for stakeholders
+
+### Path Forward
+
+To become a functional energy analytics platform, the following development is required (in priority order):
+
+**Phase 1: Core Analytics (Essential)**
+1. Statistical analysis service layer (descriptive stats, aggregations)
+2. Charting library integration (plotly or chart.js recommended)
+3. Basic visualization endpoints and UI components
+4. Energy calculation framework (consumption, demand, costs)
+
+**Phase 2: Mathematical Modeling (High Value)**
+5. Equation/expression model implementation
+6. Computed parameter system
+7. Model templates and reusable calculations
+8. M&V calculation methods (IPMVP Option C at minimum)
+
+**Phase 3: Advanced Analytics (Competitive Advantage)**
+9. Time-series analysis (trends, seasonality, forecasting)
+10. Baseline modeling and regression
+11. Weather normalization
+12. Anomaly detection and data quality scoring
+
+**Phase 4: User Experience (Adoption)**
+13. Interactive dashboards with drill-down
+14. Report generation (PDF, Excel)
+15. Comparison and benchmarking tools
+16. Scheduled reports and alerts
+
 ## Future Enhancements & Missing Best Practices
 
-While the application implements many production-ready features, the following web application best practices are **not currently implemented** and should be considered for future development:
+Beyond the core analytics functionality described above, the following web application best practices are **also not currently implemented**:
 
 ### High Priority
 
